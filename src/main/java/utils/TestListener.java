@@ -33,11 +33,23 @@ public class TestListener implements ITestListener {
 
     @Override
     public void onTestFailure(ITestResult result) {
-        // Tránh lỗi NullPointer nếu Exception không có message
         String errorMsg = result.getThrowable() != null ? result.getThrowable().getMessage() : "Lỗi không xác định";
 
-        // Dùng logFail để nhuộm ĐỎ kịch bản này trên Báo cáo HTML
-        ExtentReportManager.logFail(errorMsg);
+        try {
+            // ĐÃ SỬA THÀNH core.BaseTest
+            Object testClass = result.getInstance();
+            org.openqa.selenium.WebDriver driver = ((core.BaseTest) testClass).getDriver();
+
+            if (driver != null) {
+                String base64Img = ((org.openqa.selenium.TakesScreenshot) driver).getScreenshotAs(org.openqa.selenium.OutputType.BASE64);
+                utils.ExtentReportManager.logFailWithScreenshot(errorMsg, base64Img);
+            } else {
+                utils.ExtentReportManager.logFail(errorMsg);
+            }
+        } catch (Exception e) {
+            // Fallback: Lỡ lỗi không lấy được driver thì vẫn in log Đỏ ra
+            utils.ExtentReportManager.logFail(errorMsg);
+        }
     }
 
     @Override
