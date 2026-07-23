@@ -38,13 +38,14 @@ public class WebUI {
             scrollToElement(by);
             try {
                 wait.until(ExpectedConditions.elementToBeClickable(by)).click();
-            } catch (Exception e) {
-            String msg = "❌ Lỗi dữ liệu/giao diện: Không tìm thấy hoặc không thể click: [" + elementName + "]";
-            ExtentReportManager.logStep(msg); // GHI VÀO REPORT TRƯỚC
-            throw new SkipException(msg);     // RỒI MỚI VĂNG LỖI
-        }
+            } catch (Exception ex) {
+                // FALLBACK: Ép click bằng Javascript nếu Selenium bị che khuất
+                JavascriptExecutor js = (JavascriptExecutor) driver;
+                js.executeScript("arguments[0].click();", element);
+            }
             ExtentReportManager.logStep("Click vào <b>" + elementName + "</b>");
         } catch (Exception e) {
+            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY (Để TestListener lo)
             throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không tìm thấy hoặc không thể click: [" + elementName + "]");
         }
     }
@@ -57,11 +58,12 @@ public class WebUI {
             element.sendKeys(value);
             ExtentReportManager.logStep("Điền dữ liệu <b>'" + value + "'</b> vào <b>" + elementName + "</b>");
         } catch (Exception e) {
+            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
             throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
         }
     }
 
-    // HÀM KIỂM TRA HIỂN THỊ (Linh hoạt như phiên bản cũ)
+    // HÀM KIỂM TRA HIỂN THỊ
     public boolean isElementVisible(By by) {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(5));
@@ -82,7 +84,7 @@ public class WebUI {
         }
     }
 
-    // NHẬP CÓ ĐIỀU KIỆN (Kiểm tra Excel rỗng trước để tiết kiệm thời gian)
+    // NHẬP CÓ ĐIỀU KIỆN
     public void setTextWithCheck(By by, String value, String elementName) {
         if (value == null || value.trim().isEmpty()) {
             ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do dữ liệu Excel trống.");
@@ -121,6 +123,7 @@ public class WebUI {
             element.sendKeys(value);
             ExtentReportManager.logStep("Điền dữ liệu <b>'" + value + "'</b> vào <b>" + elementName + " (Có Mask)</b>");
         } catch (Exception e) {
+            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
             throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không thể nhập dữ liệu vào ô [" + elementName + "]");
         }
     }
@@ -144,6 +147,7 @@ public class WebUI {
             // Chờ xử lý ở cờ isFound
         }
         if (!isFound) {
+            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
             throw new SkipException("❌ Dữ liệu Excel sai: Không tìm thấy giá trị ['" + expectedText + "'] trong danh sách [" + elementName + "]");
         }
     }
@@ -178,6 +182,7 @@ public class WebUI {
         }
 
         if (!isFound) {
+            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
             throw new SkipException("❌ Dữ liệu Excel sai: Không tìm thấy giá trị ['" + expectedText + "'] trong Dropdown [" + elementName + "]");
         }
     }

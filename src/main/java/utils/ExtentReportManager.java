@@ -35,30 +35,55 @@ public class ExtentReportManager {
         }
     }
 
-    // Bổ sung: Ghi log khi test Pass (Màu xanh)
+    // Ghi log khi test Pass (Màu xanh)
     public static void logPass(String message) {
         if (extentTest != null) {
             extentTest.pass(message);
             System.out.println("🎉 " + message);
         }
     }
+    // Dùng để in ra dòng log trạng thái LỖI (Màu Đỏ)
+    public static void logFail(String message) {
+        if (extentTest != null) {
+            extentTest.fail("❌ [FAILED] " + message);
+            System.out.println("❌ [FAILED] " + message);
+        }
+    }
 
-    // Bổ sung: Ghi log khi test Fail kèm Ảnh màn hình (Màu đỏ)
+    // Ghi log khi test Fail kèm Ảnh màn hình (Màu đỏ)
     public static void logFailWithScreenshot(String message, String base64Image) {
         if (extentTest != null) {
-            // Đính kèm ảnh Base64 trực tiếp vào báo cáo
             extentTest.fail(message, MediaEntityBuilder.createScreenCaptureFromBase64String(base64Image).build());
             System.out.println("❌ " + message);
         }
-
     }
-    // Bổ sung: Ghi log khi test Pass kèm Ảnh màn hình (Màu xanh)
+
+    // Ghi log khi test Pass kèm Ảnh màn hình (Màu xanh)
     public static void logPassWithScreenshot(String message, String base64Image) {
         if (extentTest != null) {
             extentTest.pass(message, MediaEntityBuilder.createScreenCaptureFromBase64String(base64Image).build());
             System.out.println("🎉 " + message);
         }
     }
+
+    // ================== THÊM MỚI 2 HÀM NÀY ==================
+
+    // Dùng để in ra dòng log trạng thái Bỏ Qua (Màu Vàng)
+    public static void logSkip(String message) {
+        if (extentTest != null) {
+            extentTest.skip(message);
+            System.out.println("⚠️ [SKIPPED] " + message);
+        }
+    }
+
+    // Dùng để in ra dòng log trạng thái Cảnh Báo (Màu Cam)
+    public static void logWarning(String message) {
+        if (extentTest != null) {
+            extentTest.warning(message);
+            System.out.println("⚠️ [WARNING] " + message);
+        }
+    }
+    // ========================================================
 
     public static void flushReport() {
         if (extentReports != null) {

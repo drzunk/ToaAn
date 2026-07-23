@@ -36,23 +36,16 @@ public class TaoDonPage {
 
         // --- CHỐT CHẶN 1: Kiểm tra thẻ có tồn tại không ---
         if (!webUI.isElementVisible(theLoaiDon)) {
-            String msg = "❌ Lỗi dữ liệu: Không tìm thấy Thẻ Loại đơn [" + loaiDon + "] trên màn hình.";
-
-            // Ép hệ thống ghi dòng này vào Báo cáo HTML trước khi dừng!
-            utils.ExtentReportManager.logStep(msg);
-
-            // Sau khi đã ghi nhận bằng chứng, mới ngắt kịch bản
-            throw new org.testng.SkipException(msg);
+            // XÓA DÒNG logWarning Ở ĐÂY ĐI
+            // Chỉ cần ném cục lỗi ra, TestListener sẽ tự động bắt lấy nó!
+            throw new org.testng.SkipException("❌ Lỗi dữ liệu: Không tìm thấy Thẻ Loại đơn [" + loaiDon + "] trên màn hình.");
         }
 
         // --- CHỐT CHẶN 2: Kiểm tra thẻ có bị khóa không ---
         String classAttribute = driver.findElement(theLoaiDon).getAttribute("class");
-
         if (classAttribute != null && classAttribute.contains("opacity-70")) {
-            String msg = "❌ Bỏ qua kịch bản: Thẻ Loại đơn [" + loaiDon + "] đang bị khóa (Chỉ dành cho cơ quan)!";
-
-            utils.ExtentReportManager.logStep(msg); // Ép ghi vào Report
-            throw new org.testng.SkipException(msg); // Ngắt kịch bản
+            // TƯƠNG TỰ: XÓA DÒNG GHI LOG Ở ĐÂY ĐI
+            throw new org.testng.SkipException("❌ Thẻ Loại đơn [" + loaiDon + "] đang bị khóa (Chỉ dành cho cơ quan)!");
         }
         // -----------------------------------------------------------------
 

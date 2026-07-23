@@ -13,6 +13,7 @@ import utils.WebUI;
 import java.lang.reflect.Method;
 import java.time.Duration;
 
+@Listeners(utils.TestListener.class)
 public class BaseTest {
     public WebDriver driver;
     public WebUI webUI;
@@ -29,8 +30,6 @@ public class BaseTest {
         if (args != null && args.length > 0) {
             testName = "Tạo đơn: " + args[0].toString();
         }
-        ExtentReportManager.createTest(testName);
-        ExtentReportManager.logStep("--- Khởi tạo Trình duyệt Chrome ---");
 
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--disable-notifications");
