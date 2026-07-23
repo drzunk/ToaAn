@@ -5,7 +5,6 @@ import net.sourceforge.tess4j.Tesseract;
 import org.openqa.selenium.*;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
-import org.testng.SkipException;
 
 import java.io.File;
 import java.time.Duration;
@@ -40,10 +39,10 @@ public class WebUI {
                 JavascriptExecutor js = (JavascriptExecutor) driver;
                 js.executeScript("arguments[0].click();", element);
             }
-            // CHỈ IN RA CONSOLE, KHÔNG IN RA REPORT HTML NỮA
             System.out.println(" ➔ Click vào: [" + elementName + "]");
         } catch (Exception e) {
-            throw new SkipException("❌ Lỗi: Không tìm thấy hoặc không thể click: [" + elementName + "]");
+            // ĐÃ ĐỔI SANG RUNTIME EXCEPTION ĐỂ ĐÁNH FAILED REPORT
+            throw new RuntimeException("❌ Lỗi: Không tìm thấy hoặc không thể click: [" + elementName + "]");
         }
     }
 
@@ -53,10 +52,9 @@ public class WebUI {
             scrollToElement(by);
             element.clear();
             element.sendKeys(value);
-            // CHỈ IN RA CONSOLE
             System.out.println(" ➔ Điền: '" + value + "' vào [" + elementName + "]");
         } catch (Exception e) {
-            throw new SkipException("❌ Lỗi: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
+            throw new RuntimeException("❌ Lỗi: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
         }
     }
 
@@ -117,7 +115,7 @@ public class WebUI {
             element.sendKeys(value);
             System.out.println(" ➔ Điền (Mask): '" + value + "' vào [" + elementName + "]");
         } catch (Exception e) {
-            throw new SkipException("❌ Lỗi: Không thể nhập dữ liệu vào ô [" + elementName + "]");
+            throw new RuntimeException("❌ Lỗi: Không thể nhập dữ liệu vào ô [" + elementName + "]");
         }
     }
 
@@ -145,7 +143,7 @@ public class WebUI {
         } catch (Exception e) {
         }
         if (!isFound) {
-            throw new SkipException("❌ Lỗi dữ liệu/Web lag: Không tìm thấy ['" + expectedText + "'] trong [" + elementName + "]");
+            throw new RuntimeException("❌ Lỗi dữ liệu/Web lag: Không tìm thấy ['" + expectedText + "'] trong [" + elementName + "]");
         }
     }
 
@@ -179,7 +177,7 @@ public class WebUI {
         }
 
         if (!isFound) {
-            throw new SkipException("❌ Lỗi dữ liệu: Không tìm thấy ['" + expectedText + "'] trong Dropdown [" + elementName + "]");
+            throw new RuntimeException("❌ Lỗi dữ liệu: Không tìm thấy ['" + expectedText + "'] trong Dropdown [" + elementName + "]");
         }
     }
 
@@ -220,7 +218,6 @@ public class WebUI {
         try {
             org.openqa.selenium.TakesScreenshot ts = (org.openqa.selenium.TakesScreenshot) driver;
             String base64Image = ts.getScreenshotAs(org.openqa.selenium.OutputType.BASE64);
-            // DUY NHẤT LỆNH NÀY ĐƯỢC GIỮ LẠI ĐỂ IN ẢNH RA BÁO CÁO HTML
             ExtentReportManager.logPassWithScreenshot(message, base64Image);
         } catch (Exception e) {
         }
