@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="ToaAn_Automation_Suite">
+
+    <test name="Test_Tao_Don_Moi">
+        <classes>
+            <!-- Đã đổi sang gọi kịch bản TaoDonTest -->
+            <class name="testcases.TaoDonTest"/>
+        </classes>
+    </test>
+
+</suite>
