@@ -2,14 +2,16 @@ package testcases;
 
 import core.BaseTest;
 import org.testng.annotations.DataProvider;
-import org.testng.annotations.Listeners;
 import org.testng.annotations.Test;
+import pages.BiDonPage;
 import pages.DashboardPage;
 import pages.LoginPage;
 import pages.NguyenDonPage;
 import pages.TaoDonPage;
+import utils.ConfigReader;
 import utils.ExcelHelper;
 import utils.ExtentReportManager;
+
 public class TaoDonTest extends BaseTest {
 
     @DataProvider(name = "DuLieuTaoDon")
@@ -17,30 +19,41 @@ public class TaoDonTest extends BaseTest {
         String filePath = "src/test/resources/TestData/DuLieuTaoDon.xlsx";
         Object[][] rawData = ExcelHelper.getExcelData(filePath, "Sheet1");
 
-        // LỌC DỮ LIỆU: Loại bỏ hoàn toàn các "dòng ma" trước khi đưa vào chạy Test
         java.util.List<Object[]> validData = new java.util.ArrayList<>();
         for (Object[] row : rawData) {
-            // Chỉ lấy những dòng mà Cột 1 (Loại đơn) có chứa chữ
             if (row[0] != null && !row[0].toString().trim().isEmpty()) {
                 validData.add(row);
             }
         }
-
-        // Trả về danh sách dữ liệu "sạch" 100%
         return validData.toArray(new Object[0][]);
     }
 
-    // KỊCH BẢN GỘP: CHUẨN ĐỘC LẬP (Mỗi dòng Excel là 1 phiên chạy đầy đủ)
-    // LƯU Ý: Phải thêm các biến tương ứng với số cột mới trong Excel vào trong hàm này
-    // Đã thêm biến thứ 16: coNguoiDaiDien
-    // Cập nhật tham số: Thêm tenNguoiDaiDien và quanHeDaiDien vào cuối cùng
+    // LƯU Ý: SỐ LƯỢNG BIẾN ĐÃ TĂNG LÊN ĐỂ CHỨA DATA CỦA BỊ ĐƠN
+    // TỔNG CỘNG CÓ 41 CỘT TRONG EXCEL CỦA BẠN BÂY GIỜ!
     @Test(dataProvider = "DuLieuTaoDon")
     public void testFlowTaoDon(String stt,
                                String loaiDon, String loaiViec, String toaAn, String tomTat,
-                               String loaiChuThe, String hoTen, String ngaySinh, String gioiTinh,
-                               String cccd, String ngayCap, String noiCap,
-                               String thuongTru, String lienLac, String sdt, String email,
-                               String coNguoiDaiDien, String tenNguoiDaiDien, String quanHeDaiDien) {
+
+                               // =================== NGUYÊN ĐƠN ===================
+                               String loaiChuThe,
+                               // Nguyên đơn - Cá nhân
+                               String hoTen, String ngaySinh, String gioiTinh, String cccd, String ngayCap, String noiCap, String thuongTru, String lienLac,
+                               // Nguyên đơn - Tổ chức
+                               String tenToChuc, String loaiHinhToChuc, String mst, String diaChiToChuc, String nguoiDaiDienToChuc, String chucVuToChuc,
+                               // Nguyên đơn - Dùng chung
+                               String sdt, String email, String coNguoiDaiDien, String tenNguoiDaiDien, String quanHeDaiDien,
+
+                               // =================== BỊ ĐƠN ===================
+                               String loaiBiDon,
+                               // Bị đơn - Cá nhân
+                               String hoTenBD, String cccdBD, String namSinhBD, String diaChiCaNhanBD,
+                               // Bị đơn - Tổ chức
+                               String tenToChucBD, String loaiHinhBD, String mstBD, String diaChiTruSoBD, String nguoiDaiDienBD,
+                               // Bị đơn - Dùng chung
+                               String sdtBD, String emailBD,
+
+                               // =================== NGƯỜI LIÊN QUAN ===================
+                               String coNguoiLienQuan, String hoTenNLQ, String lyDoNLQ, String thongTinLienLacNLQ) {
 
         // --- MỐC 1: ĐĂNG NHẬP ---
         ExtentReportManager.logStep("=== THỰC HIỆN ĐĂNG NHẬP ===");
@@ -49,8 +62,9 @@ public class TaoDonTest extends BaseTest {
         webUI.zoomPage("80%");
         loginPage.chonDangNhapBangTaiKhoan();
 
-        // Gọi hàm đăng nhập (Bên trong LoginPage đã có lệnh chụp ảnh lúc điền đủ thông tin)
-        loginPage.thucHienDangNhap("040092000547", "Admin@123", "");
+        String user = ConfigReader.getValue("username");
+        String pass = ConfigReader.getValue("password");
+        loginPage.thucHienDangNhap(user, pass, "");
 
         // --- MỐC 2: TẠO ĐƠN (BƯỚC 1) ---
         ExtentReportManager.logStep("=== THỰC HIỆN TẠO ĐƠN ===");
@@ -60,8 +74,7 @@ public class TaoDonTest extends BaseTest {
         TaoDonPage taoDonPage = new TaoDonPage(driver);
         taoDonPage.dienFormBuoc1(loaiDon, loaiViec, toaAn, tomTat);
 
-        // Chụp ảnh kết quả Bước 1
-        webUI.captureScreen("Đã điền đầy đủ dữ liệu Bước 1 - đơn " + loaiDon.toLowerCase() + " " + loaiDon);
+        webUI.captureScreen("Đã điền đầy đủ dữ liệu Bước 1 - đơn " + loaiDon.toLowerCase());
         taoDonPage.clickTiepTheo();
 
         webUI.sleep(2);
@@ -70,14 +83,54 @@ public class TaoDonTest extends BaseTest {
         ExtentReportManager.logStep("--- ĐIỀN THÔNG TIN NGUYÊN ĐƠN ---");
         NguyenDonPage nguyenDonPage = new NguyenDonPage(driver);
 
-        nguyenDonPage.dienThongTinCaNhan(loaiChuThe, hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
-        nguyenDonPage.dienThongTinLienHe(thuongTru, lienLac, sdt, email);
+        nguyenDonPage.chonLoaiChuThe(loaiChuThe);
+        webUI.sleep(1);
+
+        boolean isToChuc = loaiChuThe != null &&
+                (loaiChuThe.toLowerCase().contains("tổ chức") ||
+                        loaiChuThe.toLowerCase().contains("doanh nghiệp"));
+
+        if (isToChuc) {
+            nguyenDonPage.dienThongTinToChuc(tenToChuc, loaiHinhToChuc, mst, diaChiToChuc, nguoiDaiDienToChuc, chucVuToChuc, sdt, email);
+        } else {
+            nguyenDonPage.dienThongTinCaNhan(hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
+            nguyenDonPage.dienThongTinLienHe(thuongTru, lienLac, sdt, email);
+        }
+
         nguyenDonPage.chonNguoiDaiDien(coNguoiDaiDien, tenNguoiDaiDien, quanHeDaiDien);
 
-        // Chụp ảnh kết quả Nguyên Đơn
         webUI.captureScreen("Đã điền đầy đủ dữ liệu Nguyên Đơn");
         nguyenDonPage.clickTiepTheo();
 
+        webUI.sleep(2);
+
+        // ==============================================================
+        // --- MỐC 4: BỊ ĐƠN (BƯỚC 3) ---
+        // ==============================================================
+        ExtentReportManager.logStep("--- ĐIỀN THÔNG TIN BỊ ĐƠN ---");
+        BiDonPage biDonPage = new BiDonPage(driver);
+
+        // Mặc định điền cho Bị đơn số 1
+        int indexBiDon = 1;
+
+        biDonPage.chonLoaiBiDon(indexBiDon, loaiBiDon);
+        webUI.sleep(1);
+
+        boolean isBiDonToChuc = loaiBiDon != null &&
+                (loaiBiDon.toLowerCase().contains("tổ chức") ||
+                        loaiBiDon.toLowerCase().contains("doanh nghiệp"));
+
+        if (isBiDonToChuc) {
+            biDonPage.dienThongTinToChuc(indexBiDon, tenToChucBD, loaiHinhBD, mstBD, diaChiTruSoBD, nguoiDaiDienBD, sdtBD);
+        } else {
+            biDonPage.dienThongTinCaNhan(indexBiDon, hoTenBD, cccdBD, namSinhBD, diaChiCaNhanBD, sdtBD, emailBD);
+        }
+
+        // Người có quyền lợi, nghĩa vụ liên quan
+        biDonPage.dienNguoiLienQuan(coNguoiLienQuan, hoTenNLQ, lyDoNLQ, thongTinLienLacNLQ);
+
+        webUI.captureScreen("Đã điền đầy đủ dữ liệu Bị Đơn");
+        biDonPage.clickTiepTheo();
         webUI.sleep(2);
     }
 }
