@@ -9,34 +9,62 @@ public class NguyenDonPage {
     private WebUI webUI;
 
     // ==========================================
-    // 1. KHAI BÁO LOCATORS
+    // 1. SMART LOCATORS (CHỐNG LỖI HOA/THƯỜNG & KHOẢNG TRẮNG)
     // ==========================================
 
+    // Hàm bắt Loại chủ thể (Excel nhập "Cá nhân", "cá nhân", "TỔ CHỨC", "doanh nghiệp" đều nhận hết)
     private By getLoaiChuThe(String loai) {
-        return By.xpath("//div[text()='" + loai + "']");
+        String tuKhoa = loai.trim().toLowerCase(); // Ép về chữ thường để so sánh
+
+        if (tuKhoa.contains("tổ chức") || tuKhoa.contains("doanh nghiệp")) {
+            // Chỉ cần HTML chứa chữ "Tổ chức" là click trúng phóc
+            return By.xpath("//div[contains(@class, 'cursor-pointer') and contains(text(), 'Tổ chức')]");
+        } else {
+            return By.xpath("//div[contains(@class, 'cursor-pointer') and contains(text(), 'Cá nhân')]");
+        }
     }
 
+    // Hàm bắt Giới tính (Chống lỗi gõ "nam", "NỮ", "khác ")
+    private By getGioiTinh(String gioiTinh) {
+        String tuKhoa = gioiTinh.trim().toLowerCase();
+
+        if (tuKhoa.equals("nam")) {
+            return By.xpath("//label[contains(text(),'Giới tính')]/following-sibling::div//div[contains(text(), 'Nam')]");
+        } else if (tuKhoa.contains("nữ")) {
+            return By.xpath("//label[contains(text(),'Giới tính')]/following-sibling::div//div[contains(text(), 'Nữ')]");
+        } else {
+            return By.xpath("//label[contains(text(),'Giới tính')]/following-sibling::div//div[contains(text(), 'Khác')]");
+        }
+    }
+
+    // --- LOCATOR CÁ NHÂN ---
     private By txtHoTen = By.xpath("//label[contains(text(),'Họ và tên')]/following-sibling::input");
     private By txtNgaySinh = By.xpath("//label[contains(text(),'Ngày sinh')]/following-sibling::div/input");
-
-    private By getGioiTinh(String gioiTinh) {
-        return By.xpath("//label[contains(text(),'Giới tính')]/following-sibling::div//div[text()='" + gioiTinh + "']");
-    }
-
     private By txtCCCD = By.xpath("//label[contains(text(),'Số CCCD')]/following-sibling::input");
     private By txtNgayCapCCCD = By.xpath("//label[contains(text(),'Ngày cấp CCCD')]/following-sibling::div/input");
     private By txtNoiCapCCCD = By.xpath("//label[contains(text(),'Nơi cấp CCCD')]/following-sibling::input");
-
     private By txtDiaChiThuongTru = By.xpath("//label[contains(text(),'Địa chỉ thường trú')]/following-sibling::textarea");
-    private By chkGiongThuongTru = By.xpath("//span[text()='Địa chỉ liên lạc giống địa chỉ thường trú']");
+
+    // Đã đổi text() thành contains() để né lỗi dư dấu cách trên HTML
+    private By chkGiongThuongTru = By.xpath("//span[contains(text(), 'giống địa chỉ thường trú')]");
     private By txtDiaChiLienLac = By.xpath("//label[contains(text(),'Địa chỉ liên lạc')]/following-sibling::textarea");
 
+    // --- LOCATOR TỔ CHỨC / DOANH NGHIỆP ---
+    private By txtTenToChuc = By.xpath("//label[contains(text(), 'Tên tổ chức')]/following-sibling::input");
+    private By btnLoaiHinhToChuc = By.xpath("//label[contains(text(), 'Loại hình tổ chức')]/following-sibling::div//button");
+    private By listOptionsLoaiHinh = By.xpath("//div[@role='listbox']//div[@role='option']");
+    private By txtMaSoThue = By.xpath("//label[contains(text(), 'Mã số thuế')]/following-sibling::input");
+    private By txtDiaChiTruSo = By.xpath("//label[contains(text(), 'Địa chỉ trụ sở')]/following-sibling::textarea");
+    private By txtNguoiDaiDienPL = By.xpath("//label[contains(text(), 'Người đại diện pháp luật')]/following-sibling::input");
+    private By txtChucVu = By.xpath("//label[contains(text(), 'Chức vụ')]/following-sibling::input");
+
+    // --- LOCATOR DÙNG CHUNG ---
     private By txtSoDienThoai = By.xpath("//label[contains(text(),'Số điện thoại')]/following-sibling::input");
     private By txtEmail = By.xpath("//label[contains(text(),'Email')]/following-sibling::input");
 
-    private By chkNguoiDaiDien = By.xpath("//span[text()='Tôi có người đại diện pháp lý']");
+    // Đã đổi text() thành contains()
+    private By chkNguoiDaiDien = By.xpath("//span[contains(text(), 'Tôi có người đại diện pháp lý')]");
     private By txtTenNguoiDaiDien = By.xpath("//label[contains(text(),'Người đại diện pháp lý')]/following-sibling::input");
-
     private By btnDropdownQuanHe = By.xpath("//label[contains(text(),'Quan hệ')]/following-sibling::div//button");
     private By listOptionsQuanHe = By.xpath("//div[@role='listbox']//div[@role='option']");
 
@@ -51,14 +79,17 @@ public class NguyenDonPage {
     }
 
     // ==========================================
-    // 3. CÁC HÀM NGHIỆP VỤ (ACTION METHODS)
+    // 3. CÁC HÀM NGHIỆP VỤ
     // ==========================================
 
-    public void dienThongTinCaNhan(String loaiChuThe, String hoTen, String ngaySinh, String gioiTinh, String cccd, String ngayCap, String noiCap) {
+    public void chonLoaiChuThe(String loaiChuThe) {
         if (loaiChuThe != null && !loaiChuThe.isEmpty()) {
-            webUI.clickElement(getLoaiChuThe(loaiChuThe), "Loại chủ thể: [" + loaiChuThe + "]");
+            // Giờ đây getLoaiChuThe đã tự chuẩn hóa, bạn không cần lo Excel viết hoa/thường nữa
+            webUI.clickElement(getLoaiChuThe(loaiChuThe), "Thẻ Loại chủ thể: [" + loaiChuThe + "]");
         }
+    }
 
+    public void dienThongTinCaNhan(String hoTen, String ngaySinh, String gioiTinh, String cccd, String ngayCap, String noiCap) {
         webUI.setTextWithCheck(txtHoTen, hoTen, "Ô nhập [Họ và tên]");
         webUI.setTextForMaskedInput(txtNgaySinh, ngaySinh, "Ô nhập [Ngày sinh]");
 
@@ -72,20 +103,16 @@ public class NguyenDonPage {
     }
 
     public void dienThongTinLienHe(String thuongTru, String lienLac, String sdt, String email) {
-        // 1. Luôn điền Địa chỉ thường trú trước
         webUI.setTextWithCheck(txtDiaChiThuongTru, thuongTru, "Ô nhập [Địa chỉ thường trú]");
 
-        // 2. PHÂN TÍCH TRẠNG THÁI ĐỘNG CỦA Ô ĐỊA CHỈ LIÊN LẠC
         boolean yeuCauGiong = (lienLac == null || lienLac.trim().isEmpty() ||
-                lienLac.equalsIgnoreCase("Giống thường trú") ||
+                lienLac.toLowerCase().contains("giống thường trú") ||
                 lienLac.trim().equals(thuongTru.trim()));
 
         if (yeuCauGiong) {
             if (webUI.isElementVisible(txtDiaChiLienLac)) {
                 webUI.clickElement(chkGiongThuongTru, "Checkbox [Địa chỉ liên lạc giống địa chỉ thường trú]");
                 webUI.sleep(1);
-            } else {
-                utils.ExtentReportManager.logStep("Hệ thống đã tự động ẩn [Địa chỉ liên lạc] (Trùng khớp yêu cầu Excel).");
             }
         } else {
             if (!webUI.isElementVisible(txtDiaChiLienLac)) {
@@ -95,20 +122,30 @@ public class NguyenDonPage {
             webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
         }
 
-        // 3. Điền các thông tin còn lại
         webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
         webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
     }
 
-    // ĐÃ BỔ SUNG LẠI HÀM NÀY (HÀM BỊ MẤT TRONG CODE BẠN VỪA GỬI)
+    public void dienThongTinToChuc(String tenToChuc, String loaiHinh, String mst, String diaChi,
+                                   String nguoiDaiDien, String chucVu, String sdt, String email) {
+        webUI.setTextWithCheck(txtTenToChuc, tenToChuc, "Ô nhập [Tên tổ chức / doanh nghiệp]");
+        webUI.selectDropdownWithCheck(btnLoaiHinhToChuc, listOptionsLoaiHinh, loaiHinh, "Dropdown [Loại hình tổ chức]");
+        webUI.setTextWithCheck(txtMaSoThue, mst, "Ô nhập [Mã số thuế / MSDN]");
+        webUI.setTextWithCheck(txtDiaChiTruSo, diaChi, "Ô nhập [Địa chỉ trụ sở]");
+        webUI.setTextWithCheck(txtNguoiDaiDienPL, nguoiDaiDien, "Ô nhập [Người đại diện pháp luật]");
+        webUI.setTextWithCheck(txtChucVu, chucVu, "Ô nhập [Chức vụ]");
+        webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại tổ chức]");
+        webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email tổ chức]");
+    }
+
     public void chonNguoiDaiDien(String coNguoiDaiDien, String tenNguoiDaiDien, String quanHe) {
-        if (coNguoiDaiDien != null && coNguoiDaiDien.trim().equalsIgnoreCase("Có")) {
+        if (coNguoiDaiDien != null && coNguoiDaiDien.trim().toLowerCase().equals("có")) {
             webUI.clickElement(chkNguoiDaiDien, "Checkbox [Tôi có người đại diện pháp lý]");
             webUI.sleep(1);
             webUI.setTextWithCheck(txtTenNguoiDaiDien, tenNguoiDaiDien, "Ô nhập [Người đại diện pháp lý]");
             webUI.selectDropdownWithCheck(btnDropdownQuanHe, listOptionsQuanHe, quanHe, "Dropdown [Quan hệ đại diện]");
         } else {
-            utils.ExtentReportManager.logStep("Bỏ qua Checkbox [Người đại diện] vì không có yêu cầu từ Excel.");
+            System.out.println(" ⏩ Bỏ qua Checkbox [Người đại diện] vì Excel không yêu cầu.");
         }
     }
 
