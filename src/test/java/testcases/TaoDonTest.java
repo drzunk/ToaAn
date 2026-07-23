@@ -35,42 +35,46 @@ public class TaoDonTest extends BaseTest {
     // Đã thêm biến thứ 16: coNguoiDaiDien
     // Cập nhật tham số: Thêm tenNguoiDaiDien và quanHeDaiDien vào cuối cùng
     @Test(dataProvider = "DuLieuTaoDon")
-    public void testFlowTaoDon(String stt, // <-- THÊM MỚI BIẾN stt VÀO ĐÂY
+    public void testFlowTaoDon(String stt,
                                String loaiDon, String loaiViec, String toaAn, String tomTat,
                                String loaiChuThe, String hoTen, String ngaySinh, String gioiTinh,
                                String cccd, String ngayCap, String noiCap,
                                String thuongTru, String lienLac, String sdt, String email,
                                String coNguoiDaiDien, String tenNguoiDaiDien, String quanHeDaiDien) {
 
-        ExtentReportManager.logStep("=== THỰC THI DATA STT [" + stt + "]: " + loaiDon + " ===");
-
-        // --- BƯỚC 1: ĐĂNG NHẬP & TẠO ĐƠN ---
+        // --- MỐC 1: ĐĂNG NHẬP ---
+        ExtentReportManager.logStep("=== THỰC HIỆN ĐĂNG NHẬP ===");
         LoginPage loginPage = new LoginPage(driver);
         loginPage.openPage();
         webUI.zoomPage("80%");
         loginPage.chonDangNhapBangTaiKhoan();
+
+        // Gọi hàm đăng nhập (Bên trong LoginPage đã có lệnh chụp ảnh lúc điền đủ thông tin)
         loginPage.thucHienDangNhap("040092000547", "Admin@123", "");
 
+        // --- MỐC 2: TẠO ĐƠN (BƯỚC 1) ---
+        ExtentReportManager.logStep("=== THỰC HIỆN TẠO ĐƠN ===");
         DashboardPage dashboardPage = new DashboardPage(driver);
         dashboardPage.clickNopDonMoi();
 
         TaoDonPage taoDonPage = new TaoDonPage(driver);
         taoDonPage.dienFormBuoc1(loaiDon, loaiViec, toaAn, tomTat);
-        webUI.captureScreen("Đã điền đầy đủ dữ liệu Bước 1 - " + loaiDon);
+
+        // Chụp ảnh kết quả Bước 1
+        webUI.captureScreen("Đã điền đầy đủ dữ liệu Bước 1 - đơn " + loaiDon.toLowerCase() + " " + loaiDon);
         taoDonPage.clickTiepTheo();
 
         webUI.sleep(2);
 
-        // --- BƯỚC 2: NGUYÊN ĐƠN ---
+        // --- MỐC 3: NGUYÊN ĐƠN (BƯỚC 2) ---
         ExtentReportManager.logStep("--- ĐIỀN THÔNG TIN NGUYÊN ĐƠN ---");
         NguyenDonPage nguyenDonPage = new NguyenDonPage(driver);
 
         nguyenDonPage.dienThongTinCaNhan(loaiChuThe, hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
         nguyenDonPage.dienThongTinLienHe(thuongTru, lienLac, sdt, email);
-
-        // TRUYỀN DỮ LIỆU ĐẠI DIỆN VÀO HÀM
         nguyenDonPage.chonNguoiDaiDien(coNguoiDaiDien, tenNguoiDaiDien, quanHeDaiDien);
 
+        // Chụp ảnh kết quả Nguyên Đơn
         webUI.captureScreen("Đã điền đầy đủ dữ liệu Nguyên Đơn");
         nguyenDonPage.clickTiepTheo();
 

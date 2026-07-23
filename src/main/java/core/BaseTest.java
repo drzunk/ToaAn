@@ -50,25 +50,10 @@ public class BaseTest {
     }
     // QUAY LẠI ĐÓNG TRÌNH DUYỆT TỪNG LẦN (Đã dọn sạch rác code lỗi)
     @AfterMethod
-    public void tearDownTestCase(ITestResult result) {
-        if (result.getStatus() == ITestResult.FAILURE) {
-            TakesScreenshot ts = (TakesScreenshot) driver;
-            String base64Image = ts.getScreenshotAs(OutputType.BASE64);
-
-            // TỐI ƯU HIỂN THỊ LOG: Chỉ lấy đúng câu thông báo lõi, bỏ qua các class name của Java
-            String cleanErrorMessage = "Lỗi không xác định";
-            if (result.getThrowable().getMessage() != null) {
-                // Dùng .getMessage() thay vì .toString() để bỏ chữ java.lang.RuntimeException
-                cleanErrorMessage = result.getThrowable().getMessage().split("\n")[0];
-            }
-
-            ExtentReportManager.logFailWithScreenshot("❌ Lỗi: " + cleanErrorMessage, base64Image);
-        } else if (result.getStatus() == ITestResult.SUCCESS) {
-            ExtentReportManager.logPass("Kịch bản kết thúc luồng an toàn.");
-        }
-
-        ExtentReportManager.logStep("--- Đóng Trình duyệt Chrome ---");
+    public void tearDown() {
         if (driver != null) {
+            // Thay vì dùng ExtentReportManager, chỉ in ra console thôi:
+            System.out.println("--- Đóng trình duyệt Chrome ---");
             driver.quit();
         }
     }

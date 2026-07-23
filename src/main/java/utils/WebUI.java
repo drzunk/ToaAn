@@ -25,13 +25,11 @@ public class WebUI {
             WebElement element = wait.until(ExpectedConditions.presenceOfElementLocated(by));
             JavascriptExecutor js = (JavascriptExecutor) driver;
             js.executeScript("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element);
-            Thread.sleep(300); // Chờ 1 nhịp rất nhỏ để cuộn xong
+            Thread.sleep(300);
         } catch (Exception e) {
-            // Không làm gì, bỏ qua lỗi cuộn
         }
     }
 
-    // CLICK BẤT TỬ: Kết hợp Click chuẩn và Ép Click bằng JavaScript
     public void clickElement(By by, String elementName) {
         try {
             WebElement element = wait.until(ExpectedConditions.presenceOfElementLocated(by));
@@ -39,14 +37,13 @@ public class WebUI {
             try {
                 wait.until(ExpectedConditions.elementToBeClickable(by)).click();
             } catch (Exception ex) {
-                // FALLBACK: Ép click bằng Javascript nếu Selenium bị che khuất
                 JavascriptExecutor js = (JavascriptExecutor) driver;
                 js.executeScript("arguments[0].click();", element);
             }
-            ExtentReportManager.logStep("Click vào <b>" + elementName + "</b>");
+            // CHỈ IN RA CONSOLE, KHÔNG IN RA REPORT HTML NỮA
+            System.out.println(" ➔ Click vào: [" + elementName + "]");
         } catch (Exception e) {
-            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY (Để TestListener lo)
-            throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không tìm thấy hoặc không thể click: [" + elementName + "]");
+            throw new SkipException("❌ Lỗi: Không tìm thấy hoặc không thể click: [" + elementName + "]");
         }
     }
 
@@ -56,14 +53,13 @@ public class WebUI {
             scrollToElement(by);
             element.clear();
             element.sendKeys(value);
-            ExtentReportManager.logStep("Điền dữ liệu <b>'" + value + "'</b> vào <b>" + elementName + "</b>");
+            // CHỈ IN RA CONSOLE
+            System.out.println(" ➔ Điền: '" + value + "' vào [" + elementName + "]");
         } catch (Exception e) {
-            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
-            throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
+            throw new SkipException("❌ Lỗi: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
         }
     }
 
-    // HÀM KIỂM TRA HIỂN THỊ
     public boolean isElementVisible(By by) {
         try {
             WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(5));
@@ -84,35 +80,33 @@ public class WebUI {
         }
     }
 
-    // NHẬP CÓ ĐIỀU KIỆN
     public void setTextWithCheck(By by, String value, String elementName) {
         if (value == null || value.trim().isEmpty()) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do dữ liệu Excel trống.");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do Excel trống.");
             return;
         }
         if (!isElementVisible(by)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do form không hiển thị trường này.");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do form ẩn.");
             return;
         }
         if (!isElementEnabled(by)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do hệ thống đang khóa (Disabled).");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do hệ thống khóa.");
             return;
         }
         setText(by, value, elementName);
     }
 
-    // NHẬP CÓ MASK (Ngày tháng/CCCD)
     public void setTextForMaskedInput(By by, String value, String elementName) {
         if (value == null || value.trim().isEmpty()) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do dữ liệu Excel trống.");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do Excel trống.");
             return;
         }
         if (!isElementVisible(by)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do form không hiển thị trường này.");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do form ẩn.");
             return;
         }
         if (!isElementEnabled(by)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do hệ thống đang khóa (Disabled).");
+            System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do hệ thống khóa.");
             return;
         }
 
@@ -121,47 +115,50 @@ public class WebUI {
             scrollToElement(by);
             element.sendKeys(Keys.chord(Keys.CONTROL, "a"), Keys.DELETE);
             element.sendKeys(value);
-            ExtentReportManager.logStep("Điền dữ liệu <b>'" + value + "'</b> vào <b>" + elementName + " (Có Mask)</b>");
+            System.out.println(" ➔ Điền (Mask): '" + value + "' vào [" + elementName + "]");
         } catch (Exception e) {
-            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
-            throw new SkipException("❌ Lỗi dữ liệu/giao diện: Không thể nhập dữ liệu vào ô [" + elementName + "]");
+            throw new SkipException("❌ Lỗi: Không thể nhập dữ liệu vào ô [" + elementName + "]");
         }
     }
 
     public void selectCustomDropdown(By dropdownLocator, By optionsLocator, String expectedText, String elementName) {
         clickElement(dropdownLocator, elementName);
+        sleep(1);
         boolean isFound = false;
         try {
-            List<WebElement> options = wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(optionsLocator));
+            List<WebElement> options = wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(optionsLocator));
             for (WebElement option : options) {
-                if (option.getText().trim().toLowerCase().contains(expectedText.trim().toLowerCase())) {
+                String textOnWeb = option.getText();
+                if (textOnWeb == null || textOnWeb.trim().isEmpty()) {
+                    textOnWeb = option.getAttribute("textContent");
+                }
+                if (textOnWeb != null && textOnWeb.trim().toLowerCase().contains(expectedText.trim().toLowerCase())) {
                     JavascriptExecutor js = (JavascriptExecutor) driver;
                     js.executeScript("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", option);
+                    Thread.sleep(300);
                     option.click();
-                    ExtentReportManager.logStep("Chọn giá trị <b>'" + expectedText + "'</b> từ danh sách thả xuống");
+                    System.out.println(" ➔ Chọn Dropdown: '" + expectedText + "' tại [" + elementName + "]");
                     isFound = true;
                     break;
                 }
             }
         } catch (Exception e) {
-            // Chờ xử lý ở cờ isFound
         }
         if (!isFound) {
-            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
-            throw new SkipException("❌ Dữ liệu Excel sai: Không tìm thấy giá trị ['" + expectedText + "'] trong danh sách [" + elementName + "]");
+            throw new SkipException("❌ Lỗi dữ liệu/Web lag: Không tìm thấy ['" + expectedText + "'] trong [" + elementName + "]");
         }
     }
 
     public void selectDropdownWithSearch(By dropdownLocator, By searchInputLocator, By optionsLocator, String expectedText, String elementName) {
         clickElement(dropdownLocator, elementName);
+        sleep(1);
         try {
             WebElement searchInput = wait.until(ExpectedConditions.visibilityOfElementLocated(searchInputLocator));
             searchInput.clear();
             searchInput.sendKeys(expectedText);
-            ExtentReportManager.logStep("Gõ tìm kiếm <b>'" + expectedText + "'</b> vào thanh Search");
+            System.out.println(" ➔ Gõ tìm kiếm Dropdown: '" + expectedText + "'");
             Thread.sleep(1000);
         } catch (Exception e) {
-            System.out.println("Không tìm thấy ô nhập tìm kiếm của Dropdown.");
         }
 
         boolean isFound = false;
@@ -173,7 +170,7 @@ public class WebUI {
                     JavascriptExecutor js = (JavascriptExecutor) driver;
                     js.executeScript("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", option);
                     option.click();
-                    ExtentReportManager.logStep("Chọn giá trị <b>'" + expectedText + "'</b> từ danh sách lọc");
+                    System.out.println(" ➔ Chọn Dropdown lọc: '" + expectedText + "' tại [" + elementName + "]");
                     isFound = true;
                     break;
                 }
@@ -182,18 +179,17 @@ public class WebUI {
         }
 
         if (!isFound) {
-            // CHỈ NÉM LỖI, KHÔNG GHI LOG Ở ĐÂY
-            throw new SkipException("❌ Dữ liệu Excel sai: Không tìm thấy giá trị ['" + expectedText + "'] trong Dropdown [" + elementName + "]");
+            throw new SkipException("❌ Lỗi dữ liệu: Không tìm thấy ['" + expectedText + "'] trong Dropdown [" + elementName + "]");
         }
     }
 
     public void selectDropdownWithCheck(By dropdownLocator, By optionsLocator, String expectedText, String elementName) {
         if (expectedText == null || expectedText.trim().isEmpty()) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do dữ liệu Excel trống.");
+            System.out.println(" ⏩ Bỏ qua Dropdown: [" + elementName + "] do Excel trống.");
             return;
         }
         if (!isElementVisible(dropdownLocator)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do form không hiển thị trường này.");
+            System.out.println(" ⏩ Bỏ qua Dropdown: [" + elementName + "] do form ẩn.");
             return;
         }
         selectCustomDropdown(dropdownLocator, optionsLocator, expectedText, elementName);
@@ -201,11 +197,11 @@ public class WebUI {
 
     public void selectToaAnWithCheck(By dropdownLocator, By searchInputLocator, By optionsLocator, String expectedText, String elementName) {
         if (expectedText == null || expectedText.trim().isEmpty()) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do dữ liệu Excel trống.");
+            System.out.println(" ⏩ Bỏ qua Tòa án: [" + elementName + "] do Excel trống.");
             return;
         }
         if (!isElementVisible(dropdownLocator)) {
-            ExtentReportManager.logStep("Bỏ qua <b>" + elementName + "</b> do form không hiển thị trường này.");
+            System.out.println(" ⏩ Bỏ qua Tòa án: [" + elementName + "] do form ẩn.");
             return;
         }
         selectDropdownWithSearch(dropdownLocator, searchInputLocator, optionsLocator, expectedText, elementName);
@@ -215,9 +211,8 @@ public class WebUI {
         try {
             JavascriptExecutor js = (JavascriptExecutor) driver;
             js.executeScript("document.body.style.zoom = '" + percentage + "'");
-            ExtentReportManager.logStep("Đã thu nhỏ màn hình xuống <b>" + percentage + "</b>");
+            System.out.println(" ➔ Thu nhỏ màn hình: " + percentage);
         } catch (Exception e) {
-            System.out.println("Không thể zoom màn hình: " + e.getMessage());
         }
     }
 
@@ -225,9 +220,9 @@ public class WebUI {
         try {
             org.openqa.selenium.TakesScreenshot ts = (org.openqa.selenium.TakesScreenshot) driver;
             String base64Image = ts.getScreenshotAs(org.openqa.selenium.OutputType.BASE64);
+            // DUY NHẤT LỆNH NÀY ĐƯỢC GIỮ LẠI ĐỂ IN ẢNH RA BÁO CÁO HTML
             ExtentReportManager.logPassWithScreenshot(message, base64Image);
         } catch (Exception e) {
-            System.out.println("Lỗi khi chụp ảnh: " + e.getMessage());
         }
     }
 
@@ -235,26 +230,32 @@ public class WebUI {
         try {
             Thread.sleep(seconds * 1000L);
         } catch (InterruptedException e) {
-            e.printStackTrace();
         }
     }
 
     public String docCaptcha(By locatorAnhCaptcha) {
         String result = "";
         try {
-            WebElement captchaImage = driver.findElement(locatorAnhCaptcha);
-            File srcFile = captchaImage.getScreenshotAs(OutputType.FILE);
+            WebElement captchaElement = driver.findElement(locatorAnhCaptcha);
+            String rawText = captchaElement.getText();
+            if (rawText != null && !rawText.trim().isEmpty()) {
+                result = rawText.replaceAll("[^a-zA-Z0-9]", "");
+                System.out.println(" 🤖 Bắt Captcha từ HTML: " + result);
+                return result;
+            }
 
+            File srcFile = captchaElement.getScreenshotAs(OutputType.FILE);
             ITesseract tesseract = new Tesseract();
-            tesseract.setDatapath("tessdata");
+            String absoluteTessDataPath = System.getProperty("user.dir") + java.io.File.separator + "tessdata";
+            tesseract.setDatapath(absoluteTessDataPath);
             tesseract.setLanguage("eng");
 
             result = tesseract.doOCR(srcFile);
             result = result.replaceAll("[^a-zA-Z0-9]", "");
+            System.out.println(" 🤖 AI giải mã Captcha thành: " + result);
 
-            ExtentReportManager.logStep("🤖 AI đã giải mã Captcha thành: <b>" + result + "</b>");
         } catch (Exception e) {
-            ExtentReportManager.logStep("❌ Lỗi khi đọc Captcha: " + e.getMessage());
+            System.out.println(" ❌ Lỗi đọc Captcha: " + e.getMessage());
         }
         return result;
     }

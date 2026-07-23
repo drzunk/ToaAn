@@ -18,10 +18,10 @@ public class LoginPage {
     private By txtPassword = By.id("login-password");
 
     // --- KHU VỰC CAPTCHA ---
-    // 1. Ô NHẬP CAPTCHA (Nơi bot sẽ điền chữ vào - Bạn f12 kiểm tra lại XPath này nhé)
-// 1. Ô NHẬP CAPTCHA (Đã bắt chính xác 100% bằng ID)
+    // 1. Ô NHẬP CAPTCHA (Bắt chính xác bằng ID)
     private By txtCaptcha = By.id("login-captcha");
-    // 2. THẺ CHỨA CHỮ CAPTCHA (Lỗ hổng của Dev, nơi Bot sẽ đọc chữ ra)
+
+    // 2. THẺ CHỨA CHỮ CAPTCHA (Đã đồng bộ lại tên biến thành lblCaptchaText cho khớp)
     private By lblCaptchaText = By.xpath("//span[contains(@class, 'font-mono') and contains(@style, 'letter-spacing')]");
     // -----------------------
 
@@ -43,24 +43,22 @@ public class LoginPage {
         webUI.clickElement(btnDangNhapBangTaiKhoan, "Nút [Đăng nhập bằng tài khoản]");
     }
 
-    public void thucHienDangNhap(String cccd, String password, String captchaTuExcel) {
-        webUI.setText(txtUsername, cccd, "Ô nhập [CCCD/Tên đăng nhập]");
-        webUI.setText(txtPassword, password, "Ô nhập [Mật khẩu]");
+    public void thucHienDangNhap(String user, String pass, String manualCaptcha) {
+        // PHẢI GỌI QUA webUI ĐỂ ĐƯỢC BẢO VỆ VÀ CHECK ĐIỀU KIỆN
+        webUI.setTextWithCheck(txtUsername, user, "Ô nhập [CCCD/Tên đăng nhập]");
+        webUI.setTextWithCheck(txtPassword, pass, "Ô nhập [Mật khẩu]");
 
-        if (captchaTuExcel != null && !captchaTuExcel.isEmpty()) {
-            // Nếu Excel có sẵn Captcha tĩnh thì điền luôn
-            webUI.setText(txtCaptcha, captchaTuExcel, "Ô nhập [Mã Captcha]");
-        } else {
-            // HACK CAPTCHA: Lấy trực tiếp text từ DOM vì Dev để lộ HTML :))
-            String textCaptcha = driver.findElement(lblCaptchaText).getText().trim();
-
-            ExtentReportManager.logStep("✅ Đã bắt sống Captcha từ HTML: <b>" + textCaptcha + "</b>");
-
-            // Điền chữ vừa lấy được vào ô nhập
-            webUI.setText(txtCaptcha, textCaptcha, "Ô nhập [Mã Captcha]");
+        String captcha = manualCaptcha;
+        if(captcha == null || captcha.isEmpty()) {
+            // Đọc Captcha bằng AI từ thẻ lblCaptchaText
+            captcha = webUI.docCaptcha(lblCaptchaText);
         }
+        webUI.setTextWithCheck(txtCaptcha, captcha, "Ô nhập [Mã Captcha]");
 
-        // Click nút đăng nhập
+        // CHỤP ẢNH TẠI ĐÂY ĐỂ LẤY KHOẢNH KHẮC ĐIỀN ĐỦ USER, PASS, CAPTCHA
+        webUI.captureScreen("Đã điền đầy đủ thông tin Đăng nhập");
+
+        // Click nút đăng nhập thông qua webUI
         webUI.clickElement(btnSubmitLogin, "Nút [Đăng nhập]");
     }
 }
