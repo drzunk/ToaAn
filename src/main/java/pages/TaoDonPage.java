@@ -36,16 +36,15 @@ public class TaoDonPage {
 
         // --- CHỐT CHẶN 1: Kiểm tra thẻ có tồn tại không ---
         if (!webUI.isElementVisible(theLoaiDon)) {
-            // XÓA DÒNG logWarning Ở ĐÂY ĐI
-            // Chỉ cần ném cục lỗi ra, TestListener sẽ tự động bắt lấy nó!
-            throw new org.testng.SkipException("❌ Lỗi dữ liệu: Không tìm thấy Thẻ Loại đơn [" + loaiDon + "] trên màn hình.");
+            // ĐÃ ĐỔI THÀNH RUNTIME EXCEPTION: LỖI LÀ PHẢI ĐỎ LÒM!
+            throw new RuntimeException("❌ Lỗi dữ liệu: Không tìm thấy Thẻ Loại đơn [" + loaiDon + "] trên màn hình.");
         }
 
         // --- CHỐT CHẶN 2: Kiểm tra thẻ có bị khóa không ---
         String classAttribute = driver.findElement(theLoaiDon).getAttribute("class");
         if (classAttribute != null && classAttribute.contains("opacity-70")) {
-            // TƯƠNG TỰ: XÓA DÒNG GHI LOG Ở ĐÂY ĐI
-            throw new org.testng.SkipException("❌ Thẻ Loại đơn [" + loaiDon + "] đang bị khóa (Chỉ dành cho cơ quan)!");
+            // ĐÃ ĐỔI THÀNH RUNTIME EXCEPTION
+            throw new RuntimeException("❌ Lỗi: Thẻ Loại đơn [" + loaiDon + "] đang bị khóa (Chỉ dành cho cơ quan)!");
         }
         // -----------------------------------------------------------------
 
