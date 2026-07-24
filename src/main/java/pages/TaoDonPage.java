@@ -2,6 +2,7 @@ package pages;
 
 import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
+import utils.LoaiDonLocator;
 import utils.WebUI;
 
 public class TaoDonPage {
@@ -9,8 +10,11 @@ public class TaoDonPage {
     private WebUI webUI;
 
     // --- KHAI BÁO LOCATORS ---
-    private By btnDropdownLoaiViec = By.xpath("//button[contains(., 'Chọn loại việc cụ thể')]");
-    private By listOptionsLoaiViec = By.xpath("//button[contains(., 'Chọn loại việc cụ thể')]/following-sibling::div//div[@role='option']");
+    private By btnDropdownLoaiViec = By.xpath(
+            "//button[contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]");
+    private By listOptionsLoaiViec = By.xpath(
+            "//button[contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]"
+                    + "/following-sibling::div//div[@role='option']");
 
     private By btnDropdownToaAn = By.xpath("//button[contains(., 'Chọn tòa án nhận đơn')]");
     // Locator bắt chính xác ô Input tìm kiếm nằm ngay trong khung Tòa án
@@ -21,7 +25,7 @@ public class TaoDonPage {
     private By btnTiepTheo = By.xpath("//button[contains(., 'Tiếp theo')]");
 
     private By getCardLoaiDon(String tenLoaiDon) {
-        return By.xpath("//span[text()='" + tenLoaiDon + "']/ancestor::div[contains(@class, 'cursor-pointer')]");
+        return LoaiDonLocator.card(tenLoaiDon);
     }
 
     public TaoDonPage(WebDriver driver) {
@@ -51,7 +55,7 @@ public class TaoDonPage {
         // 1. Chọn thẻ Loại đơn
         webUI.clickElement(theLoaiDon, "Thẻ Loại đơn: [" + loaiDon + "]");
 
-        // 2. Chọn Loại việc cụ thể
+        // 2. Chọn Loại việc cụ thể (dropdown chỉ enable sau khi chọn loại đơn)
         webUI.selectDropdownWithCheck(btnDropdownLoaiViec, listOptionsLoaiViec, loaiViecCuThe, "Dropdown [Loại việc cụ thể]");
 
         // 3. Chọn Tòa án nhận đơn

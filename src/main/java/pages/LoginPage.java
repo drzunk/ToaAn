@@ -27,6 +27,14 @@ public class LoginPage {
         System.out.println("Đã mở trang: " + pageUrl);
     }
 
+    public String getPageUrl() {
+        return pageUrl;
+    }
+
+    public boolean isLoginFormVisible() {
+        return webUI.existsNow(btnDangNhapBangTaiKhoan) || webUI.existsNow(txtUsername);
+    }
+
     public void chonDangNhapBangTaiKhoan() {
         webUI.clickElement(btnDangNhapBangTaiKhoan, "Nút [Đăng nhập bằng tài khoản]");
     }

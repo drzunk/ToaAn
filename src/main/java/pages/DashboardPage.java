@@ -18,6 +18,14 @@ public class DashboardPage {
     }
 
     // 3. Các hàm thao tác (Nghiệp vụ)
+    public boolean isDashboardVisible() {
+        return webUI.existsNow(btnNopDonMoi);
+    }
+
+    public void waitForDashboard(int timeoutSeconds) {
+        webUI.waitUntilVisible(btnNopDonMoi, timeoutSeconds, "Dashboard [Nộp đơn mới]");
+    }
+
     public void clickNopDonMoi() {
         webUI.clickElement(btnNopDonMoi, "Nút [Nộp đơn mới]");
     }

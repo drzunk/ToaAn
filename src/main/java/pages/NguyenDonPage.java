@@ -17,10 +17,10 @@ public class NguyenDonPage {
         String tuKhoa = loai.trim().toLowerCase(); // Ép về chữ thường để so sánh
 
         if (tuKhoa.contains("tổ chức") || tuKhoa.contains("doanh nghiệp")) {
-            // Chỉ cần HTML chứa chữ "Tổ chức" là click trúng phóc
-            return By.xpath("//div[contains(@class, 'cursor-pointer') and contains(text(), 'Tổ chức')]");
+            // Dùng contains(., ...) thay text() vì nhãn có thể nằm trong thẻ con (vd: "Tổ chức / Doanh nghiệp")
+            return By.xpath("//div[contains(@class, 'cursor-pointer') and (contains(., 'Tổ chức') or contains(., 'Doanh nghiệp'))]");
         } else {
-            return By.xpath("//div[contains(@class, 'cursor-pointer') and contains(text(), 'Cá nhân')]");
+            return By.xpath("//div[contains(@class, 'cursor-pointer') and contains(., 'Cá nhân') and not(contains(., 'Tổ chức'))]");
         }
     }
 
@@ -52,7 +52,7 @@ public class NguyenDonPage {
     // --- LOCATOR TỔ CHỨC / DOANH NGHIỆP ---
     private By txtTenToChuc = By.xpath("//label[contains(text(), 'Tên tổ chức')]/following-sibling::input");
     private By btnLoaiHinhToChuc = By.xpath("//label[contains(text(), 'Loại hình tổ chức')]/following-sibling::div//button");
-    private By listOptionsLoaiHinh = By.xpath("//div[@role='listbox']//div[@role='option']");
+    private By listOptionsLoaiHinh = By.xpath("//label[contains(text(), 'Loại hình tổ chức')]/following-sibling::div//div[@role='option']");
     private By txtMaSoThue = By.xpath("//label[contains(text(), 'Mã số thuế')]/following-sibling::input");
     private By txtDiaChiTruSo = By.xpath("//label[contains(text(), 'Địa chỉ trụ sở')]/following-sibling::textarea");
     private By txtNguoiDaiDienPL = By.xpath("//label[contains(text(), 'Người đại diện pháp luật')]/following-sibling::input");
@@ -66,7 +66,7 @@ public class NguyenDonPage {
     private By chkNguoiDaiDien = By.xpath("//span[contains(text(), 'Tôi có người đại diện pháp lý')]");
     private By txtTenNguoiDaiDien = By.xpath("//label[contains(text(),'Người đại diện pháp lý')]/following-sibling::input");
     private By btnDropdownQuanHe = By.xpath("//label[contains(text(),'Quan hệ')]/following-sibling::div//button");
-    private By listOptionsQuanHe = By.xpath("//div[@role='listbox']//div[@role='option']");
+    private By listOptionsQuanHe = By.xpath("//label[contains(text(),'Quan hệ')]/following-sibling::div//div[@role='option']");
 
     private By btnTiepTheo = By.xpath("//button[contains(., 'Tiếp theo')]");
 
