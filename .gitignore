@@ -4,6 +4,13 @@ target/
 !**/src/test/**/target/
 .kotlin
 
+### Secrets & reports ###
+src/test/resources/config.properties
+test-output/
+
+### Tessdata dump cũ (chỉ giữ src/main/resources/tessdata) ###
+/tessdata/
+
 ### IntelliJ IDEA ###
 .idea/modules.xml
 .idea/jarRepositories.xml

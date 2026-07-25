@@ -12,31 +12,21 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <suiteXmlFile>src/test/resources/suites/testng.xml</suiteXmlFile>
+        <taodon.suite>full</taodon.suite>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>org.seleniumhq.selenium</groupId>
             <artifactId>selenium-java</artifactId>
-            <version>4.18.1</version>
+            <version>4.46.0</version>
         </dependency>
 
         <dependency>
             <groupId>org.testng</groupId>
             <artifactId>testng</artifactId>
             <version>7.9.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi</artifactId>
-            <version>5.2.5</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.poi</groupId>
-            <artifactId>poi-ooxml</artifactId>
-            <version>5.2.5</version>
         </dependency>
 
         <dependency>
@@ -50,7 +40,6 @@
             <artifactId>tess4j</artifactId>
             <version>5.11.0</version>
         </dependency>
-
 
         <dependency>
             <groupId>commons-io</groupId>
@@ -79,5 +68,82 @@
             <artifactId>datafaker</artifactId>
             <version>2.1.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.2.5</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
+                    </suiteXmlFiles>
+                    <systemPropertyVariables>
+                        <taodon.suite>${taodon.suite}</taodon.suite>
+                    </systemPropertyVariables>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.maven.surefire</groupId>
+                        <artifactId>surefire-testng</artifactId>
+                        <version>3.2.5</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>17</release>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>smoke</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-smoke.xml</suiteXmlFile>
+                <taodon.suite>smoke</taodon.suite>
+            </properties>
+        </profile>
+        <profile>
+            <id>mid</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-mid.xml</suiteXmlFile>
+                <taodon.suite>mid</taodon.suite>
+            </properties>
+        </profile>
+        <profile>
+            <id>full</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng.xml</suiteXmlFile>
+                <taodon.suite>full</taodon.suite>
+            </properties>
+        </profile>
+        <profile>
+            <id>login</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-login.xml</suiteXmlFile>
+                <taodon.suite>login</taodon.suite>
+            </properties>
+        </profile>
+        <profile>
+            <id>unit</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-unit.xml</suiteXmlFile>
+                <taodon.suite>full</taodon.suite>
+            </properties>
+        </profile>
+    </profiles>
 </project>

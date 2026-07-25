@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="ToaAn_Full_Suite" verbose="1">
+    <test name="TaoDon_Full_Coverage">
+        <groups>
+            <run>
+                <include name="full"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.tests.TaoDonTest"/>
+        </classes>
+    </test>
+</suite>

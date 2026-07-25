@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Suite riêng khi cần kiểm tra đăng nhập độc lập (không nằm trong smoke). -->
+<suite name="ToaAn_Login_Suite" verbose="1">
+    <test name="Login">
+        <classes>
+            <class name="vn.tuphap.automation.tests.LoginTest"/>
+        </classes>
+    </test>
+</suite>
