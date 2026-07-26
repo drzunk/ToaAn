@@ -49,14 +49,14 @@ public final class TaoDonReportBuilder {
         return s != null ? s.loaiViec() : "Khác";
     }
 
-    /** Bảng tóm tắt ngắn trên Extent — chi tiết đầy đủ nằm ở TestLogs Excel. */
+    /** Bảng tóm tắt ngắn trên Extent — chi tiết đầy đủ nằm ở báo cáo Excel. */
     public static void logScenarioOverview(TaoDonScenario s) {
         if (s == null) {
             return;
         }
         TaoDonExcelTestLog.bindScenario(s);
         ExtentReportManager.logInfo(
-                "Kịch bản: " + buildTestTitle(s) + " — chi tiết dữ liệu xem file TestLogs Excel.");
+                "Kịch bản: " + buildTestTitle(s) + " — chi tiết dữ liệu xem file báo cáo Excel.");
     }
 
     public static String tenBuocDayDu(int step) {

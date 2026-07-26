@@ -36,8 +36,12 @@ public final class WaitConfig {
     /** Dropdown mở / có option. */
     public static final int DROPDOWN = 10;
 
-    /** Chờ toast sau Gửi đơn (soft-fail). Override: {@code -Dtaodon.submit.timeoutSec}. */
-    public static final int SUBMIT = 10;
+    /**
+     * Trần tối đa chờ toast sau Gửi đơn (soft-fail).
+     * Happy-path vẫn thoát sớm khi toast hiện; chỉ case chậm/treo mới chạm trần.
+     * Override: {@code -Dtaodon.submit.timeoutSec}.
+     */
+    public static final int SUBMIT = 60;
 
     /** Bước 3 Hôn nhân — UI đặc thù, đôi khi render chậm. */
     public static final int HON_NHAN = 15;

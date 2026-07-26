@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Sinh chi tiết dữ liệu TestLogs (Excel) theo từng bước — đầy đủ cho tester.
+ * Sinh chi tiết dữ liệu báo cáo Excel theo từng bước — đầy đủ cho tester.
  */
 public final class TaoDonExcelLogBuilder {
 

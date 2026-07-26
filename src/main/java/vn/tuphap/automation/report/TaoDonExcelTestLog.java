@@ -72,13 +72,17 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Xuất nhật ký kiểm thử Excel theo suite: smoke / mid / full / login.
+ * Xuất báo cáo kiểm thử Excel theo suite: smoke / mid / full / login.
  * <p>
  * Sheet {@code Thông tin}: bảng tóm tắt KPI, biểu đồ trạng thái, mục lục liên kết.<br>
  * Sheet {@code Độ phủ}: ma trận nhánh luồng đã chạy (đầy đủ cặp đôi mức B).<br>
  * Sheet {@code Tổng hợp}: master/detail thu gọn; Thời gian dạng số + màu nhiệt.
  */
 public final class TaoDonExcelTestLog {
+
+    /** Mã dự án / module — dùng thống nhất trên file Excel & metadata. */
+    public static final String PROJECT_CODE = "TOAAN";
+    public static final String MODULE_CODE = "TAODON";
 
     /** Trạng thái ghi vào Excel — toàn bộ tiếng Việt. */
     public static final String ST_DAT = "Đạt";
@@ -89,10 +93,10 @@ public final class TaoDonExcelTestLog {
     private static final String SHEET_DO_PHU = "Độ phủ";
 
     public enum SuiteKind {
-        SMOKE("smoke", "SMOKE", "Nhật ký kiểm thử — Mẫu nhanh (tạo đơn)"),
-        MID("mid", "MID", "Nhật ký kiểm thử — Trung bình (35+4)"),
-        FULL("full", "FULL", "Nhật ký kiểm thử — Đầy đủ cặp đôi (mức B)"),
-        LOGIN("login", "LOGIN", "Nhật ký kiểm thử — Đăng nhập");
+        SMOKE("smoke", "SMOKE", "Báo cáo kiểm thử — Tạo đơn điện tử — Mẫu nhanh"),
+        MID("mid", "MID", "Báo cáo kiểm thử — Tạo đơn điện tử — Trung bình"),
+        FULL("full", "FULL", "Báo cáo kiểm thử — Tạo đơn điện tử — Đầy đủ"),
+        LOGIN("login", "LOGIN", "Báo cáo kiểm thử — Tạo đơn điện tử — Đăng nhập");
 
         private final String folder;
         private final String fileTag;
@@ -297,7 +301,7 @@ public final class TaoDonExcelTestLog {
                 INSTANCE = new TaoDonExcelTestLog("Suite kiểm thử", SuiteKind.FULL);
             }
             int seq = INSTANCE.sheetSeq.incrementAndGet();
-            String id = "KB_" + INSTANCE.kind.fileTag() + "_" + String.format("%03d", seq);
+            String id = "TC_" + INSTANCE.kind.fileTag() + "_" + String.format("%03d", seq);
             INSTANCE.entries.add(new LogEntry(
                     id, title, desc, expected, actual, status,
                     note == null ? "" : note,
@@ -313,12 +317,12 @@ public final class TaoDonExcelTestLog {
             }
             try {
                 Path saved = INSTANCE.writeWorkbook();
-                System.out.println("📊 Đã xuất nhật ký [" + INSTANCE.kind.fileTag() + "]: "
+                System.out.println("📊 Đã xuất báo cáo [" + INSTANCE.kind.fileTag() + "]: "
                         + saved.toAbsolutePath());
                 INSTANCE = null;
                 return saved;
             } catch (IOException e) {
-                System.out.println("⚠ Không ghi được nhật ký Excel: " + e.getMessage());
+                System.out.println("⚠ Không ghi được báo cáo Excel: " + e.getMessage());
                 return null;
             }
         }
@@ -421,7 +425,7 @@ public final class TaoDonExcelTestLog {
         title.setHeightInPoints(34f);
 
         Row meta = sheet.createRow(r++);
-        String metaText = kind.fileTag()
+        String metaText = PROJECT_CODE + " / " + MODULE_CODE + " / " + kind.fileTag()
                 + "  ·  " + suiteLabel
                 + "  ·  Bắt đầu: " + startedAt
                 + "  ·  " + entries.size() + " kịch bản";
@@ -475,7 +479,9 @@ public final class TaoDonExcelTestLog {
                 ? "Trung bình — mọi cặp loại việc thường (1 nhánh) + đủ 4 tư cách Phá sản"
                 : kind == SuiteKind.SMOKE ? "Mẫu nhanh — có ép Phá sản" : "Đăng nhập";
         String[][] suiteRows = {
-                {"Loại nhật ký", kind.fileTag()},
+                {"Mã dự án", PROJECT_CODE},
+                {"Module", MODULE_CODE},
+                {"Loại bộ kiểm thử", kind.fileTag()},
                 {"Bộ kiểm thử", suiteLabel},
                 {"Chiến lược độ phủ", coverageStrategy},
                 {"Số kịch bản trong file", String.valueOf(entries.size())},
@@ -1040,7 +1046,8 @@ public final class TaoDonExcelTestLog {
 
         Row title = sheet.createRow(r++);
         Cell t0 = title.createCell(0);
-        t0.setCellValue("NHẬT KÝ KIỂM THỬ — " + kind.fileTag() + "  ·  " + startedAt
+        t0.setCellValue(kind.titleVi().toUpperCase() + "  ·  " + PROJECT_CODE + "/" + kind.fileTag()
+                + "  ·  " + startedAt
                 + "   |   [+] kịch bản → [+] dữ liệu bước (có cột Thao tác)  ·  Màu nhiệt thời gian");
         t0.setCellStyle(st.dashTitle);
         for (int i = 1; i < SHEET_COLS; i++) {

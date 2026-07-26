@@ -8,6 +8,9 @@ import org.openqa.selenium.WebElement;
 import vn.tuphap.automation.ui.WaitConfig;
 import vn.tuphap.automation.ui.WebUI;
 
+import java.util.List;
+import java.util.Locale;
+
 public class XemLaiGuiDonPage {
     private final WebDriver driver;
     private final WebUI webUI;
@@ -22,20 +25,36 @@ public class XemLaiGuiDonPage {
     private final By lblXacNhan = By.xpath(REVIEW_SECTION
             + "//label[contains(., 'Tôi xác nhận')]");
     private final By btnGuiDon = By.xpath("//button[contains(., 'Gửi đơn')]");
-    private final By successAny = By.xpath(
-            "//*[contains(., 'thành công') or contains(., 'Thành công')"
-                    + " or contains(., 'Gửi đơn thành công') or contains(., 'Nộp đơn thành công')]");
-    /** Toast/banner lỗi thường gặp — dùng để dừng chờ sớm, không đợi đủ timeout. */
-    private final By errorAny = By.xpath(
+
+    /** Toast/notify góc màn hình — ưu tiên lấy message sạch từ đây. */
+    private static final List<By> TOAST_SELECTORS = List.of(
+            By.cssSelector(".ant-notification-notice"),
+            By.cssSelector(".ant-message-notice"),
+            By.cssSelector(".ant-message-notice-content"),
+            By.cssSelector(".Toastify__toast"),
+            By.cssSelector("[data-sonner-toast]"),
+            By.cssSelector("[role='alert']"),
+            By.cssSelector("[role='status']"),
+            By.xpath("//div[(contains(@class,'toast') or contains(@class,'notification')"
+                    + " or contains(@class,'Notification') or contains(@class,'notify'))"
+                    + " and string-length(normalize-space(.)) > 0]")
+    );
+
+    /** Fallback text-based (khi UI toast không khớp selector thư viện). */
+    private final By successHint = By.xpath(
+            "//*[contains(., 'Gửi đơn thành công') or contains(., 'Nộp đơn thành công')"
+                    + " or contains(., 'gửi đơn thành công') or contains(., 'nộp đơn thành công')]");
+    private final By errorHint = By.xpath(
             "//*[contains(., 'thất bại') or contains(., 'Thất bại')"
                     + " or contains(., 'không thành công') or contains(., 'Có lỗi')"
                     + " or contains(., 'lỗi hệ thống') or contains(., 'Lỗi hệ thống')"
                     + " or contains(., 'vui lòng thử lại') or contains(., 'Vui lòng thử lại')]");
 
-    /** Thời gian chờ toast thành công sau khi bấm Gửi đơn. Override: -Dtaodon.submit.timeoutSec */
+    /** Trần chờ toast sau Gửi đơn. Override: -Dtaodon.submit.timeoutSec */
     public static int submitTimeoutSec() {
         return WaitConfig.submitTimeoutSec();
     }
+
     /** Các mục trên màn Xem lại — nút Chỉnh sửa quay về bước tương ứng. */
     public static final String MUC_LOAI_DON = "Loại đơn";
     public static final String MUC_NGUYEN_DON = "Nguyên đơn";
@@ -159,38 +178,10 @@ public class XemLaiGuiDonPage {
     }
 
     public void choGuiDonThanhCong(int timeoutSeconds) {
-        System.out.println(" ⏳ Chờ hệ thống xử lý gửi đơn (tối đa " + timeoutSeconds + "s)...");
-        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
-        int lastLogged = -1;
-        while (System.currentTimeMillis() < deadline) {
-            int elapsed = (int) ((timeoutSeconds * 1000L - (deadline - System.currentTimeMillis()) + 999) / 1000);
-            elapsed = Math.min(Math.max(elapsed, 1), timeoutSeconds);
-            if (isGuiDonThanhCong()) {
-                System.out.println(" ✅ Gửi đơn thành công (" + elapsed + "s).");
-                return;
-            }
-            if (isGuiDonThatBai()) {
-                throw new RuntimeException(
-                        "❌ Hệ thống báo lỗi sau khi Gửi đơn (phát hiện sớm sau " + elapsed + "s).");
-            }
-            if (elapsed != lastLogged && (elapsed == 1 || elapsed % 4 == 0 || elapsed == timeoutSeconds)) {
-                lastLogged = elapsed;
-                System.out.println(" ⏳ Chờ phản hồi gửi đơn... (" + elapsed + "/" + timeoutSeconds + "s)");
-            }
-            webUI.sleepMillis(250);
+        GuiDonKetQua kq = choKetQuaSauGuiDon(timeoutSeconds);
+        if (!kq.isSuccess()) {
+            throw new RuntimeException("❌ " + kq.message());
         }
-        throw new RuntimeException(
-                "❌ Hết thời gian chờ: Không nhận được thông báo thành công sau khi Gửi đơn ("
-                        + timeoutSeconds + "s).");
-    }
-
-    /** Chỉ coi là thành công khi thấy text thông báo thành công (không suy luận từ nút biến mất). */
-    public boolean isGuiDonThanhCong() {
-        return webUI.existsNow(successAny);
-    }
-
-    public boolean isGuiDonThatBai() {
-        return webUI.existsNow(errorAny);
     }
 
     public void xemLaiVaGuiDon() {
@@ -201,22 +192,209 @@ public class XemLaiGuiDonPage {
     }
 
     /**
-     * Tick xác nhận + bấm Gửi đơn + chờ kết quả.
+     * Tick xác nhận + bấm Gửi đơn + chờ toast + chụp ngay khi có phản hồi.
      *
-     * @return {@code true} nếu thấy thông báo thành công; {@code false} nếu timeout/lỗi app
-     *         (không ném exception — dùng cho soft-fail).
+     * @return {@link GuiDonKetQua} gồm trạng thái, message hệ thống, ảnh screenshot
      */
-    public boolean thuGuiDonVaChoKetQua() {
+    public GuiDonKetQua thuGuiDonVaChoKetQua() {
         waitStepReady();
         xacNhanThongTin();
         clickGuiDon();
-        try {
-            choGuiDonThanhCong();
-            return true;
-        } catch (RuntimeException ex) {
-            System.out.println(" ⚠ Gửi đơn chưa thành công: " + ex.getMessage());
-            return false;
+        return choKetQuaSauGuiDon(submitTimeoutSec());
+    }
+
+    /**
+     * Chờ toast success/error (thoát sớm), lấy message, chụp giữ toast.
+     * Hết trần → TIMEOUT + chụp màn hình hiện tại.
+     */
+    public GuiDonKetQua choKetQuaSauGuiDon(int timeoutSeconds) {
+        System.out.println(" ⏳ Chờ hệ thống xử lý gửi đơn (tối đa " + timeoutSeconds + "s)...");
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        int lastLogged = -1;
+        while (System.currentTimeMillis() < deadline) {
+            int elapsed = (int) ((timeoutSeconds * 1000L
+                    - (deadline - System.currentTimeMillis()) + 999) / 1000);
+            elapsed = Math.min(Math.max(elapsed, 1), timeoutSeconds);
+
+            GuiDonKetQua fromToast = tryReadToastKetQua();
+            if (fromToast != null) {
+                System.out.println(" " + (fromToast.isSuccess() ? "✅" : "❌")
+                        + " Toast sau Gửi đơn (" + elapsed + "s): " + fromToast.message());
+                return fromToast;
+            }
+
+            if (webUI.existsNow(successHint)) {
+                String msg = firstVisibleText(successHint, "Gửi đơn thành công");
+                String shot = webUI.takeScreenshotPreserveToast();
+                System.out.println(" ✅ Gửi đơn thành công (" + elapsed + "s): " + msg);
+                return new GuiDonKetQua(GuiDonKetQua.TrangThai.SUCCESS, msg, shot);
+            }
+            if (webUI.existsNow(errorHint)) {
+                String msg = firstVisibleText(errorHint, "Hệ thống báo lỗi sau khi Gửi đơn");
+                String shot = webUI.takeScreenshotPreserveToast();
+                System.out.println(" ❌ Hệ thống báo lỗi (" + elapsed + "s): " + msg);
+                return new GuiDonKetQua(GuiDonKetQua.TrangThai.ERROR, msg, shot);
+            }
+
+            if (elapsed != lastLogged && (elapsed == 1 || elapsed % 5 == 0 || elapsed == timeoutSeconds)) {
+                lastLogged = elapsed;
+                System.out.println(" ⏳ Chờ phản hồi gửi đơn... (" + elapsed + "/" + timeoutSeconds + "s)");
+            }
+            webUI.sleepMillis(250);
         }
+
+        String timeoutMsg = "Timeout " + timeoutSeconds
+                + " giây — không có thông báo từ hệ thống sau khi Gửi đơn.";
+        System.out.println(" ⚠ " + timeoutMsg);
+        String shot = webUI.takeScreenshotPreserveToast();
+        return new GuiDonKetQua(GuiDonKetQua.TrangThai.TIMEOUT, timeoutMsg, shot);
+    }
+
+    /** Chỉ coi là thành công khi thấy text thông báo thành công. */
+    public boolean isGuiDonThanhCong() {
+        GuiDonKetQua toast = tryReadToastKetQua();
+        if (toast != null) {
+            return toast.isSuccess();
+        }
+        return webUI.existsNow(successHint);
+    }
+
+    public boolean isGuiDonThatBai() {
+        GuiDonKetQua toast = tryReadToastKetQua();
+        if (toast != null) {
+            return toast.isError();
+        }
+        return webUI.existsNow(errorHint);
+    }
+
+    /**
+     * Đọc toast visible nếu có; đồng thời chụp ảnh giữ toast.
+     *
+     * @return null nếu chưa thấy toast
+     */
+    private GuiDonKetQua tryReadToastKetQua() {
+        WebElement toast = findVisibleToast();
+        if (toast == null) {
+            return null;
+        }
+        String text = normalizeMessage(toast.getText());
+        if (text.isBlank()) {
+            return null;
+        }
+        GuiDonKetQua.TrangThai st = classifyToast(toast, text);
+        if (st == null) {
+            return null;
+        }
+        String shot = webUI.takeScreenshotPreserveToast();
+        return new GuiDonKetQua(st, text, shot);
+    }
+
+    private WebElement findVisibleToast() {
+        for (By by : TOAST_SELECTORS) {
+            try {
+                for (WebElement el : driver.findElements(by)) {
+                    try {
+                        if (el.isDisplayed()) {
+                            String t = normalizeMessage(el.getText());
+                            if (!t.isBlank() && t.length() <= 500) {
+                                return el;
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static GuiDonKetQua.TrangThai classifyToast(WebElement toast, String text) {
+        String cls = "";
+        try {
+            cls = String.valueOf(toast.getAttribute("class")).toLowerCase(Locale.ROOT);
+        } catch (Exception ignored) {
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+
+        boolean knownToastUi = cls.contains("ant-notification")
+                || cls.contains("ant-message")
+                || cls.contains("toastify")
+                || cls.contains("toast")
+                || cls.contains("notification")
+                || cls.contains("sonner");
+        boolean classSuccess = cls.contains("success") || cls.contains("--success");
+        boolean classError = cls.contains("error") || cls.contains("danger")
+                || cls.contains("fail") || cls.contains("destructive")
+                || cls.contains("warning") || cls.contains("--error");
+
+        if (looksLikeSuccess(lower) || classSuccess) {
+            return GuiDonKetQua.TrangThai.SUCCESS;
+        }
+        if (looksLikeError(lower) || classError) {
+            return GuiDonKetQua.TrangThai.ERROR;
+        }
+        // Chỉ chấp nhận toast "lạ" khi chắc là UI notify (tránh role=status có sẵn trên trang)
+        if (knownToastUi) {
+            return GuiDonKetQua.TrangThai.ERROR;
+        }
+        return null;
+    }
+
+    private static boolean looksLikeSuccess(String lower) {
+        return lower.contains("thành công")
+                || lower.contains("đã gửi")
+                || lower.contains("đã nộp")
+                || lower.contains("nộp đơn thành công")
+                || lower.contains("gửi đơn thành công");
+    }
+
+    private static boolean looksLikeError(String lower) {
+        return lower.contains("thất bại")
+                || lower.contains("không thành công")
+                || lower.contains("có lỗi")
+                || lower.contains("lỗi hệ thống")
+                || lower.contains("vui lòng thử lại")
+                || lower.contains("không thể")
+                || lower.contains("error")
+                || lower.contains("exception")
+                || lower.contains("failed");
+    }
+
+    private String firstVisibleText(By by, String fallback) {
+        try {
+            WebElement best = null;
+            int bestLen = Integer.MAX_VALUE;
+            for (WebElement el : driver.findElements(by)) {
+                try {
+                    if (!el.isDisplayed()) {
+                        continue;
+                    }
+                    String t = normalizeMessage(el.getText());
+                    if (t.isBlank() || t.length() > 400) {
+                        continue;
+                    }
+                    // Ưu tiên node nhỏ (gần toast) hơn ancestor chứa cả trang
+                    if (t.length() < bestLen) {
+                        best = el;
+                        bestLen = t.length();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (best != null) {
+                return normalizeMessage(best.getText());
+            }
+        } catch (Exception ignored) {
+        }
+        return fallback;
+    }
+
+    private static String normalizeMessage(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replace('\u00A0', ' ').replaceAll("\\s+", " ").trim();
     }
 
     /** Kiểm tra màn Xem lại có chứa đoạn text (vd. yêu cầu đã sửa). */

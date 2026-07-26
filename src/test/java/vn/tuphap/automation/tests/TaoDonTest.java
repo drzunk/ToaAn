@@ -1,12 +1,11 @@
 package vn.tuphap.automation.tests;
 
-import vn.tuphap.automation.ui.WebUI;
-
 import vn.tuphap.automation.core.TaoDonBaseTest;
 import org.testng.Assert;
 import org.testng.ITestContext;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
+import vn.tuphap.automation.pages.GuiDonKetQua;
 import vn.tuphap.automation.pages.XemLaiGuiDonPage;
 import vn.tuphap.automation.data.DataGenerator;
 import vn.tuphap.automation.report.ExtentReportManager;
@@ -42,41 +41,46 @@ public class TaoDonTest extends TaoDonBaseTest {
         ExtentReportManager.logPass("Đã điền biểu mẫu bước 1→5 và đến màn Xem lại.");
 
         long t = ExtentReportManager.markStepStart();
-        boolean ok = review.thuGuiDonVaChoKetQua();
-        String shotSauGui = webUI.takeOverviewScreenshot();
-        if (ok) {
-            ExtentReportManager.logStepDone(6, 6,
-                    TaoDonReportBuilder.tenBuocDayDu(6) + " — gửi đơn thành công", t,
+        GuiDonKetQua kq = review.thuGuiDonVaChoKetQua();
+        String shotSauGui = kq.screenshotBase64();
+        String systemMsg = kq.message();
+
+        if (kq.isSuccess()) {
+            String stepMsg = TaoDonReportBuilder.tenBuocDayDu(6) + " — " + systemMsg;
+            ExtentReportManager.logStepDone(6, 6, stepMsg, t,
                     shotSauGui == null ? null : List.of(shotSauGui));
             TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT);
             TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_DAT);
-            TaoDonExcelTestLog.setKetQuaThucTe("Đã điền biểu mẫu và gửi đơn thành công.");
+            TaoDonExcelTestLog.setKetQuaThucTe(systemMsg);
             TaoDonExcelTestLog.setGhiChuKetQua("");
             return;
         }
 
-        int timeoutSec = XemLaiGuiDonPage.submitTimeoutSec();
-        String msg = "Đã điền đủ biểu mẫu (bước 1→5), nhưng sau Gửi đơn hệ thống không xác nhận trong "
-                + timeoutSec + " giây (khả năng cao lỗi ứng dụng/máy chủ).";
-        if (shotSauGui != null) {
-            ExtentReportManager.logWarningWithScreenshots(msg, List.of(shotSauGui));
+        String baoCaoMsg;
+        if (kq.isError()) {
+            baoCaoMsg = "Hệ thống báo lỗi sau Gửi đơn: " + systemMsg;
         } else {
-            ExtentReportManager.logWarning(msg);
+            baoCaoMsg = systemMsg;
+        }
+
+        if (shotSauGui != null) {
+            ExtentReportManager.logWarningWithScreenshots(baoCaoMsg, List.of(shotSauGui));
+        } else {
+            ExtentReportManager.logWarning(baoCaoMsg);
         }
 
         if (requireSubmitSuccess()) {
             TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_THAT_BAI);
-            Assert.fail(msg);
+            Assert.fail(baoCaoMsg);
         } else {
             TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT_CANH_BAO);
             TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_DAT_CANH_BAO);
-            TaoDonExcelTestLog.setKetQuaThucTe(
-                    "Đã điền đủ các bước 1→5. Hệ thống không xác nhận gửi đơn trong "
-                            + timeoutSec + " giây.");
-            TaoDonExcelTestLog.setGhiChuKetQua(
-                    "Nghi lỗi phía ứng dụng/máy chủ. Phần gửi đơn chấp nhận thất bại mềm.");
+            TaoDonExcelTestLog.setKetQuaThucTe(systemMsg);
+            TaoDonExcelTestLog.setGhiChuKetQua(kq.isTimeout()
+                    ? "Không có toast từ hệ thống trong thời gian chờ. Phần gửi đơn chấp nhận thất bại mềm."
+                    : "Message lỗi hệ thống (soft-fail): " + systemMsg);
             ExtentReportManager.logPass(
-                    "Điền biểu mẫu thành công; Gửi đơn chấp nhận thất bại mềm (demo chưa phản hồi thành công).");
+                    "Điền biểu mẫu thành công; Gửi đơn soft-fail — " + systemMsg);
         }
     }
 

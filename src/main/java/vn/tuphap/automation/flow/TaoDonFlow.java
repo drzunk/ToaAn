@@ -28,7 +28,7 @@ import vn.tuphap.automation.pages.XemLaiGuiDonPage;
 /**
  * Các bước điền biểu mẫu dùng chung cho TaoDonTest.
  * Extent: không ảnh từng bước 1→5; chỉ ảnh tổng quan ở mốc Xem lại / kết thúc.
- * Chi tiết dữ liệu: TestLogs Excel.
+ * Chi tiết dữ liệu: báo cáo Excel.
  */
 public final class TaoDonFlow {
 

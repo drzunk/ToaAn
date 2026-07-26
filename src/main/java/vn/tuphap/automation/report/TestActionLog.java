@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Ghi nhận thao tác nhập liệu thực tế (cùng nội dung in ra console) để xuất TestLogs.
+ * Ghi nhận thao tác nhập liệu thực tế (cùng nội dung in ra console) để xuất báo cáo Excel.
  */
 public final class TestActionLog {
 
@@ -83,7 +83,7 @@ public final class TestActionLog {
     }
 
     /**
-     * Đánh dấu đầu một khối bước/page trong TestLogs Excel (kiểu báo cáo).
+     * Đánh dấu đầu một khối bước/page trong báo cáo Excel.
      *
      * @param soBuoc   số bước (0 = mở biểu mẫu / đăng nhập / khác)
      * @param tenBuoc  tên bước đầy đủ

@@ -83,7 +83,7 @@ public class WebUI {
         return "";
     }
 
-    /** Click không ghi TestLogs (mở danh sách thả xuống trước khi chọn). */
+    /** Click không ghi báo cáo Excel (mở danh sách thả xuống trước khi chọn). */
     public void clickElementQuiet(By by, String elementName) {
         try {
             scrollToElement(by);
@@ -405,6 +405,25 @@ public class WebUI {
         }
     }
 
+    /**
+     * Chụp viewport giữ nguyên toast/notify (không ESC, không đóng overlay).
+     * Dùng ngay sau khi toast Gửi đơn hiện.
+     */
+    public String takeScreenshotPreserveToast() {
+        if (!screenshotsEnabled()) {
+            return null;
+        }
+        try {
+            scrollWindowTo(0);
+            sleepMillis(150);
+            String shot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64);
+            return (shot == null || shot.isBlank()) ? null : shot;
+        } catch (Exception e) {
+            System.out.println(" ⚠ Không chụp được ảnh (giữ toast): " + e.getMessage());
+            return null;
+        }
+    }
+
     /** Đính 1 ảnh tổng quan vào báo cáo Extent. */
     public void captureOverview(String message) {
         String shot = takeOverviewScreenshot();
@@ -554,7 +573,7 @@ public class WebUI {
         return result;
     }
 
-    /** Tên hiển thị trong nhật ký/Excel — file mẫu không dùng tên tiếng Anh. */
+    /** Tên hiển thị trong báo cáo Excel — file mẫu không dùng tên tiếng Anh. */
     private static String tenTepHienThi(String fileName) {
         if (fileName == null || fileName.isBlank()) {
             return fileName;

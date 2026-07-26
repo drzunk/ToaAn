@@ -27,18 +27,30 @@ public class ExtentReportManager {
     private static final String WARN_BG = "#ffc107";
 
     public static void initReport() {
+        initReport(null);
+    }
+
+    /**
+     * Khởi tạo Extent — luôn ghi {@code test-output/ExtentReport.html} (1 file).
+     *
+     * @param suiteName tên suite TestNG (để gắn loại SMOKE/MID/FULL/LOGIN trên tiêu đề)
+     */
+    public static void initReport(String suiteName) {
         if (extentReports != null) {
             return;
         }
         suiteStartMs = System.currentTimeMillis();
+
+        TaoDonExcelTestLog.SuiteKind kind = TaoDonExcelTestLog.SuiteKind.fromSuiteName(suiteName);
 
         ExtentSparkReporter spark = new ExtentSparkReporter("test-output/ExtentReport.html");
         spark.config().setTheme(Theme.STANDARD);
         spark.config().setEncoding("utf-8");
         spark.config().setTimelineEnabled(false);
         spark.config().setOfflineMode(true);
-        spark.config().setDocumentTitle("Báo cáo kiểm thử tự động — Dịch vụ tư pháp Tòa án");
-        spark.config().setReportName("Kiểm thử luồng Tạo đơn điện tử");
+        spark.config().setDocumentTitle(
+                "Báo cáo kiểm thử — " + TaoDonExcelTestLog.PROJECT_CODE + " — Tạo đơn điện tử");
+        spark.config().setReportName(kind.titleVi());
         spark.viewConfigurer().viewOrder()
                 .as(new ViewName[]{ViewName.DASHBOARD, ViewName.TEST, ViewName.EXCEPTION})
                 .apply();
@@ -47,6 +59,9 @@ public class ExtentReportManager {
         extentReports.attachReporter(spark);
 
         String now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"));
+        extentReports.setSystemInfo("Mã dự án", TaoDonExcelTestLog.PROJECT_CODE);
+        extentReports.setSystemInfo("Module", TaoDonExcelTestLog.MODULE_CODE);
+        extentReports.setSystemInfo("Loại bộ kiểm thử", kind.fileTag());
         extentReports.setSystemInfo("Địa chỉ hệ thống (URL)", ConfigReader.getValue("baseUrl", "https://demo-dichvutuphap.gsfpt.com/"));
         extentReports.setSystemInfo("Thời điểm bắt đầu chạy", now);
         extentReports.setSystemInfo("Công cụ", "Selenium + TestNG (tự động hóa trình duyệt)");

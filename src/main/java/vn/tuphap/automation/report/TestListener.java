@@ -16,8 +16,8 @@ public class TestListener implements ITestListener {
 
     @Override
     public void onStart(ITestContext context) {
-        ExtentReportManager.initReport();
         String suiteName = context.getSuite().getName();
+        ExtentReportManager.initReport(suiteName);
         TaoDonExcelTestLog.SuiteKind kind = TaoDonExcelTestLog.SuiteKind.fromSuiteName(suiteName);
         System.setProperty("taodon.suite", kind.folder());
         TaoDonExcelTestLog.initSuite(suiteName);
