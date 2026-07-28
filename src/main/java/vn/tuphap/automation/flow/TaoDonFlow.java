@@ -26,6 +26,8 @@ import vn.tuphap.automation.pages.TaiLieuPage;
 import vn.tuphap.automation.pages.TaoDonPage;
 import vn.tuphap.automation.pages.XemLaiGuiDonPage;
 
+import java.util.List;
+
 /**
  * Các bước điền biểu mẫu dùng chung cho TaoDonTest.
  * Khi hệ thống báo lỗi/validate: dừng ngay, ghi log message và chụp ảnh (Extent + Excel).
@@ -71,10 +73,17 @@ public final class TaoDonFlow {
     }
 
     public void dienBuoc1(TaoDonScenario s) {
+        dienBuoc1(s, true);
+    }
+
+    /**
+     * @param boQuaDonNhap {@code false} khi đã [Chỉnh sửa] từ Xem lại về bước 1 — không bấm Bắt đầu mới.
+     */
+    public void dienBuoc1(TaoDonScenario s, boolean boQuaDonNhap) {
         long t = ExtentReportManager.markStepStart();
         TestActionLog.buoc(1, TaoDonReportBuilder.tenBuocDayDu(1), "Trang tạo đơn");
         TaoDonPage page = new TaoDonPage(driver);
-        page.dienFormBuoc1(s.loaiDon(), s.loaiViec(), s.toaAn(), s.tomTat());
+        page.dienFormBuoc1(s.loaiDon(), s.loaiViec(), s.toaAn(), s.tomTat(), boQuaDonNhap);
         page.clickTiepTheo();
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
         webUI.waitUntilInvisible(TaoDonPage.MARKER_BUOC1, WaitConfig.STEP, "Đã rời bước 1");
@@ -103,37 +112,16 @@ public final class TaoDonFlow {
             page.chonTuCachNguoiNopDon(s.tuCachNopDon());
         }
         page.xuLyDongNguyenDon(s.coDongNguyenDon(), s.dongNguyenDon());
+        page.chonDongYLuuThongTinDinhDanh();
         driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        if (DataDictionary.isToChuc(s.loaiChuThe())) {
-            page.chuanBiDiaChiToChucTruocTiepTheo(s.diaChiToChuc());
-        } else {
-            page.chuanBiDiaChiTruocTiepTheo(s.thuongTru(), s.lienLac());
-        }
         webUI.logValidationMessages("Trước Tiếp theo — bước 2");
-        chuyenBuoc2(s, page);
-        ExtentReportManager.logStepDone(2, 6, TaoDonReportBuilder.tenBuocDayDu(2), t);
-        TestActionLog.trangThaiBuoc("Đạt");
-    }
-
-    private void chuyenBuoc2(TaoDonScenario s, NguyenDonPage page) {
         page.clickTiepTheo();
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        try {
-            webUI.waitForStepTransition(2, TaoDonReportBuilder.tenBuocDayDu(2), MARKER_BI_DON,
-                    WaitConfig.STEP, "Đã chuyển sang bước Bị đơn / bên bị kiện");
-        } catch (RuntimeException ex) {
-            webUI.logValidationMessages("Bước 2 — sửa địa chỉ và thử lại");
-            if (DataDictionary.isToChuc(s.loaiChuThe())) {
-                page.chuanBiDiaChiToChucTruocTiepTheo(s.diaChiToChuc());
-            } else {
-                page.chuanBiDiaChiTruocTiepTheo(s.thuongTru(), s.lienLac());
-            }
-            page.clickTiepTheo();
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            webUI.waitForStepTransition(2, TaoDonReportBuilder.tenBuocDayDu(2), MARKER_BI_DON,
-                    WaitConfig.STEP, "Đã chuyển sang bước Bị đơn / bên bị kiện");
-        }
+        webUI.waitForStepTransition(2, TaoDonReportBuilder.tenBuocDayDu(2), MARKER_BI_DON,
+                WaitConfig.STEP, "Đã chuyển sang bước Bị đơn / bên bị kiện");
+        ExtentReportManager.logStepDone(2, 6, TaoDonReportBuilder.tenBuocDayDu(2), t);
+        TestActionLog.trangThaiBuoc("Đạt");
     }
 
     public void dienBuoc3(TaoDonScenario s) {
@@ -142,7 +130,10 @@ public final class TaoDonFlow {
         BiDonPage page = new BiDonPage(driver);
         page.dienBuoc3(s);
         webUI.logValidationMessages("Trước Tiếp theo — bước 3");
-        chuyenBuoc3(s, page);
+        page.clickTiepTheo();
+        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        webUI.waitForStepTransition(3, TaoDonReportBuilder.tenBuocDayDu(3), MARKER_NOI_DUNG,
+                WaitConfig.STEP, "Đã chuyển sang bước Nội dung đơn");
         String moTaBuoc3 = TaoDonReportBuilder.tenBuocDayDu(3)
                 + (s.soLuongBiDon() > 1
                 ? " (đã điền " + s.soLuongBiDon() + " bị đơn)"
@@ -151,30 +142,20 @@ public final class TaoDonFlow {
         TestActionLog.trangThaiBuoc("Đạt");
     }
 
-    private void chuyenBuoc3(TaoDonScenario s, BiDonPage page) {
-        page.clickTiepTheo();
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        try {
-            webUI.waitForStepTransition(3, TaoDonReportBuilder.tenBuocDayDu(3), MARKER_NOI_DUNG,
-                    WaitConfig.STEP, "Đã chuyển sang bước Nội dung đơn");
-        } catch (RuntimeException ex) {
-            webUI.logValidationMessages("Bước 3 — sửa địa chỉ bị đơn và thử lại");
-            webUI.scrollToElement(MARKER_BI_DON);
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            page.damBaoDiaChiTatCaBiDon(s);
-            page.clickTiepTheo();
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            webUI.waitForStepTransition(3, TaoDonReportBuilder.tenBuocDayDu(3), MARKER_NOI_DUNG,
-                    WaitConfig.STEP, "Đã chuyển sang bước Nội dung đơn");
-        }
-    }
-
     public void dienBuoc4(TaoDonScenario s) {
         long t = ExtentReportManager.markStepStart();
         TestActionLog.buoc(4, TaoDonReportBuilder.tenBuocDayDu(4), "Trang nội dung đơn");
         NoiDungDonPage page = new NoiDungDonPage(driver);
         page.dienForm(s.loaiDon(), s.thoiDiemPhatSinh(), s.giaTriTranhChap(),
                 s.tomTatQuaTrinh(), s.yeuCauCuThe(), s.canCuPhapLy());
+        if (page.isIframeMode()) {
+            String gaps = page.describeIframeFillGaps();
+            if (!gaps.isBlank()) {
+                webUI.failStepWithSystemFeedback(4, TaoDonReportBuilder.tenBuocDayDu(4),
+                        "Eform chưa điền đủ trước khi Tiếp theo", List.of(gaps));
+            }
+            System.out.println(" ✅ Bước 4 — đã điền đủ thông tin trong eform iframe.");
+        }
         webUI.logValidationMessages("Trước Tiếp theo — bước 4");
         page.clickTiepTheo();
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
@@ -213,18 +194,8 @@ public final class TaoDonFlow {
         webUI.logValidationMessages("Trước Tiếp theo — bước 5");
         page.clickTiepTheo();
         webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
-        try {
-            webUI.waitForStepTransition(5, TaoDonReportBuilder.tenBuocDayDu(5), MARKER_XEM_LAI,
-                    WaitConfig.STEP, "Đã chuyển sang màn Xem lại và Gửi đơn");
-        } catch (StepBlockedException blocked) {
-            throw blocked;
-        } catch (RuntimeException ex) {
-            webUI.logValidationMessages("Bước 5 — không chuyển sang Xem lại (lần 1)");
-            page.clickTiepTheo();
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            webUI.waitForStepTransition(5, TaoDonReportBuilder.tenBuocDayDu(5), MARKER_XEM_LAI,
-                    WaitConfig.STEP, "Đã chuyển sang màn Xem lại và Gửi đơn");
-        }
+        webUI.waitForStepTransition(5, TaoDonReportBuilder.tenBuocDayDu(5), MARKER_XEM_LAI,
+                WaitConfig.STEP, "Đã chuyển sang màn Xem lại và Gửi đơn");
         ExtentReportManager.logStepDone(5, 6, TaoDonReportBuilder.tenBuocDayDu(5), t);
         TestActionLog.trangThaiBuoc("Đạt");
     }
@@ -244,8 +215,54 @@ public final class TaoDonFlow {
         return review;
     }
 
+    /** Điền bước 1→3 rồi dừng (kiểm tra luồng nguyên đơn / bị đơn). */
+    public void denHetBuoc3(TaoDonScenario s) {
+        moFormNopDonMoi();
+        dienBuoc1(s);
+        dienBuoc2(s);
+        dienBuoc3(s);
+        webUI.captureOverview("Ảnh tổng quan — đã điền bước 1→3 [" + s.loaiDon() + "]");
+    }
+
     public void tuXemLaiQuaBuoc5DenXemLai(TaoDonScenario s) {
         dienBuoc5(s);
         TestActionLog.buoc(6, TaoDonReportBuilder.tenBuocDayDu(6) + " (sau chỉnh sửa)", "Trang xem lại");
+    }
+
+    /**
+     * Sau [Chỉnh sửa] Xem trước đơn (đã về bước 1): form còn dữ liệu cũ —
+     * chỉ Tiếp theo đến bước 4, cập nhật yêu cầu cụ thể, rồi bước 5 → Xem lại.
+     * Tránh điền lại bước 2/3 (checkbox đại diện / địa chỉ đã sẵn → click nhầm tắt).
+     */
+    public void tiepTucNopDonTuBuoc1SauChinhSua(TaoDonScenario s, String yeuCauMoi) {
+        chuyenDenBuoc4GiuDuLieuSauChinhSua();
+        dienBuoc4CapNhatYeuCau(s, yeuCauMoi);
+        dienBuoc5(s);
+        TestActionLog.buoc(6, TaoDonReportBuilder.tenBuocDayDu(6) + " (sau chỉnh sửa đơn)", "Trang xem lại");
+    }
+
+    /** Từ bước 1 (sau Chỉnh sửa): bấm Tiếp theo đến khi thấy form bước 4. */
+    private void chuyenDenBuoc4GiuDuLieuSauChinhSua() {
+        long t = ExtentReportManager.markStepStart();
+        TestActionLog.buoc(1, "Tiếp tục từ bước 1→4 (giữ dữ liệu sau Chỉnh sửa)", "Wizard nộp đơn");
+        By btnTiepTheo = By.xpath("//button[contains(., 'Tiếp theo')]");
+        for (int i = 0; i < 5; i++) {
+            webUI.failIfBrowserClosed();
+            if (webUI.existsNow(MARKER_NOI_DUNG)) {
+                System.out.println(" ✅ Đã đến bước 4 [Nội dung đơn] (giữ dữ liệu sau Chỉnh sửa)");
+                ExtentReportManager.logStepDone(1, 6, "Tiếp tục đến bước 4 sau Chỉnh sửa", t);
+                TestActionLog.trangThaiBuoc("Đạt");
+                return;
+            }
+            if (!webUI.existsNow(btnTiepTheo)) {
+                break;
+            }
+            webUI.logValidationMessages("Trước Tiếp theo — sau Chỉnh sửa (lần " + (i + 1) + ")");
+            webUI.clickElement(btnTiepTheo, "Nút [Tiếp theo] (giữ dữ liệu sau Chỉnh sửa)");
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        }
+        webUI.waitUntilVisible(MARKER_NOI_DUNG, WaitConfig.STEP, "Bước 4 [Nội dung đơn] sau Chỉnh sửa");
+        ExtentReportManager.logStepDone(1, 6, "Tiếp tục đến bước 4 sau Chỉnh sửa", t);
+        TestActionLog.trangThaiBuoc("Đạt");
     }
 }

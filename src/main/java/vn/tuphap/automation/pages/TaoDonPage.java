@@ -58,7 +58,18 @@ public class TaoDonPage {
 
     // --- CÁC HÀM NGHIỆP VỤ ---
     public void dienFormBuoc1(String loaiDon, String loaiViecCuThe, String toaAn, String tomTat) {
-        boQuaNhapNeuCo();
+        dienFormBuoc1(loaiDon, loaiViecCuThe, toaAn, tomTat, true);
+    }
+
+    /**
+     * @param boQuaDonNhap {@code true} khi nộp đơn mới (bấm Bắt đầu mới nếu có nháp);
+     *                     {@code false} khi tiếp tục sau [Chỉnh sửa] từ Xem lại — giữ đơn hiện tại.
+     */
+    public void dienFormBuoc1(String loaiDon, String loaiViecCuThe, String toaAn, String tomTat,
+                              boolean boQuaDonNhap) {
+        if (boQuaDonNhap) {
+            boQuaNhapNeuCo();
+        }
 
         By theLoaiDon = getCardLoaiDon(loaiDon);
 
@@ -75,8 +86,7 @@ public class TaoDonPage {
 
         // Phá sản không có danh sách thả xuống loại việc trên UI
         if (DataDictionary.hasLoaiViecDropdown(loaiDon)) {
-            webUI.waitUntilVisible(btnDropdownLoaiViec, WaitConfig.DROPDOWN, "Dropdown [Loại việc cụ thể]");
-            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_MS);
             webUI.selectDropdownWithCheck(btnDropdownLoaiViec, listOptionsLoaiViec, loaiViecCuThe,
                     "Dropdown [Loại việc cụ thể]");
         } else {
@@ -85,7 +95,7 @@ public class TaoDonPage {
             TestActionLog.boQua("Dropdown [Loại việc cụ thể]",
                     "Loại đơn [" + loaiDon + "] không có trên biểu mẫu");
             webUI.waitUntilVisible(btnDropdownToaAn, WaitConfig.DROPDOWN, "Dropdown [Tòa án nhận đơn]");
-            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_MS);
         }
 
         webUI.selectToaAnWithCheck(btnDropdownToaAn, inputSearchToaAn, listOptionsToaAn, toaAn,

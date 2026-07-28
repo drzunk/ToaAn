@@ -12,15 +12,19 @@ public class DataGenerator {
     private static final long FAKER_SEED = 20240724L;
     private static final int SMOKE_ROW_COUNT = 3;
 
-    /** Địa chỉ kiểu Việt Nam — tránh faker US (Apt./AZ…) bị UAT reject. */
+    /** Địa chỉ VN đầy đủ: số nhà/đường + phường (chỉ để đọc) + tỉnh (hint dropdown).
+     * Textarea "Chi tiết" chỉ nhận phần số nhà/đường ({@code WebUI.toAddressStreetDetail}). */
     private static String vietnameseAddress(Faker faker) {
         int soNha = faker.number().numberBetween(1, 999);
         String[] streets = {"Nguyễn Huệ", "Lê Lợi", "Trần Phú", "Hoàng Diệu", "Phan Đình Phùng", "Bà Triệu"};
         String[] wards = {"Phường Bồ Đề", "Phường Minh Khai", "Phường Cầu Giấy", "Phường 1", "Phường 5"};
-        String[] cities = {"Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ", "Bắc Ninh", "Ninh Bình"};
+        // Tên tỉnh/TP gần option dropdown UAT (hint chọn tỉnh từ đoạn cuối địa chỉ).
+        String[] cities = {"Hà Nội", "Thành phố Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
+                "Bắc Ninh", "Ninh Bình", "Sơn La", "Lâm Đồng", "Khánh Hòa"};
+        String city = cities[faker.number().numberBetween(0, cities.length)];
         return soNha + " " + streets[faker.number().numberBetween(0, streets.length)]
                 + ", " + wards[faker.number().numberBetween(0, wards.length)]
-                + ", " + cities[faker.number().numberBetween(0, cities.length)];
+                + ", " + city;
     }
 
     /** CCCD 12 số — format gần thực tế, tránh chuỗi ngẫu nhiên bị UAT chặn. */
@@ -99,8 +103,10 @@ public class DataGenerator {
     }
 
     /**
-     * Smoke: luôn có 1 kịch bản Phá sản + (N-1) kịch bản ngẫu nhiên khác
-     * để cover cả luồng đặc thù và các loại đơn thường.
+     * Smoke (3 kịch bản):
+     * 1) Phá sản (luồng đặc thù)
+     * 2) Dân sự / Bồi thường — eform iframe bước 4 (hiện UAT chỉ có case này)
+     * 3) 1 kịch bản ngẫu nhiên khác (không Phá sản, không trùng eform trên)
      */
     public static Object[][] generateSmokeData() {
         Object[][] data = new Object[SMOKE_ROW_COUNT][1];
@@ -113,20 +119,25 @@ public class DataGenerator {
                 + phaSan.loaiDon + " / " + phaSan.loaiViec
                 + " — tư cách: " + phaSan.tuCachNopDon);
 
-        for (int i = 1; i < SMOKE_ROW_COUNT; i++) {
-            RowSelections selections = buildRandomSelections(faker);
-            int guard = 0;
-            while (DataDictionary.isPhaSan(selections.loaiDon) && guard++ < 20) {
-                selections = buildRandomSelections(faker);
-            }
-            normalizePhaSanSelections(selections, i);
-            validateSelections(selections);
-            TaoDonScenario scenario = buildScenario(i, selections, faker);
-            System.out.println(" 🎲 Kịch bản smoke số " + (i + 1) + ": "
-                    + scenario.loaiDon() + " / " + scenario.loaiViec()
-                    + " — số bị đơn: " + scenario.soLuongBiDon());
-            data[i][0] = scenario;
+        RowSelections eform = buildDanSuBoiThuongEformSelections();
+        validateSelections(eform);
+        data[1][0] = buildScenario(1, eform, faker);
+        System.out.println(" 🎲 Kịch bản smoke số 2 (eform bước 4): "
+                + eform.loaiDon + " / " + eform.loaiViec);
+
+        RowSelections random = buildRandomSelections(faker);
+        int guard = 0;
+        while (guard++ < 30 && (DataDictionary.isPhaSan(random.loaiDon)
+                || isDanSuBoiThuongEform(random.loaiDon, random.loaiViec))) {
+            random = buildRandomSelections(faker);
         }
+        normalizePhaSanSelections(random, 2);
+        validateSelections(random);
+        data[2][0] = buildScenario(2, random, faker);
+        System.out.println(" 🎲 Kịch bản smoke số 3 (ngẫu nhiên): "
+                + random.loaiDon + " / " + random.loaiViec
+                + " — số bị đơn: " + random.soLuongBiDon);
+
         return data;
     }
 
@@ -152,6 +163,56 @@ public class DataGenerator {
         return generateOneRandomScenario();
     }
 
+    /**
+     * Đúng 1 kịch bản / mỗi loại đơn trong catalog (7 loại) — gọn để kiểm tra bước 2–3:
+     * Cá nhân, 1 bị đơn, không đồng ND / NLQ / đại diện.
+     */
+    public static Object[][] generateBuoc23AllLoaiDonData() {
+        Faker faker = new Faker(new Locale("vi"));
+        String[] loaiDons = MasterDataCatalog.getLoaiDon();
+        Object[][] data = new Object[loaiDons.length][1];
+        for (int i = 0; i < loaiDons.length; i++) {
+            String loaiDon = loaiDons[i];
+            String[] viecs = MasterDataCatalog.getLoaiViecByLoaiDon(loaiDon);
+            String loaiViec = viecs[Math.floorMod(i, viecs.length)];
+            // Hành chính ưu tiên việc có form cơ quan ổn định (tránh "Khác" UI lệch).
+            if ("Hành chính".equals(loaiDon)) {
+                for (String v : viecs) {
+                    if (v != null && v.toLowerCase(Locale.ROOT).contains("quyết định")) {
+                        loaiViec = v;
+                        break;
+                    }
+                }
+            }
+            RowSelections s = new RowSelections();
+            s.loaiDon = loaiDon;
+            s.loaiViec = loaiViec;
+            s.toaAn = DataDictionary.pick(MasterDataCatalog.getToaAn(), i);
+            s.loaiChuTheNguyenDon = "Cá nhân";
+            s.gioiTinh = DataDictionary.pick(MasterDataCatalog.getGioiTinh(), i);
+            s.noiCap = DataDictionary.pick(MasterDataCatalog.getNoiCapCccd(), i);
+            s.loaiHinhToChuc = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), i);
+            s.coNguoiDaiDien = "Không";
+            s.quanHeDaiDien = DataDictionary.pick(MasterDataCatalog.getQuanHeDaiDien(), i);
+            s.loaiChuTheBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiChuTheBiDon(), i);
+            s.loaiHinhBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), i + 1);
+            s.coNguoiLienQuan = "Không";
+            s.coTaiLieuBoSung = "Không";
+            s.soLuongBiDon = 1;
+            s.coDongNguyenDon = "Không";
+            if (DataDictionary.isPhaSan(loaiDon)) {
+                s.tuCachNopDon = DataDictionary.pick(MasterDataCatalog.getTuCachNopDonPhaSan(), i);
+            }
+            normalizePhaSanSelections(s, i);
+            validateSelections(s);
+            TaoDonScenario scenario = buildScenario(i, s, faker);
+            System.out.println(" 🎲 Kịch bản bước 2–3 [" + (i + 1) + "/" + loaiDons.length + "]: "
+                    + scenario.loaiDon() + " / " + scenario.loaiViec());
+            data[i][0] = scenario;
+        }
+        return data;
+    }
+
     private static TaoDonScenario pickReviewEditScenario(Faker faker, boolean preferDanSuOrShtt) {
         for (int i = 0; i < 25; i++) {
             RowSelections selections = buildRandomSelections(faker);
@@ -170,6 +231,12 @@ public class DataGenerator {
             if (DataDictionary.isToChuc(selections.loaiChuTheNguyenDon)) {
                 continue;
             }
+            // Giữ kịch bản gọn: 1 bị đơn, không đồng ND / NLQ — tránh treo lâu khi đi lại 1→5 sau Chỉnh sửa.
+            selections.soLuongBiDon = 1;
+            selections.coDongNguyenDon = "Không";
+            selections.coNguoiLienQuan = "Không";
+            selections.coTaiLieuBoSung = "Không";
+            selections.coNguoiDaiDien = "Không";
             TaoDonScenario scenario = buildScenario(i, selections, faker);
             System.out.println(" 🎲 Kịch bản chỉnh sửa Xem lại: "
                     + scenario.loaiDon() + " / " + scenario.loaiViec());
@@ -219,6 +286,46 @@ public class DataGenerator {
             MasterDataCatalog.assertInCatalog(s.loaiChuTheBiDon, "loaiChuTheBiDon", MasterDataCatalog.getLoaiChuTheBiDon());
         }
         MasterDataCatalog.assertInCatalog(s.coNguoiLienQuan, "coNguoiLienQuan", MasterDataCatalog.getCoKhong());
+    }
+
+    /**
+     * 1 kịch bản gọn tới bước 4 eform: Dân sự / Bồi thường thiệt hại ngoài hợp đồng.
+     * Cá nhân, 1 bị đơn, không đồng ND / NLQ / đại diện.
+     */
+    public static Object[][] generateDanSuBoiThuongEformProbeData() {
+        Faker faker = new Faker(new Locale("vi"));
+        RowSelections s = buildDanSuBoiThuongEformSelections();
+        validateSelections(s);
+        TaoDonScenario scenario = buildScenario(0, s, faker);
+        System.out.println(" 🎲 Probe eform bước 4: " + scenario.loaiDon() + " / " + scenario.loaiViec());
+        return new Object[][]{{scenario}};
+    }
+
+    /** Dân sự / Bồi thường — eform iframe bước 4 (UAT hiện chỉ có case này). */
+    private static RowSelections buildDanSuBoiThuongEformSelections() {
+        RowSelections s = new RowSelections();
+        s.loaiDon = "Dân sự";
+        s.loaiViec = "Bồi thường thiệt hại ngoài hợp đồng";
+        s.toaAn = DataDictionary.pick(MasterDataCatalog.getToaAn(), 0);
+        s.loaiChuTheNguyenDon = "Cá nhân";
+        s.gioiTinh = DataDictionary.pick(MasterDataCatalog.getGioiTinh(), 0);
+        s.noiCap = DataDictionary.pick(MasterDataCatalog.getNoiCapCccd(), 0);
+        s.loaiHinhToChuc = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), 0);
+        s.coNguoiDaiDien = "Không";
+        s.quanHeDaiDien = DataDictionary.pick(MasterDataCatalog.getQuanHeDaiDien(), 0);
+        s.loaiChuTheBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiChuTheBiDon(), 0);
+        s.loaiHinhBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), 1);
+        s.coNguoiLienQuan = "Không";
+        s.coTaiLieuBoSung = "Không";
+        s.soLuongBiDon = 1;
+        s.coDongNguyenDon = "Không";
+        return s;
+    }
+
+    private static boolean isDanSuBoiThuongEform(String loaiDon, String loaiViec) {
+        return "Dân sự".equals(loaiDon)
+                && loaiViec != null
+                && loaiViec.contains("Bồi thường thiệt hại ngoài hợp đồng");
     }
 
     private static TaoDonScenario buildScenario(int index, RowSelections selections, Faker faker) {
@@ -283,12 +390,18 @@ public class DataGenerator {
                     .loaiHinhBD(selections.loaiHinhBiDon)
                     .mstBD(faker.number().digits(10))
                     .diaChiTruSoBD(vietnameseAddress(faker))
-                    .nguoiDaiDienBD(faker.name().fullName());
+                    .nguoiDaiDienBD(faker.name().fullName())
+                    .chucVuBD("Giám đốc");
         } else {
             b.hoTenBD(faker.name().fullName())
                     .cccdBD(generateCccd(faker))
                     .namSinhBD(String.valueOf(faker.number().numberBetween(1960, 2000)))
-                    .diaChiCaNhanBD(vietnameseAddress(faker));
+                    .gioiTinhBD(selections.gioiTinh == null || selections.gioiTinh.isBlank()
+                            ? "Nam" : selections.gioiTinh)
+                    .diaChiCaNhanBD(vietnameseAddress(faker))
+                    .noiOHienTaiBD(vietnameseAddress(faker))
+                    .ngheNghiepBD(faker.options().option(
+                            "Nhân viên văn phòng", "Kỹ sư", "Kinh doanh", "Lao động tự do", "Giáo viên"));
         }
 
         if ("Có".equals(selections.coNguoiLienQuan)) {
@@ -351,12 +464,17 @@ public class DataGenerator {
                     .mst(faker.number().digits(10))
                     .diaChiTruSo(vietnameseAddress(faker))
                     .nguoiDaiDien(faker.name().fullName())
+                    .chucVu("Giám đốc")
                     .build();
         }
         return extra.hoTen(faker.name().fullName())
                 .cccd(generateCccd(faker))
                 .namSinh(String.valueOf(faker.number().numberBetween(1965, 1998)))
+                .gioiTinh(faker.options().option("Nam", "Nữ", "Khác"))
                 .diaChiCaNhan(vietnameseAddress(faker))
+                .noiOHienTai(vietnameseAddress(faker))
+                .ngheNghiep(faker.options().option(
+                        "Nhân viên văn phòng", "Kỹ sư", "Kinh doanh", "Lao động tự do"))
                 .build();
     }
 

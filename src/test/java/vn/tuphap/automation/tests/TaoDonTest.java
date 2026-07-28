@@ -1,6 +1,7 @@
 package vn.tuphap.automation.tests;
 
 import vn.tuphap.automation.core.TaoDonBaseTest;
+import org.openqa.selenium.By;
 import org.testng.Assert;
 import org.testng.ITestContext;
 import org.testng.annotations.DataProvider;
@@ -85,11 +86,12 @@ public class TaoDonTest extends TaoDonBaseTest {
     }
 
     @Test(groups = {"smoke", "mid", "full", "chinhSua"},
-            description = "Từ màn Xem lại, bấm Chỉnh sửa phần Nội dung đơn, cập nhật yêu cầu cụ thể, rồi quay lại Xem lại để đối chiếu (không gửi đơn)")
+            description = "Từ màn Xem lại, bấm Chỉnh sửa (Xem trước đơn) → bước 1, đi lại nộp đơn với yêu cầu mới, đối chiếu Xem lại (không gửi đơn)")
     public void testChinhSuaNoiDungTuXemLai() {
         TaoDonScenario s = DataGenerator.generateScenarioForReviewEdit();
         TaoDonReportBuilder.logScenarioOverview(s);
-        ExtentReportManager.logInfo("Kiểm tra Chỉnh sửa Nội dung đơn từ Xem lại (không gửi đơn).");
+        ExtentReportManager.logInfo(
+                "Kiểm tra Chỉnh sửa đơn từ Xem lại: Xem trước đơn → bước 1 → nộp lại (không gửi đơn).");
 
         TaoDonFlow flow = new TaoDonFlow(driver, webUI);
         XemLaiGuiDonPage review = flow.denManXemLai(s);
@@ -98,25 +100,48 @@ public class TaoDonTest extends TaoDonBaseTest {
                 + " — kiểm tra luồng Chỉnh sửa từ bước Xem lại.";
 
         long t = ExtentReportManager.markStepStart();
-        review.clickChinhSuaNoiDung();
-        ExtentReportManager.logStepDone(6, 6, "Click Chỉnh sửa tại mục Nội dung đơn", t);
+        review.clickChinhSuaDon();
+        ExtentReportManager.logStepDone(6, 6, "Click Chỉnh sửa — Xem trước đơn (về bước 1)", t);
 
-        flow.dienBuoc4CapNhatYeuCau(s, yeuCauMoi);
-        flow.tuXemLaiQuaBuoc5DenXemLai(s);
+        flow.tiepTucNopDonTuBuoc1SauChinhSua(s, yeuCauMoi);
 
         review.waitStepReady();
         Assert.assertTrue(review.reviewContains(yeuCauMoi),
                 "Màn Xem lại phải hiển thị đúng nội dung yêu cầu vừa chỉnh sửa");
-        webUI.captureOverview("Ảnh tổng quan — màn Xem lại sau chỉnh sửa nội dung đơn");
+        webUI.captureOverview("Ảnh tổng quan — màn Xem lại sau chỉnh sửa đơn");
         ExtentReportManager.logPass("Đối chiếu Xem lại ổn — đã thấy yêu cầu đã chỉnh sửa.");
         TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT);
 
         TaoDonExcelTestLog.setKetQuaMongDoi(
-                "Từ màn Xem lại, chỉnh sửa nội dung đơn rồi quay lại Xem lại thấy đúng yêu cầu đã sửa.");
+                "Từ màn Xem lại, Chỉnh sửa (Xem trước đơn) về bước 1, nộp lại rồi Xem lại thấy đúng yêu cầu đã sửa.");
         TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_DAT);
         TaoDonExcelTestLog.setKetQuaThucTe(
                 "Đối chiếu thành công: màn Xem lại đã cập nhật theo yêu cầu vừa chỉnh sửa. Không gửi đơn.");
         TaoDonExcelTestLog.setGhiChuKetQua("Yêu cầu cụ thể sau chỉnh sửa: " + yeuCauMoi);
+    }
+
+    @DataProvider(name = "DuLieuBuoc23BayLoai")
+    public Object[][] getBuoc23Data() {
+        return DataGenerator.generateBuoc23AllLoaiDonData();
+    }
+
+    @Test(dataProvider = "DuLieuBuoc23BayLoai", groups = {"buoc23", "regression"},
+            description = "Điền bước 1→3 cho đủ 7 loại đơn — kiểm tra thứ tự nhập nguyên đơn / bị đơn")
+    public void testBuoc2Va3BayLoaiDon(TaoDonScenario s) {
+        Assert.assertNotNull(s, "Kịch bản kiểm thử không được để trống");
+        TaoDonReportBuilder.logScenarioOverview(s);
+        ExtentReportManager.logInfo("Kiểm tra bước 2–3: " + s.loaiDon() + " / " + s.loaiViec());
+
+        TaoDonFlow flow = new TaoDonFlow(driver, webUI);
+        flow.denHetBuoc3(s);
+
+        Assert.assertTrue(webUI.existsNow(TaoDonFlow.MARKER_NOI_DUNG)
+                        || webUI.existsNow(By.xpath("//button[contains(., 'Tiếp theo')]")),
+                "Sau bước 3 phải còn ở wizard (có Tiếp theo / marker nội dung)");
+        ExtentReportManager.logPass("Đã điền ổn định bước 1→3 cho [" + s.loaiDon() + "].");
+        TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT);
+        TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_DAT);
+        TaoDonExcelTestLog.setKetQuaThucTe("Điền bước 1→3 thành công: " + s.loaiDon() + " / " + s.loaiViec());
     }
 
     /**

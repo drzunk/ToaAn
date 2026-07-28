@@ -79,6 +79,9 @@ public final class TestFileHelper {
         if (lower.endsWith(".docx") || lower.endsWith(".doc")) {
             return "tệp mẫu.docx";
         }
+        if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "tệp mẫu.png";
+        }
         return Paths.get(absolutePath).getFileName().toString();
     }
 

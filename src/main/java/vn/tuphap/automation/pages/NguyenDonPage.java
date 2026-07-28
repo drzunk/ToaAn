@@ -4,6 +4,7 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import vn.tuphap.automation.data.DataDictionary;
 import vn.tuphap.automation.data.DongNguyenDonData;
+import vn.tuphap.automation.report.ExtentReportManager;
 import vn.tuphap.automation.report.TestActionLog;
 import vn.tuphap.automation.ui.UiSynonyms;
 import vn.tuphap.automation.ui.WaitConfig;
@@ -120,7 +121,29 @@ public class NguyenDonPage {
     private By txtNoiCapCCCD = By.xpath(MAIN_SECTION + "//label[contains(text(),'Nơi cấp CCCD')]/following-sibling::input");
     private By txtDiaChiThuongTru = By.xpath(MAIN_SECTION + "//label[contains(text(),'Địa chỉ thường trú')]/following-sibling::textarea");
 
-    private By lblGiongThuongTru = By.xpath(MAIN_SECTION + "//span[contains(text(), 'giống địa chỉ thường trú')]/ancestor::label[1]");
+    /**
+     * UAT: {@code div.cursor-pointer} + vòng tròn (không phải {@code label}/checkbox).
+     * Neo theo text trên toàn trang — hai lựa chọn này unique ở bước Nguyên đơn.
+     */
+    private By optGiongThuongTru = By.xpath(
+            "//div[contains(@class,'cursor-pointer')]"
+                    + "[contains(., 'Địa chỉ liên lạc giống địa chỉ thường trú')"
+                    + " or .//span[contains(., 'giống địa chỉ thường trú')]]"
+                    + " | //span[contains(., 'giống địa chỉ thường trú')]"
+                    + "/ancestor::div[contains(@class,'cursor-pointer')][1]"
+                    + " | //label[.//span[contains(., 'giống địa chỉ thường trú')]"
+                    + " or contains(., 'giống địa chỉ thường trú')]");
+
+    /** Đồng ý lưu vào Thông tin định danh — cùng kiểu toggle vòng tròn. */
+    private By optDongYLuuDinhDanh = By.xpath(
+            "//div[contains(@class,'cursor-pointer')]"
+                    + "[contains(., 'Thông tin định danh') and contains(., 'lưu các thông tin')]"
+                    + " | //div[contains(@class,'cursor-pointer')]"
+                    + "[.//span[contains(., 'lưu các thông tin đã nhập')]]"
+                    + " | //span[contains(., 'lưu các thông tin đã nhập')]"
+                    + "/ancestor::div[contains(@class,'cursor-pointer')][1]"
+                    + " | //label[contains(., 'Thông tin định danh') and contains(., 'lưu')]");
+
     private By txtDiaChiLienLac = By.xpath(MAIN_SECTION + "//label[contains(text(),'Địa chỉ liên lạc')]/following-sibling::textarea");
 
     // --- LOCATOR TỔ CHỨC / DOANH NGHIỆP ---
@@ -182,11 +205,11 @@ public class NguyenDonPage {
     }
 
     private boolean mainCaNhanFormVisible() {
-        return webUI.isElementVisible(txtHoTen) || webUI.isElementVisible(txtCCCD);
+        return webUI.existsNow(txtHoTen) || webUI.existsNow(txtCCCD);
     }
 
     private boolean mainToChucFormVisible() {
-        return webUI.isElementVisible(txtTenToChuc);
+        return webUI.existsNow(txtTenToChuc);
     }
 
     /** Tab Cá nhân/Tổ chức trong một scope (nguyên đơn chính hoặc card đồng ND). */
@@ -267,39 +290,129 @@ public class NguyenDonPage {
         webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
     }
 
-    /** Hoàn thiện tỉnh/phường/chi tiết — dùng khi điền form và trước bấm Tiếp theo. */
+    /** Hoàn thiện tỉnh/phường/chi tiết — một lần theo đúng thứ tự form. */
     public void hoanThienDiaChiNguyenDon(String thuongTru, String lienLac) {
         boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
-        if (webUI.isElementVisible(lblGiongThuongTru)) {
-            webUI.ensureCheckboxState(lblGiongThuongTru, giongThuongTru,
-                    "Checkbox [Địa chỉ liên lạc giống địa chỉ thường trú]");
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        }
         webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru, "Thường trú");
+        chonDiaChiLienLacGiongThuongTru(giongThuongTru);
+        if (giongThuongTru) {
+            return;
+        }
         int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
         if (blocks >= 2) {
-            String lienLacChiTiet = giongThuongTru ? thuongTru : lienLac;
             webUI.dismissOpenDropdowns();
             webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
-            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLacChiTiet, "Liên lạc");
-        } else if (!giongThuongTru && webUI.isElementVisible(txtDiaChiLienLac)
-                && webUI.isElementEnabled(txtDiaChiLienLac)) {
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac, "Liên lạc");
+        } else if (webUI.existsNow(txtDiaChiLienLac) && webUI.isElementEnabledNow(txtDiaChiLienLac)) {
             webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
         }
     }
 
-    /** Kiểm tra nhanh trước Tiếp theo — chỉ điền lại khối còn thiếu. */
+    /**
+     * Chọn “Địa chỉ liên lạc giống địa chỉ thường trú”.
+     * Xác nhận bằng: toggle đã chọn <b>và/hoặc</b> thẻ địa chỉ liên lạc ẩn (còn ≤1 thẻ).
+     */
+    public void chonDiaChiLienLacGiongThuongTru(boolean giong) {
+        if (!webUI.existsNow(optGiongThuongTru)) {
+            webUI.scrollToElement(By.xpath(
+                    "//*[contains(., 'Địa chỉ thường trú') or contains(., 'giống địa chỉ thường trú')]"));
+            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        }
+        if (!webUI.existsNow(optGiongThuongTru)) {
+            System.out.println(" ⏩ Bỏ qua [Địa chỉ liên lạc giống thường trú] — không có trên biểu mẫu.");
+            TestActionLog.boQua("Địa chỉ liên lạc giống địa chỉ thường trú", "Không có trên biểu mẫu");
+            return;
+        }
+        webUI.scrollToElement(optGiongThuongTru);
+        if (!giong) {
+            webUI.ensureCustomToggleSelected(optGiongThuongTru, false,
+                    "Hộp kiểm [Địa chỉ liên lạc giống địa chỉ thường trú]");
+            return;
+        }
+        if (daChonGiongThuongTru()) {
+            System.out.println(" ⏩ [Địa chỉ liên lạc giống địa chỉ thường trú] đã chọn sẵn.");
+            TestActionLog.chon("Hộp kiểm [Địa chỉ liên lạc giống địa chỉ thường trú]", "Đã chọn sẵn");
+            return;
+        }
+        webUI.clickElement(optGiongThuongTru,
+                "Hộp kiểm [Địa chỉ liên lạc giống địa chỉ thường trú]");
+        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        waitLienLacAddressHidden();
+        if (daChonGiongThuongTru()) {
+            System.out.println(" ✅ Đã chọn [Địa chỉ liên lạc giống địa chỉ thường trú]"
+                    + " — thẻ liên lạc đã ẩn / toggle active.");
+            return;
+        }
+        // Click chưa ăn — thử 1 lần nữa rồi xác nhận; không thì chụp ảnh (không chặn nếu vẫn đi tiếp được).
+        System.out.println(" ⚠ Toggle giống thường trú chưa xác nhận — click lại 1 lần...");
+        webUI.clickElement(optGiongThuongTru,
+                "Hộp kiểm [Địa chỉ liên lạc giống địa chỉ thường trú] (lần 2)");
+        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        waitLienLacAddressHidden();
+        if (daChonGiongThuongTru()) {
+            System.out.println(" ✅ Đã chọn [Địa chỉ liên lạc giống địa chỉ thường trú] sau lần 2.");
+            return;
+        }
+        String shot = webUI.takeScreenshotPreserveToast();
+        String msg = "Chưa xác nhận được chọn 'Địa chỉ liên lạc giống địa chỉ thường trú'"
+                + " (toggle/thẻ liên lạc vẫn hiện).";
+        System.out.println(" ⚠ " + msg);
+        TestActionLog.validation("Địa chỉ liên lạc giống thường trú", msg);
+        if (shot != null) {
+            ExtentReportManager.logWarningWithScreenshot(msg, shot);
+        } else {
+            ExtentReportManager.logWarning(msg);
+        }
+    }
+
+    /** Đã chọn giống thường trú? — ưu tiên thẻ liên lạc ẩn; fallback trạng thái vòng tròn. */
+    private boolean daChonGiongThuongTru() {
+        int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
+        if (blocks <= 1 && webUI.existsNow(optGiongThuongTru)) {
+            return true;
+        }
+        return webUI.isCustomToggleSelected(optGiongThuongTru);
+    }
+
+    /** Đồng ý lưu thông tin vào 'Thông tin định danh' cho lần tạo hồ sơ sau — chỉ chọn 1 lần. */
+    public void chonDongYLuuThongTinDinhDanh() {
+        if (!webUI.existsNow(optDongYLuuDinhDanh)) {
+            webUI.scrollToElement(By.xpath(
+                    "//*[contains(., 'Thông tin định danh') or contains(., 'lưu các thông tin đã nhập')]"));
+            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        }
+        if (!webUI.existsNow(optDongYLuuDinhDanh)) {
+            System.out.println(" ⏩ Bỏ qua [Đồng ý lưu Thông tin định danh] — không có trên biểu mẫu.");
+            TestActionLog.boQua("Đồng ý lưu Thông tin định danh", "Không có trên biểu mẫu");
+            return;
+        }
+        webUI.scrollToElement(optDongYLuuDinhDanh);
+        webUI.ensureCustomToggleSelected(optDongYLuuDinhDanh, true,
+                "Hộp kiểm [Đồng ý lưu Thông tin định danh]");
+    }
+
+    private void waitLienLacAddressHidden() {
+        long deadline = System.currentTimeMillis() + WaitConfig.FIELD * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (webUI.countVisibleAddressBlocks(MAIN_SECTION) <= 1) {
+                return;
+            }
+            webUI.sleepMillis(150);
+        }
+    }
+
+    /** Chỉ bổ sung khối địa chỉ còn thiếu — không click lại toggle giống thường trú. */
     public void chuanBiDiaChiTruocTiepTheo(String thuongTru, String lienLac) {
         boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
-        int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
         if (!webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 0)) {
             webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru);
         }
-        if (blocks >= 2) {
-            String lienLacChiTiet = giongThuongTru ? thuongTru : lienLac;
-            if (!webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 1)) {
-                webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLacChiTiet);
-            }
+        if (giongThuongTru) {
+            return;
+        }
+        int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
+        if (blocks >= 2 && !webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 1)) {
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac);
         }
     }
 
@@ -349,7 +462,7 @@ public class NguyenDonPage {
                 getGioiTinh(gt)
         };
         for (By by : candidates) {
-            if (webUI.isElementVisible(by)) {
+            if (webUI.existsNow(by)) {
                 webUI.clickElement(by, "Giới tính người đại diện: [" + gt + "]");
                 return;
             }
@@ -439,8 +552,12 @@ public class NguyenDonPage {
             return;
         }
         if (coNguoiDaiDien != null && coNguoiDaiDien.trim().equalsIgnoreCase("có")) {
-            if (webUI.existsNow(chkNguoiDaiDien)) {
+            // Form đã mở sẵn (vd. sau Chỉnh sửa từ Xem lại) — không click lại checkbox (sẽ tắt).
+            boolean alreadyOpen = webUI.existsNow(txtTenNguoiDaiDien);
+            if (!alreadyOpen && webUI.existsNow(chkNguoiDaiDien)) {
                 webUI.clickElement(chkNguoiDaiDien, "Checkbox [Tôi có người đại diện pháp lý]");
+            } else if (alreadyOpen) {
+                System.out.println(" ⏩ [Người đại diện pháp lý] đã mở sẵn — không click lại checkbox.");
             }
             webUI.waitUntilVisible(txtTenNguoiDaiDien, WaitConfig.FIELD, "Ô [Người đại diện pháp lý]");
             webUI.setTextWithCheck(txtTenNguoiDaiDien, tenNguoiDaiDien, "Ô nhập [Người đại diện pháp lý]");

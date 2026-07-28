@@ -36,12 +36,16 @@ public final class TaoDonScenario {
     private final String hoTenBD;
     private final String cccdBD;
     private final String namSinhBD;
+    private final String gioiTinhBD;
     private final String diaChiCaNhanBD;
+    private final String noiOHienTaiBD;
+    private final String ngheNghiepBD;
     private final String tenToChucBD;
     private final String loaiHinhBD;
     private final String mstBD;
     private final String diaChiTruSoBD;
     private final String nguoiDaiDienBD;
+    private final String chucVuBD;
     private final String sdtBD;
     private final String emailBD;
 
@@ -105,12 +109,16 @@ public final class TaoDonScenario {
         this.hoTenBD = b.hoTenBD;
         this.cccdBD = b.cccdBD;
         this.namSinhBD = b.namSinhBD;
+        this.gioiTinhBD = b.gioiTinhBD;
         this.diaChiCaNhanBD = b.diaChiCaNhanBD;
+        this.noiOHienTaiBD = b.noiOHienTaiBD;
+        this.ngheNghiepBD = b.ngheNghiepBD;
         this.tenToChucBD = b.tenToChucBD;
         this.loaiHinhBD = b.loaiHinhBD;
         this.mstBD = b.mstBD;
         this.diaChiTruSoBD = b.diaChiTruSoBD;
         this.nguoiDaiDienBD = b.nguoiDaiDienBD;
+        this.chucVuBD = b.chucVuBD;
         this.sdtBD = b.sdtBD;
         this.emailBD = b.emailBD;
         this.coNguoiLienQuan = b.coNguoiLienQuan;
@@ -166,12 +174,16 @@ public final class TaoDonScenario {
     public String hoTenBD() { return hoTenBD; }
     public String cccdBD() { return cccdBD; }
     public String namSinhBD() { return namSinhBD; }
+    public String gioiTinhBD() { return gioiTinhBD; }
     public String diaChiCaNhanBD() { return diaChiCaNhanBD; }
+    public String noiOHienTaiBD() { return noiOHienTaiBD; }
+    public String ngheNghiepBD() { return ngheNghiepBD; }
     public String tenToChucBD() { return tenToChucBD; }
     public String loaiHinhBD() { return loaiHinhBD; }
     public String mstBD() { return mstBD; }
     public String diaChiTruSoBD() { return diaChiTruSoBD; }
     public String nguoiDaiDienBD() { return nguoiDaiDienBD; }
+    public String chucVuBD() { return chucVuBD; }
     public String sdtBD() { return sdtBD; }
     public String emailBD() { return emailBD; }
     public String coNguoiLienQuan() { return coNguoiLienQuan; }
@@ -200,12 +212,16 @@ public final class TaoDonScenario {
                 .hoTen(hoTenBD)
                 .cccd(cccdBD)
                 .namSinh(namSinhBD)
+                .gioiTinh(gioiTinhBD)
                 .diaChiCaNhan(diaChiCaNhanBD)
+                .noiOHienTai(noiOHienTaiBD)
+                .ngheNghiep(ngheNghiepBD)
                 .tenToChuc(tenToChucBD)
                 .loaiHinh(loaiHinhBD)
                 .mst(mstBD)
                 .diaChiTruSo(diaChiTruSoBD)
                 .nguoiDaiDien(nguoiDaiDienBD)
+                .chucVu(chucVuBD)
                 .sdt(sdtBD)
                 .email(emailBD)
                 .tenCoQuanHC(tenCoQuanHC)
@@ -244,12 +260,16 @@ public final class TaoDonScenario {
         private String hoTenBD = "";
         private String cccdBD = "";
         private String namSinhBD = "";
+        private String gioiTinhBD = "";
         private String diaChiCaNhanBD = "";
+        private String noiOHienTaiBD = "";
+        private String ngheNghiepBD = "";
         private String tenToChucBD = "";
         private String loaiHinhBD = "";
         private String mstBD = "";
         private String diaChiTruSoBD = "";
         private String nguoiDaiDienBD = "";
+        private String chucVuBD = "";
         private String sdtBD = "";
         private String emailBD = "";
         private String coNguoiLienQuan = "";
@@ -300,12 +320,16 @@ public final class TaoDonScenario {
         public Builder hoTenBD(String v) { this.hoTenBD = nullToEmpty(v); return this; }
         public Builder cccdBD(String v) { this.cccdBD = nullToEmpty(v); return this; }
         public Builder namSinhBD(String v) { this.namSinhBD = nullToEmpty(v); return this; }
+        public Builder gioiTinhBD(String v) { this.gioiTinhBD = nullToEmpty(v); return this; }
         public Builder diaChiCaNhanBD(String v) { this.diaChiCaNhanBD = nullToEmpty(v); return this; }
+        public Builder noiOHienTaiBD(String v) { this.noiOHienTaiBD = nullToEmpty(v); return this; }
+        public Builder ngheNghiepBD(String v) { this.ngheNghiepBD = nullToEmpty(v); return this; }
         public Builder tenToChucBD(String v) { this.tenToChucBD = nullToEmpty(v); return this; }
         public Builder loaiHinhBD(String v) { this.loaiHinhBD = nullToEmpty(v); return this; }
         public Builder mstBD(String v) { this.mstBD = nullToEmpty(v); return this; }
         public Builder diaChiTruSoBD(String v) { this.diaChiTruSoBD = nullToEmpty(v); return this; }
         public Builder nguoiDaiDienBD(String v) { this.nguoiDaiDienBD = nullToEmpty(v); return this; }
+        public Builder chucVuBD(String v) { this.chucVuBD = nullToEmpty(v); return this; }
         public Builder sdtBD(String v) { this.sdtBD = nullToEmpty(v); return this; }
         public Builder emailBD(String v) { this.emailBD = nullToEmpty(v); return this; }
         public Builder coNguoiLienQuan(String v) { this.coNguoiLienQuan = nullToEmpty(v); return this; }

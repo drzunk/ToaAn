@@ -94,25 +94,30 @@ public class XemLaiGuiDonPage {
         webUI.waitUntilVisible(stepReadyMarker, WaitConfig.STEP, "Bước 6 [Xem lại & Gửi đơn]");
     }
 
+    /**
+     * Nút [Chỉnh sửa] trong card mục trên màn Xem lại.
+     * Scope bắt buộc {@code (REVIEW_CARD)} — tránh XPath {@code |} khớp cả card thay vì nút.
+     * UI mới chỉ còn card "Xem trước đơn" / "Danh sách tài liệu" (không còn card "Nội dung đơn").
+     */
     private By chinhSuaTrongMuc(String tenMuc) {
         String titleMatch = tieuDeMucMatch(tenMuc);
-        return By.xpath(REVIEW_SECTION
-                + "//div[contains(@class, 'border') and contains(@class, 'rounded')"
-                + " and (.//span[" + titleMatch + "]"
-                + " or .//*[self::span or self::h3 or self::p][contains(@class, 'font-bold') and (" + titleMatch + ")]"
-                + " or .//*[self::span or self::h3][contains(normalize-space(.), '" + tenMuc + "')])"
-                + " and .//button[contains(normalize-space(.), 'Chỉnh sửa')]]"
-                + "//button[contains(normalize-space(.), 'Chỉnh sửa')]");
+        // Khi tìm mục khác (vd. Nội dung), tránh nhầm card Xem trước — trừ khi đang tìm đúng card đó.
+        boolean timXemTruoc = MUC_XEM_TRUOC_DON.equals(tenMuc);
+        String excludeXemTruoc = timXemTruoc
+                ? ""
+                : " and not(.//span[starts-with(normalize-space(.),'Xem trước đơn')])";
+        return By.xpath("(" + REVIEW_CARD + ")"
+                + "//div[contains(@class,'border') and contains(@class,'rounded')]"
+                + "[(.//span[" + titleMatch + "]"
+                + " or .//*[self::span or self::h3 or self::p][contains(@class,'font-bold') and (" + titleMatch + ")]"
+                + " or .//*[self::span or self::h3 or self::p][" + titleMatch + "])"
+                + " and .//button[contains(normalize-space(.),'Chỉnh sửa')]"
+                + excludeXemTruoc + "]"
+                + "//button[contains(normalize-space(.),'Chỉnh sửa')]");
     }
 
-    /** Marker bước 4 wizard — có Tiếp theo (không phải summary read-only trên Xem lại). */
-    private static final By MARKER_BUOC4_WIZARD_FORM = By.xpath(
-            "//div[.//h2[contains(normalize-space(.), 'Nội dung đơn')]"
-                    + " and .//button[contains(normalize-space(.), 'Tiếp theo')]]"
-                    + "//label[contains(., 'Yêu cầu cụ thể') or contains(., 'Thời điểm phát sinh')]"
-                    + " | //div[.//h2[contains(normalize-space(.), 'Nội dung đơn')]"
-                    + " and .//button[contains(normalize-space(.), 'Tiếp theo')]]//textarea");
-
+    /** Marker bước 4 wizard — loại trừ summary trên Xem lại (dùng chung NoiDungDonPage). */
+    private static final By MARKER_BUOC4_WIZARD_FORM = NoiDungDonPage.MARKER_STEP_READY;
     /** Khớp tiêu đề card — tránh nhầm text "nội dung đơn" trong checkbox / summary. */
     private static String tieuDeMucMatch(String tenMuc) {
         if ("Danh sách tài liệu".equals(tenMuc)) {
@@ -148,21 +153,36 @@ public class XemLaiGuiDonPage {
     private void clickChinhSuaFirstAvailable(List<String> tenMucCandidates, By stepMarker, String moTaBuoc) {
         waitStepReady();
         String matched = null;
-        By btnChinhSua = null;
+        WebElement btnEl = null;
         for (String tenMuc : tenMucCandidates) {
-            By candidate = chinhSuaTrongMuc(tenMuc);
-            if (webUI.isElementVisible(candidate)) {
+            WebElement found = findVisibleChinhSuaButton(List.of(tenMuc));
+            if (found != null) {
                 matched = tenMuc;
-                btnChinhSua = candidate;
+                btnEl = found;
                 break;
             }
         }
-        if (btnChinhSua == null) {
+        if (btnEl == null) {
             throw new RuntimeException("❌ Không thấy nút [Chỉnh sửa] tại các mục: " + tenMucCandidates + ".");
         }
-        WebElement btnEl = driver.findElement(btnChinhSua);
         clickChinhSuaElement(btnEl, "Nút [Chỉnh sửa] — " + matched);
-        webUI.waitUntilVisible(stepMarker, WaitConfig.STEP, moTaBuoc);
+        if (!choHienMarker(stepMarker, WaitConfig.STEP, moTaBuoc)) {
+            throw new RuntimeException("❌ Hết thời gian chờ: [" + moTaBuoc + "] không hiển thị sau khi Chỉnh sửa.");
+        }
+    }
+
+    private boolean choHienMarker(By marker, int timeoutSeconds, String description) {
+        System.out.println(" ⏳ Chờ hiển thị: " + description);
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            webUI.failIfBrowserClosed();
+            if (webUI.isElementVisible(marker)) {
+                System.out.println(" ✅ Đã hiển thị: " + description);
+                return true;
+            }
+            webUI.sleepMillis(250);
+        }
+        return false;
     }
 
     /** Quay lại bước 1 — Loại đơn. */
@@ -191,41 +211,210 @@ public class XemLaiGuiDonPage {
                 "Bước 3 [Bị đơn]");
     }
 
-    /** Quay lại bước 4 — Nội dung đơn (UI cũ / mới / thanh tiến trình wizard). */
-    public void clickChinhSuaNoiDung() {
+    /**
+     * [Chỉnh sửa] trên card <b>Xem trước đơn</b> → về <b>bước 1</b>, tiếp tục luồng nộp đơn.
+     * (UI 2026: không còn chỉnh riêng bước 4 từ Xem lại.)
+     */
+    public void clickChinhSuaDon() {
         waitStepReady();
-        dismissUiOverlays();
+        dismissUiOverlaysFast();
 
-        try {
-            clickChinhSuaFirstAvailable(
-                    List.of(MUC_NOI_DUNG_DON, MUC_NOI_DUNG),
-                    MARKER_BUOC4_WIZARD_FORM,
-                    "Bước 4 [Nội dung đơn]");
-            return;
-        } catch (RuntimeException fromCard) {
-            System.out.println(" ℹ Chỉnh sửa card chưa mở wizard — thử điều hướng bước 4...");
-            if (!bamChinhSuaNoiDung()) {
-                moBuoc4TuChinhSuaTheoThuTu(3, 4);
-            }
-            if (!dieuHuongWizardBuoc4Aggressive()) {
-                throw fromCard;
-            }
-            webUI.waitUntilVisible(MARKER_BUOC4_WIZARD_FORM, WaitConfig.STEP,
-                    "Bước 4 [Nội dung đơn]");
+        System.out.println(" ℹ Đang tìm nút [Chỉnh sửa] — Xem trước đơn...");
+        WebElement btn = findChinhSuaByCardTitle(List.of(MUC_XEM_TRUOC_DON, MUC_NOI_DUNG_DON, MUC_NOI_DUNG));
+        if (btn == null) {
+            logVisibleReviewEditButtons();
+            throw new RuntimeException(
+                    "❌ Không thấy nút [Chỉnh sửa] trên card Xem trước đơn (chỉnh sửa đơn → bước 1).");
+        }
+
+        clickChinhSuaElement(btn, "Nút [Chỉnh sửa] — Xem trước đơn (về bước 1)");
+        if (!choHienBuoc1(WaitConfig.STEP)) {
+            throw new RuntimeException(
+                    "❌ Sau [Chỉnh sửa] Xem trước đơn kỳ vọng về bước 1 [Loại đơn] nhưng chưa thấy form bước 1.");
         }
     }
 
-    /** Bấm Chỉnh sửa tại mục Nội dung đơn hoặc Nội dung (không chờ form — dùng kèm điều hướng wizard). */
-    private boolean bamChinhSuaNoiDung() {
-        for (String muc : List.of(MUC_NOI_DUNG_DON, MUC_NOI_DUNG)) {
-            By btn = chinhSuaTrongMuc(muc);
-            if (!webUI.isElementVisible(btn)) {
-                continue;
+    /**
+     * @deprecated Dùng {@link #clickChinhSuaDon()} — UI mới về bước 1, không còn về bước 4.
+     */
+    @Deprecated
+    public void clickChinhSuaNoiDung() {
+        clickChinhSuaDon();
+    }
+
+    /**
+     * [Chỉnh sửa] trên card <b>Danh sách tài liệu</b> → về <b>bước 5</b> (đính file).
+     */
+    public void clickChinhSuaTaiLieu() {
+        waitStepReady();
+        dismissUiOverlaysFast();
+
+        System.out.println(" ℹ Đang tìm nút [Chỉnh sửa] — Danh sách tài liệu...");
+        WebElement btn = findChinhSuaByCardTitle(List.of(MUC_DANH_SACH_TAI_LIEU, MUC_TAI_LIEU));
+        if (btn == null) {
+            logVisibleReviewEditButtons();
+            throw new RuntimeException(
+                    "❌ Không thấy nút [Chỉnh sửa] trên card Danh sách tài liệu (chỉnh file → bước 5).");
+        }
+        clickChinhSuaElement(btn, "Nút [Chỉnh sửa] — Danh sách tài liệu (về bước 5)");
+        if (!choHienBuoc5(WaitConfig.STEP)) {
+            throw new RuntimeException(
+                    "❌ Sau [Chỉnh sửa] Danh sách tài liệu kỳ vọng về bước 5 nhưng chưa thấy form Tài liệu.");
+        }
+    }
+
+    /** Chờ wizard bước 1 sau khi Chỉnh sửa đơn từ Xem lại — chỉ dùng existsNow (không wait 5s). */
+    private boolean choHienBuoc1(int timeoutSeconds) {
+        System.out.println(" ⏳ Chờ hiển thị: Bước 1 [Loại đơn] sau Chỉnh sửa đơn");
+        By toaAnOrLoaiViec = By.xpath(
+                "//button[contains(., 'Chọn tòa án') or contains(., 'tòa án nhận đơn')"
+                        + " or contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]"
+                        + " | //textarea[contains(@placeholder, 'Mô tả ngắn gọn')]");
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                webUI.failIfBrowserClosed();
+                if (webUI.existsNow(TaoDonPage.MARKER_BUOC1) || webUI.existsNow(toaAnOrLoaiViec)) {
+                    if (!isStillOnReviewPageFast()) {
+                        System.out.println(" ✅ Đã về bước 1 [Loại đơn]");
+                        return true;
+                    }
+                }
+            } catch (vn.tuphap.automation.flow.BrowserClosedException e) {
+                throw e;
+            } catch (RuntimeException ignored) {
             }
-            clickChinhSuaElement(driver.findElement(btn), "Nút [Chỉnh sửa] — " + muc);
-            return true;
+            webUI.sleepMillis(250);
         }
         return false;
+    }
+
+    private boolean choHienBuoc5(int timeoutSeconds) {
+        System.out.println(" ⏳ Chờ hiển thị: Bước 5 [Tài liệu] sau Chỉnh sửa file");
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                webUI.failIfBrowserClosed();
+                if (isOnBuoc5TaiLieu()) {
+                    System.out.println(" ✅ Đã về bước 5 [Tài liệu & chứng cứ]");
+                    return true;
+                }
+            } catch (vn.tuphap.automation.flow.BrowserClosedException e) {
+                throw e;
+            } catch (RuntimeException ignored) {
+            }
+            webUI.sleepMillis(250);
+        }
+        return false;
+    }
+
+    private boolean isOnBuoc5TaiLieu() {
+        try {
+            if (isStillOnReviewPageFast()) {
+                return false;
+            }
+            return webUI.existsNow(TaiLieuPage.MARKER_STEP_READY);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Tìm nút Chỉnh sửa theo tiêu đề card — tránh XPath sâu + getText() trên card có iframe PDF (treo Chrome).
+     */
+    private WebElement findChinhSuaByCardTitle(List<String> tenMucCandidates) {
+        for (String tenMuc : tenMucCandidates) {
+            By titleBtn = By.xpath("(" + REVIEW_CARD + ")"
+                    + "//span[starts-with(normalize-space(.), '" + tenMuc + "')]"
+                    + "/ancestor::div[contains(@class,'border') and contains(@class,'rounded')][1]"
+                    + "//button[contains(normalize-space(.),'Chỉnh sửa')]");
+            for (WebElement el : driver.findElements(titleBtn)) {
+                try {
+                    if (el.isDisplayed() && el.isEnabled()
+                            && "button".equalsIgnoreCase(el.getTagName())) {
+                        return el;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        // Fallback: liệt kê nút rồi khớp tiêu đề span gần nhất (không getText cả card).
+        return findVisibleChinhSuaButton(tenMucCandidates);
+    }
+
+    /** Debug — liệt kê các nút Chỉnh sửa đang thấy trên card Xem lại. */
+    private void logVisibleReviewEditButtons() {
+        try {
+            List<WebElement> buttons = driver.findElements(By.xpath(
+                    "(" + REVIEW_CARD + ")//button[contains(normalize-space(.),'Chỉnh sửa')]"));
+            List<String> labels = new ArrayList<>();
+            for (WebElement b : buttons) {
+                if (!b.isDisplayed()) {
+                    continue;
+                }
+                String title = readNearestCardTitle(b);
+                labels.add(title.isBlank() ? "(không tiêu đề)" : title);
+            }
+            System.out.println(" ℹ Nút [Chỉnh sửa] đang thấy trên Xem lại: " + labels);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Đọc tiêu đề card qua span — không dùng getText() trên cả khối (iframe PDF). */
+    private String readNearestCardTitle(WebElement btn) {
+        try {
+            List<WebElement> spans = btn.findElements(By.xpath(
+                    "./ancestor::div[contains(@class,'border')][1]"
+                            + "//span[contains(@class,'font-bold') or starts-with(normalize-space(.),'Xem trước')"
+                            + " or starts-with(normalize-space(.),'Danh sách')"
+                            + " or starts-with(normalize-space(.),'Nội dung')"
+                            + " or starts-with(normalize-space(.),'Loại đơn')"
+                            + " or starts-with(normalize-space(.),'Tài liệu')]"));
+            for (WebElement span : spans) {
+                String t = span.getText();
+                if (t != null && !t.isBlank()) {
+                    return t.trim();
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "";
+    }
+
+    /** Tìm nút Chỉnh sửa thật sự (hiển thị) theo danh sách tên mục. */
+    private WebElement findVisibleChinhSuaButton(List<String> tenMucCandidates) {
+        By allEdit = By.xpath("(" + REVIEW_CARD + ")//button[contains(normalize-space(.),'Chỉnh sửa')]");
+        for (WebElement el : driver.findElements(allEdit)) {
+            try {
+                if (!el.isDisplayed() || !el.isEnabled()) {
+                    continue;
+                }
+                if (!"button".equalsIgnoreCase(el.getTagName())) {
+                    continue;
+                }
+                String title = readNearestCardTitle(el);
+                for (String muc : tenMucCandidates) {
+                    if (title.startsWith(muc) || title.contains(muc)) {
+                        return el;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        // XPath cũ theo mục (chỉ khi fallback trên không khớp)
+        for (String tenMuc : tenMucCandidates) {
+            By by = chinhSuaTrongMuc(tenMuc);
+            for (WebElement el : driver.findElements(by)) {
+                try {
+                    if (el.isDisplayed() && el.isEnabled()
+                            && "button".equalsIgnoreCase(el.getTagName())) {
+                        return el;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return null;
     }
 
     /** Thử mọi nút stepper / tab / số bước 4 trên trang (ngoài card Xem lại). */
@@ -321,31 +510,11 @@ public class XemLaiGuiDonPage {
 
     /** Modal xem trước PDF — không phải form chỉnh sửa bước 4. */
     private void dismissPreviewModal() {
-        List<By> closeTargets = List.of(
-                By.xpath("//div[contains(@role,'dialog')]"
-                        + "[.//*[contains(., 'Xem trước') or contains(., 'xem trước')]]"
-                        + "//button[@aria-label='Close' or @aria-label='Đóng'"
-                        + " or contains(@class,'close') or .//*[contains(@class,'lucide-x')]]"),
-                By.xpath("//div[contains(@class,'fixed') and contains(@class,'inset-0')]"
-                        + "[.//*[contains(., 'Xem trước')]]//button[.//*[contains(@class,'lucide-x')]]"),
-                By.xpath("//button[contains(normalize-space(.), 'Đóng')"
-                        + " and ancestor::div[contains(@role,'dialog') or contains(@class,'modal')]]")
-        );
-        for (By close : closeTargets) {
-            if (webUI.isElementVisible(close)) {
-                webUI.clickElement(close, "Nút [Đóng xem trước đơn]");
-                webUI.sleepMillis(WaitConfig.SETTLE_MS);
-                return;
-            }
-        }
-        try {
-            driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
-        } catch (Exception ignored) {
-        }
-        webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        dismissUiOverlaysFast();
     }
 
-    private void dismissUiOverlays() {
+    /** ESC + đóng overlay — dùng existsNow (không isElementVisible 5s — treo trên card có iframe PDF). */
+    private void dismissUiOverlaysFast() {
         try {
             driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
         } catch (Exception ignored) {
@@ -353,18 +522,22 @@ public class XemLaiGuiDonPage {
         webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
         List<By> closeButtons = List.of(
                 By.xpath("//button[@aria-label='Close' or @aria-label='Đóng']"),
-                By.xpath("//div[contains(@class,'dialog') or contains(@role,'dialog')]"
-                        + "//button[contains(@class,'close') or .//*[contains(@class,'lucide-x')]]"),
-                By.xpath("//button[.//*[contains(@class,'lucide-x')]"
-                        + " and ancestor::div[contains(@class,'fixed') or contains(@role,'dialog')]]")
+                By.xpath("//div[@role='dialog']//button[.//*[contains(@class,'lucide-x')]]")
         );
         for (By close : closeButtons) {
-            if (webUI.isElementVisible(close)) {
-                webUI.clickElement(close, "Nút [Đóng overlay/dialog]");
-                webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            if (webUI.existsNow(close)) {
+                try {
+                    webUI.clickElement(close, "Nút [Đóng overlay/dialog]");
+                    webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                } catch (RuntimeException ignored) {
+                }
                 break;
             }
         }
+    }
+
+    private void dismissUiOverlays() {
+        dismissUiOverlaysFast();
     }
 
     private void clickChinhSuaElement(WebElement btn, String logName) {
@@ -372,6 +545,13 @@ public class XemLaiGuiDonPage {
             JavascriptExecutor js = (JavascriptExecutor) driver;
             js.executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", btn);
             webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            // Click đúng nút button — tránh click nhầm khối card cha.
+            if (!"button".equalsIgnoreCase(btn.getTagName())) {
+                List<WebElement> nested = btn.findElements(By.xpath(".//button[contains(normalize-space(.),'Chỉnh sửa')]"));
+                if (!nested.isEmpty()) {
+                    btn = nested.get(0);
+                }
+            }
             btn.click();
         } catch (Exception e) {
             JavascriptExecutor js = (JavascriptExecutor) driver;
@@ -517,31 +697,27 @@ public class XemLaiGuiDonPage {
 
     /** Màn Xem lại vẫn hiển thị (nút Gửi đơn trên card review). */
     private boolean isStillOnReviewPage() {
-        By guiDonOnReview = By.xpath(REVIEW_CARD + "//button[contains(normalize-space(.), 'Gửi đơn')]");
-        return webUI.isElementVisible(guiDonOnReview);
+        return isStillOnReviewPageFast();
     }
 
-    /** Quay lại bước 5 — Tài liệu & chứng cứ. */
-    public void clickChinhSuaTaiLieu() {
-        clickChinhSuaFirstAvailable(
-                List.of(MUC_TAI_LIEU, MUC_DANH_SACH_TAI_LIEU),
-                TaiLieuPage.MARKER_STEP_READY,
-                "Bước 5 [Tài liệu & chứng cứ]");
+    private boolean isStillOnReviewPageFast() {
+        By guiDonOnReview = By.xpath(REVIEW_CARD + "//button[contains(normalize-space(.), 'Gửi đơn')]");
+        return webUI.existsNow(guiDonOnReview);
     }
 
     /**
-     * Quay lại bước 2–5 từ màn Xem lại.
+     * Quay lại bước từ màn Xem lại (UI 2026: 2 nút Chỉnh sửa chính).
      *
-     * @param buoc số bước (2 = Nguyên đơn, 3 = Bị đơn, 4 = Nội dung, 5 = Tài liệu)
+     * @param buoc 1 = Xem trước đơn → bước 1; 5 = Danh sách tài liệu → bước 5
      */
     public void quayLaiBuoc(int buoc) {
         switch (buoc) {
+            case 1, 4 -> clickChinhSuaDon(); // 4 giữ tương thích — UI mới về bước 1
             case 2 -> clickChinhSuaNguyenDon();
             case 3 -> clickChinhSuaBiDon();
-            case 4 -> clickChinhSuaNoiDung();
             case 5 -> clickChinhSuaTaiLieu();
             default -> throw new IllegalArgumentException(
-                    "Chỉ hỗ trợ quay lại bước 2–5 từ Xem lại. Nhận: " + buoc);
+                    "Chỉ hỗ trợ quay lại bước 1/2/3/5 từ Xem lại. Nhận: " + buoc);
         }
     }
 

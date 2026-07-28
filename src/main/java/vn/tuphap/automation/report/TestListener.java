@@ -5,6 +5,7 @@ import vn.tuphap.automation.data.TaoDonScenario;
 import vn.tuphap.automation.config.ConfigReader;
 
 import vn.tuphap.automation.core.BaseTest;
+import vn.tuphap.automation.flow.StepBlockedException;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
 import org.openqa.selenium.WebDriver;
@@ -74,13 +75,23 @@ public class TestListener implements ITestListener {
     @Override
     public void onTestFailure(ITestResult result) {
         String errorMsg = extractErrorMessage(result);
-        attachScreenshotOnFailure(result, errorMsg);
-        TaoDonExcelTestLog.setGhiChuKetQua(rutGonLoiChoTester(errorMsg));
+        // StepBlockedException: đã logFail + chụp toast trong WebUI.failStepWithSystemFeedback —
+        // không ghi Extent lần 2 (tránh 2 lỗi giống nhau + ảnh muộn khi toast đã tắt).
+        if (!isAlreadyReportedStepBlock(result.getThrowable())) {
+            attachScreenshotOnFailure(result, errorMsg);
+        }
+        String shortMsg = rutGonLoiChoTester(errorMsg);
         TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_THAT_BAI);
-        TaoDonExcelTestLog.setKetQuaThucTe(rutGonLoiChoTester(errorMsg));
+        TaoDonExcelTestLog.setKetQuaThucTe(shortMsg);
+        // Không setGhiChuKetQua trùng nội dung — Validation action log + Kết quả thực tế đã có.
         TaoDonExcelTestLog.recordFinished(TaoDonExcelTestLog.ST_THAT_BAI, ExtentReportManager.getTestElapsedMs());
         ExtentReportManager.clearTestContext();
         ExtentReportManager.flushReport();
+    }
+
+    /** Fail bước đã được báo cáo (Extent + ảnh) trước khi ném exception. */
+    private static boolean isAlreadyReportedStepBlock(Throwable t) {
+        return t instanceof StepBlockedException;
     }
 
     @Override
@@ -145,7 +156,7 @@ public class TestListener implements ITestListener {
         return switch (method) {
             case "testDangNhapThanhCong" -> "Đăng nhập thành công vào hệ thống";
             case "testChinhSuaNoiDungTuXemLai" ->
-                    "Quay lại chỉnh sửa nội dung đơn từ màn Xem lại, rồi đi tiếp đến Xem lại";
+                    "Chỉnh sửa đơn từ Xem lại (Xem trước đơn → bước 1), nộp lại rồi đối chiếu Xem lại";
             case "testFlowTaoDon" -> "Luồng tạo đơn đầy đủ 6 bước";
             case "syncMasterDataFromUi" -> "Đồng bộ danh mục dữ liệu từ giao diện";
             default -> method;

@@ -3,6 +3,7 @@ package vn.tuphap.automation.pages;
 import vn.tuphap.automation.report.TestActionLog;
 
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import vn.tuphap.automation.ui.TestFileHelper;
@@ -10,7 +11,10 @@ import vn.tuphap.automation.ui.WaitConfig;
 import vn.tuphap.automation.ui.WebUI;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public class TaiLieuPage {
     private final WebDriver driver;
@@ -21,7 +25,7 @@ public class TaiLieuPage {
             "//div[contains(@class,'rounded') and contains(@class,'border')"
                     + " and .//input[@type='file'] and .//svg[contains(@class,'lucide-upload')]]";
 
-    /** Marker bước 5 — dùng chung TaoDonFlow / XemLaiGuiDonPage (không còn text "Tài liệu bắt buộc"). */
+    /** Marker bước 5 — dùng chung TaoDonFlow / XemLaiGuiDonPage. */
     public static final By MARKER_STEP_READY = By.xpath(
             "//h2[contains(., 'Tài liệu') or contains(., 'chứng cứ') or contains(., 'Chứng cứ')]"
                     + " | " + UPLOAD_PANEL
@@ -47,42 +51,9 @@ public class TaiLieuPage {
                     + "[.//input[@type='file'] and (contains(., 'bổ sung') or contains(., 'Bổ sung'))]"
                     + "//input[@type='file']");
 
-    private void uploadFileToBoSung(String filePath) {
-        if (tryUploadToFirstFileInput(filePath, "Tài liệu bổ sung (fallback — không có hồ sơ bắt buộc)")) {
-            return;
-        }
-        throw new RuntimeException(
-                "❌ Không có thành phần hồ sơ bắt buộc và không tìm thấy input upload nào trên Bước 5.");
-    }
-
-    /** File input thường ẩn — thử mọi input[type=file] trên màn Tài liệu. */
-    private boolean tryUploadToFirstFileInput(String filePath, String logLabel) {
-        List<WebElement> inputs = driver.findElements(By.xpath("//input[@type='file']"));
-        if (inputs.isEmpty()) {
-            inputs = driver.findElements(By.xpath(
-                    "//label[contains(., 'Tải lên')]//input[@type='file']"
-                            + " | //label[.//input[@type='file']]//input[@type='file']"));
-        }
-        for (int i = inputs.size() - 1; i >= 0; i--) {
-            try {
-                WebElement input = inputs.get(i);
-                input.sendKeys(filePath);
-                String tenTep = TestFileHelper.displayName(filePath);
-                System.out.println(" ➔ Tải lên: '" + tenTep + "' tại [" + logLabel + "]");
-                TestActionLog.taiLen(logLabel, tenTep);
-                webUI.sleepMillis(WaitConfig.SETTLE_MS);
-                return true;
-            } catch (Exception ignored) {
-            }
-        }
-        if (webUI.isElementVisible(optionalFileInput)) {
-            webUI.uploadFile(optionalFileInput, filePath, logLabel);
-            return true;
-        }
-        return false;
-    }
-
     private final By btnTiepTheo = By.xpath("//button[contains(., 'Tiếp theo')]");
+
+    private boolean uploadedAnyFile = false;
 
     public TaiLieuPage(WebDriver driver) {
         this.driver = driver;
@@ -94,67 +65,300 @@ public class TaiLieuPage {
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
     }
 
+    /**
+     * Đính kèm đủ mọi tài liệu bắt buộc (*) trên bước 5.
+     * Upload theo tiêu đề (không theo index — DOM đổi sau mỗi lần tải).
+     * Ưu tiên PDF (UAT hay từ chối xlsx/docx với giấy tờ tùy thân).
+     */
     public void uploadTaiLieuBatBuoc() {
         waitStepReady();
 
         TestFileHelper.assertExists(TestFileHelper.getSamplePdf());
-        TestFileHelper.assertExists(TestFileHelper.getSampleXlsx());
-        TestFileHelper.assertExists(TestFileHelper.getSampleDocx());
+        TestFileHelper.assertExists(TestFileHelper.getSamplePng());
 
-        List<WebElement> rows = findRequiredUploadRows();
-        if (rows.isEmpty()) {
+        List<String> titles = collectRequiredTitles();
+        if (titles.isEmpty()) {
             String msg = "Không có thành phần hồ sơ bắt buộc — tải file vào Tài liệu bổ sung";
             System.out.println(" ⚠ " + msg);
             TestActionLog.ghiChu(msg);
-            uploadFileToBoSung(TestFileHelper.pickRandomUploadFile());
+            uploadFileToBoSung(TestFileHelper.getSamplePdf());
             return;
         }
 
-        System.out.println(" ⏳ Tải " + rows.size() + " tài liệu bắt buộc (PDF/Excel/Word ngẫu nhiên)...");
-        for (int i = 0; i < rows.size(); i++) {
-            List<WebElement> currentRows = findRequiredUploadRows();
-            if (i >= currentRows.size()) {
-                throw new RuntimeException("❌ Danh sách tài liệu bắt buộc thay đổi sau khi upload (index " + i + ").");
-            }
-            WebElement row = currentRows.get(i);
-            String tenTaiLieu = extractDocumentTitle(row);
-            WebElement input = row.findElement(By.xpath(".//input[@type='file']"));
-            String filePath = TestFileHelper.pickRandomUploadFile();
-            String tenTep = TestFileHelper.displayName(filePath);
-            input.sendKeys(filePath);
-            System.out.println(" ➔ Tải lên: '" + tenTep + "' tại [Tài liệu bắt buộc: " + tenTaiLieu + "]");
-            TestActionLog.taiLen("Tài liệu bắt buộc: " + tenTaiLieu, tenTep);
-            choUploadRowOnDinh(row);
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        System.out.println(" ⏳ Tải " + titles.size() + " tài liệu bắt buộc (mỗi mục một file)...");
+        for (String title : titles) {
+            uploadRequiredByTitle(title, 2);
         }
+
+        List<String> missing = findStillMissingTitles();
+        for (String title : missing) {
+            System.out.println(" ⚠ Còn thiếu [" + title + "] — tải lại PDF...");
+            uploadRequiredByTitle(title, 2);
+        }
+
+        missing = findStillMissingTitles();
+        if (!missing.isEmpty()) {
+            throw new RuntimeException(
+                    "❌ Chưa đính kèm đủ tài liệu bắt buộc sau khi tải: " + missing);
+        }
+        System.out.println(" ✅ Đã đính kèm đủ " + titles.size() + " tài liệu bắt buộc.");
         webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
     }
 
-    /** Chờ dòng upload xử lý xong (icon check / tên file) trước khi bấm Tiếp theo. */
-    private void choUploadRowOnDinh(WebElement row) {
-        long deadline = System.currentTimeMillis() + WaitConfig.FIELD * 1000L;
-        while (System.currentTimeMillis() < deadline) {
+    /** Thu thập tiêu đề các dòng bắt buộc (ổn định trước khi DOM đổi). */
+    private List<String> collectRequiredTitles() {
+        Set<String> titles = new LinkedHashSet<>();
+        for (WebElement row : findRequiredUploadRows()) {
             try {
-                String text = row.getText();
-                if (text != null && (text.contains("tệp mẫu") || text.contains(".pdf")
-                        || text.contains(".docx") || text.contains(".xlsx"))) {
-                    return;
-                }
-                if (!row.findElements(By.xpath(".//svg[contains(@class,'lucide-check')]")).isEmpty()) {
-                    return;
+                String title = extractDocumentTitle(row);
+                if (title != null && !title.isBlank()) {
+                    titles.add(title);
                 }
             } catch (Exception ignored) {
             }
+        }
+        return new ArrayList<>(titles);
+    }
+
+    private void uploadRequiredByTitle(String title, int maxAttempts) {
+        RuntimeException last = null;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                WebElement row = findRequiredRowByTitle(title);
+                if (row == null) {
+                    // Có thể đã đính kèm xong — hàng biến mất khỏi danh sách * đỏ
+                    if (!isTitleStillMissing(title)) {
+                        System.out.println(" ⏩ [" + title + "] đã có file — bỏ qua.");
+                        return;
+                    }
+                    throw new RuntimeException("Không tìm thấy dòng upload: " + title);
+                }
+                if (isRowAttached(row)) {
+                    System.out.println(" ⏩ [" + title + "] đã đính kèm — bỏ qua.");
+                    return;
+                }
+
+                WebElement input = row.findElement(By.xpath(".//input[@type='file']"));
+                String filePath = pickFileForInput(input, title);
+                String tenTep = TestFileHelper.displayName(filePath);
+
+                scrollRowIntoView(row);
+                input.sendKeys(filePath);
+                System.out.println(" ➔ Tải lên: '" + tenTep + "' tại [Tài liệu bắt buộc: " + title + "]"
+                        + (attempt > 1 ? " (lần " + attempt + ")" : ""));
+                TestActionLog.taiLen("Tài liệu bắt buộc: " + title, tenTep);
+                uploadedAnyFile = true;
+
+                if (waitUntilRowAttached(title)) {
+                    return;
+                }
+                last = new RuntimeException("Upload chưa được UAT chấp nhận: " + title + " (" + tenTep + ")");
+                System.out.println(" ⚠ [" + title + "] chưa thấy xác nhận đính kèm — thử lại...");
+            } catch (RuntimeException e) {
+                last = e;
+            }
+            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        }
+        throw new RuntimeException("❌ Không đính kèm được [" + title + "].", last);
+    }
+
+    /** PDF mặc định; nếu accept chỉ ảnh thì dùng PNG. */
+    private String pickFileForInput(WebElement input, String title) {
+        String accept = "";
+        try {
+            accept = input.getAttribute("accept");
+        } catch (Exception ignored) {
+        }
+        String a = accept == null ? "" : accept.toLowerCase(Locale.ROOT);
+        String t = title == null ? "" : title.toLowerCase(Locale.ROOT);
+
+        boolean wantsImage = a.contains("image") || a.contains(".png") || a.contains(".jpg")
+                || a.contains(".jpeg") || a.contains("image/");
+        boolean rejectsPdf = !a.isBlank() && !a.contains("pdf") && !a.contains("*")
+                && (a.contains("image") || a.contains(".png") || a.contains(".jpg"));
+
+        if (wantsImage || rejectsPdf) {
+            return TestFileHelper.getSamplePng();
+        }
+        // Giấy tờ tùy thân / CCCD / ảnh — ưu tiên PDF (rộng nhất trên UAT)
+        if (t.contains("cccd") || t.contains("cmnd") || t.contains("hộ chiếu")
+                || t.contains("tuỳ thân") || t.contains("tùy thân") || t.contains("giấy tờ tùy thân")) {
+            return TestFileHelper.getSamplePdf();
+        }
+        return TestFileHelper.getSamplePdf();
+    }
+
+    private boolean waitUntilRowAttached(String title) {
+        long deadline = System.currentTimeMillis() + WaitConfig.FIELD * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (!isTitleStillMissing(title)) {
+                return true;
+            }
+            WebElement row = findRequiredRowByTitle(title);
+            if (row != null && isRowAttached(row)) {
+                return true;
+            }
             webUI.sleepMillis(300);
+        }
+        return !isTitleStillMissing(title);
+    }
+
+    private boolean isTitleStillMissing(String title) {
+        for (String missing : findStillMissingTitles()) {
+            if (titlesMatch(missing, title)) {
+                return true;
+            }
+        }
+        // Còn thấy dòng * đỏ cùng tiêu đề và chưa attached
+        WebElement row = findRequiredRowByTitle(title);
+        return row != null && !isRowAttached(row);
+    }
+
+    private List<String> findStillMissingTitles() {
+        List<String> missing = new ArrayList<>();
+        for (WebElement row : findRequiredUploadRows()) {
+            try {
+                if (isRowAttached(row)) {
+                    continue;
+                }
+                String title = extractDocumentTitle(row);
+                String text = safeText(row);
+                if (text.toLowerCase(Locale.ROOT).contains("chưa đính kèm")
+                        || !isRowAttached(row)) {
+                    if (title != null && !title.isBlank()) {
+                        missing.add(title);
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return missing;
+    }
+
+    private boolean isRowAttached(WebElement row) {
+        try {
+            String text = safeText(row).toLowerCase(Locale.ROOT);
+            if (text.contains("chưa đính kèm")) {
+                return false;
+            }
+            if (!row.findElements(By.xpath(
+                    ".//svg[contains(@class,'lucide-check') or contains(@class,'check')]")).isEmpty()) {
+                return true;
+            }
+            if (text.contains("tệp mẫu") || text.contains(".pdf") || text.contains(".docx")
+                    || text.contains(".xlsx") || text.contains(".png") || text.contains(".jpg")) {
+                return true;
+            }
+            // Tên file / chip sau upload
+            if (!row.findElements(By.xpath(
+                    ".//*[contains(@class,'truncate') or contains(@class,'file') or contains(@class,'uploaded')]")).isEmpty()
+                    && !text.contains("tải lên")) {
+                // có thể vẫn chỉ là label — không tin nếu còn nút Tải lên và chưa có tên file
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
         }
     }
 
+    private WebElement findRequiredRowByTitle(String title) {
+        for (WebElement row : findRequiredUploadRows()) {
+            try {
+                if (titlesMatch(extractDocumentTitle(row), title)) {
+                    return row;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        // Fallback rộng hơn: mọi dòng có file input chứa tiêu đề
+        List<WebElement> allRows = driver.findElements(By.xpath(
+                "//div[contains(@class,'flex') and .//input[@type='file']]"));
+        for (WebElement row : allRows) {
+            try {
+                if (!row.isDisplayed()) {
+                    continue;
+                }
+                if (titlesMatch(extractDocumentTitle(row), title)
+                        || safeText(row).contains(title)) {
+                    return row;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static boolean titlesMatch(String a, String b) {
+        if (a == null || b == null) {
+            return false;
+        }
+        String x = normalizeTitle(a);
+        String y = normalizeTitle(b);
+        return x.equals(y) || x.contains(y) || y.contains(x);
+    }
+
+    private static String normalizeTitle(String t) {
+        return t.replace("*", "").replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private void scrollRowIntoView(WebElement row) {
+        try {
+            ((JavascriptExecutor) driver).executeScript(
+                    "arguments[0].scrollIntoView({block:'center', inline:'nearest'});", row);
+            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void uploadFileToBoSung(String filePath) {
+        if (tryUploadToFirstFileInput(filePath, "Tài liệu bổ sung (fallback — không có hồ sơ bắt buộc)")) {
+            uploadedAnyFile = true;
+            return;
+        }
+        throw new RuntimeException(
+                "❌ Không có thành phần hồ sơ bắt buộc và không tìm thấy input upload nào trên Bước 5.");
+    }
+
+    private boolean tryUploadToFirstFileInput(String filePath, String logLabel) {
+        List<WebElement> inputs = driver.findElements(By.xpath("//input[@type='file']"));
+        if (inputs.isEmpty()) {
+            inputs = driver.findElements(By.xpath(
+                    "//label[contains(., 'Tải lên')]//input[@type='file']"
+                            + " | //label[.//input[@type='file']]//input[@type='file']"));
+        }
+        for (WebElement input : inputs) {
+            try {
+                input.sendKeys(filePath);
+                String tenTep = TestFileHelper.displayName(filePath);
+                System.out.println(" ➔ Tải lên: '" + tenTep + "' tại [" + logLabel + "]");
+                TestActionLog.taiLen(logLabel, tenTep);
+                webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                uploadedAnyFile = true;
+                return true;
+            } catch (Exception ignored) {
+            }
+        }
+        if (webUI.isElementVisible(optionalFileInput)) {
+            webUI.uploadFile(optionalFileInput, filePath, logLabel);
+            uploadedAnyFile = true;
+            return true;
+        }
+        return false;
+    }
+
     private List<WebElement> findRequiredUploadRows() {
-        List<WebElement> rows = new ArrayList<>(driver.findElements(requiredRows));
+        List<WebElement> rows = new ArrayList<>();
+        for (WebElement row : driver.findElements(requiredRows)) {
+            try {
+                if (row.isDisplayed()) {
+                    rows.add(row);
+                }
+            } catch (Exception ignored) {
+            }
+        }
         if (!rows.isEmpty()) {
             return rows;
         }
-        // Fallback: mọi dòng upload trong panel có tiêu đề * (legacy / biến thể markup)
         List<WebElement> allRows = driver.findElements(By.xpath(
                 UPLOAD_PANEL + "//div[contains(@class,'flex') and .//input[@type='file']]"));
         if (allRows.isEmpty()) {
@@ -164,8 +368,14 @@ public class TaiLieuPage {
         }
         for (WebElement row : allRows) {
             try {
+                if (!row.isDisplayed()) {
+                    continue;
+                }
                 String title = extractDocumentTitle(row);
-                if (title.contains("*") || row.findElements(By.xpath(".//span[contains(@class,'text-danger')]")).size() > 0) {
+                String text = safeText(row);
+                if (title.contains("*") || text.contains("*")
+                        || !row.findElements(By.xpath(".//span[contains(@class,'text-danger')]")).isEmpty()
+                        || text.toLowerCase(Locale.ROOT).contains("bắt buộc")) {
                     rows.add(row);
                 }
             } catch (Exception ignored) {
@@ -179,7 +389,21 @@ public class TaiLieuPage {
             WebElement titleEl = row.findElement(By.xpath(".//div[contains(@class,'font-medium')]"));
             return titleEl.getText().replace("*", "").trim();
         } catch (Exception e) {
-            return "Tài liệu bắt buộc";
+            String text = safeText(row);
+            int star = text.indexOf('*');
+            if (star > 0) {
+                return text.substring(0, star).trim();
+            }
+            return text.lines().findFirst().orElse("Tài liệu bắt buộc").trim();
+        }
+    }
+
+    private static String safeText(WebElement el) {
+        try {
+            String t = el.getText();
+            return t == null ? "" : t.replaceAll("\\s+", " ").trim();
+        } catch (Exception e) {
+            return "";
         }
     }
 
@@ -189,16 +413,39 @@ public class TaiLieuPage {
             TestActionLog.boQua("Tài liệu bổ sung", "Không yêu cầu");
             return;
         }
-        if (!webUI.isElementVisible(optionalFileInput)) {
-            System.out.println(" ⏩ Bỏ qua [Tài liệu bổ sung] — biểu mẫu ẩn.");
-            TestActionLog.boQua("Tài liệu bổ sung", "Biểu mẫu ẩn");
+        if (tryUploadOptionalBoSung()) {
             return;
         }
-        String samplePng = TestFileHelper.getSamplePng();
-        webUI.uploadFile(optionalFileInput, samplePng, "Tài liệu bổ sung (tùy chọn)");
+        System.out.println(" ⏩ Bỏ qua [Tài liệu bổ sung] — không thấy ô tải lên riêng trên giao diện.");
+        TestActionLog.boQua("Tài liệu bổ sung", "Không thấy ô tải lên riêng");
+    }
+
+    private boolean tryUploadOptionalBoSung() {
+        if (webUI.isElementVisible(optionalFileInput)) {
+            webUI.uploadFile(optionalFileInput, TestFileHelper.getSamplePng(), "Tài liệu bổ sung (tùy chọn)");
+            uploadedAnyFile = true;
+            return true;
+        }
+        // Ô bổ sung đôi khi không có label rõ — bỏ qua, không đụng input bắt buộc đã điền
+        return false;
     }
 
     public void clickTiepTheo() {
+        List<String> missing = findStillMissingTitles();
+        if (!missing.isEmpty()) {
+            System.out.println(" ⚠ Trước Tiếp theo còn thiếu: " + missing + " — tải bổ sung...");
+            for (String title : missing) {
+                uploadRequiredByTitle(title, 2);
+            }
+            missing = findStillMissingTitles();
+            if (!missing.isEmpty()) {
+                throw new RuntimeException(
+                        "❌ Không bấm Tiếp theo được — còn thiếu tài liệu bắt buộc: " + missing);
+            }
+        }
+        if (uploadedAnyFile) {
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        }
         webUI.waitUntilClickable(btnTiepTheo, WaitConfig.STEP, "Nút [Tiếp theo] ở Bước 5");
         webUI.clickElement(btnTiepTheo, "Nút [Tiếp theo] ở Bước 5", WaitConfig.FIELD);
     }

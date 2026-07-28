@@ -477,7 +477,7 @@ public final class TaoDonExcelTestLog {
                 ? "Đầy đủ cặp đôi mức B — đủ cặp loại việc + nhánh luồng (không tổ hợp toàn phần)"
                 : kind == SuiteKind.MID
                 ? "Trung bình — mọi cặp loại việc thường (1 nhánh) + đủ 4 tư cách Phá sản"
-                : kind == SuiteKind.SMOKE ? "Mẫu nhanh — có ép Phá sản" : "Đăng nhập";
+                : kind == SuiteKind.SMOKE ? "Mẫu nhanh — ép Phá sản + eform Dân sự/Bồi thường + 1 random" : "Đăng nhập";
         String[][] suiteRows = {
                 {"Mã dự án", PROJECT_CODE},
                 {"Module", MODULE_CODE},

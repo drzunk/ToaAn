@@ -81,7 +81,7 @@ public final class TaoDonExcelLogBuilder {
             add(rows, b2, "Địa chỉ liên lạc giống thường trú?", giongThuongTru ? "Có" : "Không", "");
             add(rows, b2, "Địa chỉ liên lạc",
                     blank(s.lienLac()) ? "—" : s.lienLac(),
-                    giongThuongTru ? "Đã tích checkbox giống thường trú" : "Nhập địa chỉ riêng");
+                    giongThuongTru ? "Đã chọn toggle giống thường trú" : "Nhập địa chỉ liên lạc riêng");
             add(rows, b2, "Số điện thoại", s.sdt(), "");
             add(rows, b2, "Email", s.email(), "");
             add(rows, b2, "Có người đại diện pháp lý?", yesNo(s.coNguoiDaiDien()), "");
@@ -201,6 +201,7 @@ public final class TaoDonExcelLogBuilder {
             add(rows, buoc, prefix + "Mã số thuế", s.mstBD(), "");
             add(rows, buoc, prefix + "Địa chỉ trụ sở", s.diaChiTruSoBD(), "");
             add(rows, buoc, prefix + "Người đại diện", s.nguoiDaiDienBD(), "");
+            add(rows, buoc, prefix + "Chức vụ", blank(s.chucVuBD()) ? "(Không nhập)" : s.chucVuBD(), "");
             add(rows, buoc, prefix + "Số điện thoại", s.sdtBD(), "");
             add(rows, buoc, prefix + "Email", blank(s.emailBD()) ? "(Không nhập)" : s.emailBD(), "");
             return;
@@ -212,15 +213,20 @@ public final class TaoDonExcelLogBuilder {
             add(rows, buoc, prefix + "Mã số thuế", s.mstBD(), "");
             add(rows, buoc, prefix + "Địa chỉ trụ sở", s.diaChiTruSoBD(), "");
             add(rows, buoc, prefix + "Người đại diện", s.nguoiDaiDienBD(), "");
+            add(rows, buoc, prefix + "Chức vụ", blank(s.chucVuBD()) ? "(Không nhập)" : s.chucVuBD(), "");
             add(rows, buoc, prefix + "Số điện thoại", s.sdtBD(), "");
             add(rows, buoc, prefix + "Email", blank(s.emailBD()) ? "(Không nhập)" : s.emailBD(), "");
         } else {
             add(rows, buoc, prefix + "Họ và tên", s.hoTenBD(), "");
-            add(rows, buoc, prefix + "Số CCCD / CMND", s.cccdBD(), "");
+            add(rows, buoc, prefix + "Số CCCD / Hộ chiếu", s.cccdBD(), "");
             add(rows, buoc, prefix + "Năm sinh", s.namSinhBD(), "");
-            add(rows, buoc, prefix + "Địa chỉ", s.diaChiCaNhanBD(), "");
+            add(rows, buoc, prefix + "Giới tính", blank(s.gioiTinhBD()) ? "Nam" : s.gioiTinhBD(), "");
+            add(rows, buoc, prefix + "Địa chỉ nơi cư trú", s.diaChiCaNhanBD(), "");
+            add(rows, buoc, prefix + "Nơi ở hiện tại", blank(s.noiOHienTaiBD()) ? "(Không nhập)" : s.noiOHienTaiBD(), "");
+            add(rows, buoc, prefix + "Nghề nghiệp, nơi làm việc",
+                    blank(s.ngheNghiepBD()) ? "(Không nhập)" : s.ngheNghiepBD(), "");
             add(rows, buoc, prefix + "Số điện thoại", s.sdtBD(), "");
-            add(rows, buoc, prefix + "Email", s.emailBD(), "");
+            add(rows, buoc, prefix + "Địa chỉ thư điện tử", s.emailBD(), "");
         }
     }
 
@@ -243,15 +249,20 @@ public final class TaoDonExcelLogBuilder {
             add(rows, buoc, prefix + "Mã số thuế", d.mst(), "");
             add(rows, buoc, prefix + "Địa chỉ trụ sở", d.diaChiTruSo(), "");
             add(rows, buoc, prefix + "Người đại diện", d.nguoiDaiDien(), "");
+            add(rows, buoc, prefix + "Chức vụ", blank(d.chucVu()) ? "(Không nhập)" : d.chucVu(), "");
             add(rows, buoc, prefix + "Số điện thoại", d.sdt(), "");
             add(rows, buoc, prefix + "Email", blank(d.email()) ? "(Không nhập)" : d.email(), "");
         } else {
             add(rows, buoc, prefix + "Họ và tên", d.hoTen(), "");
-            add(rows, buoc, prefix + "Số CCCD / CMND", d.cccd(), "");
+            add(rows, buoc, prefix + "Số CCCD / Hộ chiếu", d.cccd(), "");
             add(rows, buoc, prefix + "Năm sinh", d.namSinh(), "");
-            add(rows, buoc, prefix + "Địa chỉ", d.diaChiCaNhan(), "");
+            add(rows, buoc, prefix + "Giới tính", blank(d.gioiTinh()) ? "Nam" : d.gioiTinh(), "");
+            add(rows, buoc, prefix + "Địa chỉ nơi cư trú", d.diaChiCaNhan(), "");
+            add(rows, buoc, prefix + "Nơi ở hiện tại", blank(d.noiOHienTai()) ? "(Không nhập)" : d.noiOHienTai(), "");
+            add(rows, buoc, prefix + "Nghề nghiệp, nơi làm việc",
+                    blank(d.ngheNghiep()) ? "(Không nhập)" : d.ngheNghiep(), "");
             add(rows, buoc, prefix + "Số điện thoại", d.sdt(), "");
-            add(rows, buoc, prefix + "Email", d.email(), "");
+            add(rows, buoc, prefix + "Địa chỉ thư điện tử", d.email(), "");
         }
     }
 

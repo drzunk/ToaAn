@@ -134,8 +134,37 @@ public class WebUI {
         try {
             element.click();
         } catch (Exception ex) {
+            // Chỉ fallback JS khi native click thật sự chưa tới (tránh click 2 lần nếu
+            // event đã tới React rồi mới ném ElementClickInterceptedException).
+            String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase(Locale.ROOT);
+            boolean likelyAlreadyClicked = msg.contains("stale")
+                    || msg.contains("not attached");
+            if (likelyAlreadyClicked) {
+                return;
+            }
             JavascriptExecutor js = (JavascriptExecutor) driver;
             js.executeScript("arguments[0].click();", element);
+        }
+    }
+
+    /**
+     * Bấm một lần bằng JS — tránh native+JS double-submit (toast lỗi xuất hiện 2 lần).
+     */
+    public void clickElementOnceJs(By by, String elementName, int timeoutSeconds) {
+        try {
+            failIfBrowserClosed();
+            WebElement element = waitForDisplayedEnabled(by, timeoutSeconds);
+            scrollToElement(element);
+            ((JavascriptExecutor) driver).executeScript("arguments[0].click();", element);
+            System.out.println(" ➔ Click vào: [" + elementName + "]");
+            recordClickOrChon(elementName);
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception e) {
+            failIfBrowserClosed(e);
+            String detail = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            throw new RuntimeException("❌ Lỗi: Không tìm thấy hoặc không thể click: ["
+                    + elementName + "] — " + detail);
         }
     }
 
@@ -273,6 +302,79 @@ public class WebUI {
         }
     }
 
+    /**
+     * Toggle UAT dạng {@code div.cursor-pointer} + vòng tròn {@code rounded-full}
+     * (không có {@code input[type=checkbox]} / {@code label}).
+     */
+    public void ensureCustomToggleSelected(By optionBy, boolean wantSelected, String elementName) {
+        if (!existsNow(optionBy)) {
+            System.out.println(" ⏩ Bỏ qua [" + elementName + "] — không có trên biểu mẫu.");
+            TestActionLog.boQua(elementName, "Không có trên biểu mẫu");
+            return;
+        }
+        boolean selected = isCustomToggleSelected(optionBy);
+        if (selected == wantSelected) {
+            System.out.println(" ⏩ [" + elementName + "] đã "
+                    + (wantSelected ? "chọn" : "bỏ chọn") + " sẵn.");
+            return;
+        }
+        clickElement(optionBy, (wantSelected ? "Chọn" : "Bỏ chọn") + " " + elementName);
+        sleepMillis(WaitConfig.SETTLE_MS);
+    }
+
+    /** Đã chọn? — ưu tiên input/aria; fallback vòng tròn (có chấm trong / không còn border xám nhạt). */
+    public boolean isCustomToggleSelected(By optionBy) {
+        try {
+            WebElement root = driver.findElement(optionBy);
+            List<WebElement> inputs = root.findElements(By.xpath(
+                    ".//input[@type='checkbox' or @type='radio']"));
+            if (!inputs.isEmpty()) {
+                return isCheckboxChecked(inputs.get(0));
+            }
+            String aria = root.getAttribute("aria-checked");
+            if ("true".equalsIgnoreCase(aria)) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(aria)) {
+                return false;
+            }
+            String dataState = root.getAttribute("data-state");
+            if (dataState != null) {
+                String ds = dataState.trim().toLowerCase(Locale.ROOT);
+                if (ds.equals("checked") || ds.equals("on") || ds.equals("true")) {
+                    return true;
+                }
+                if (ds.equals("unchecked") || ds.equals("off") || ds.equals("false")) {
+                    return false;
+                }
+            }
+            List<WebElement> circles = root.findElements(By.xpath(
+                    ".//span[contains(@class,'rounded-full') and (contains(@class,'w-[18px]') or contains(@class,'h-[18px]'))]"
+                            + " | .//span[contains(@class,'rounded-full')][1]"));
+            if (circles.isEmpty()) {
+                return false;
+            }
+            WebElement circle = circles.get(0);
+            if (!circle.findElements(By.xpath("./*")).isEmpty()) {
+                return true;
+            }
+            String cls = circle.getAttribute("class");
+            if (cls == null) {
+                return false;
+            }
+            String lower = cls.toLowerCase(Locale.ROOT);
+            // Unselected mẫu UAT: border-[#C9D4E1] bg-white, không có chấm trong
+            boolean looksEmpty = lower.contains("c9d4e1") && lower.contains("bg-white");
+            if (looksEmpty) {
+                return false;
+            }
+            // Selected: viền/nền khác xám nhạt, hoặc class checked/selected/primary
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private void waitForCheckboxClickable(WebElement input, int timeoutSeconds) {
         WebDriverWait w = new WebDriverWait(driver, Duration.ofSeconds(timeoutSeconds));
         w.pollingEvery(Duration.ofMillis(100));
@@ -319,8 +421,8 @@ public class WebUI {
                 }
             }
             element.click();
-            element.clear();
-            element.sendKeys(value);
+            clearEditable(element);
+            typePreservingSpaces(element, value);
             System.out.println(" ➔ Điền: '" + value + "' vào [" + elementName + "]");
             TestActionLog.dien(elementName, value);
         } catch (BrowserClosedException e) {
@@ -329,6 +431,94 @@ public class WebUI {
             failIfBrowserClosed(e);
             throw new RuntimeException("❌ Lỗi: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
         }
+    }
+
+    /** Xóa nội dung ô — Ctrl+A + Delete ổn định hơn clear() với React/controlled input. */
+    private void clearEditable(WebElement element) {
+        try {
+            element.sendKeys(Keys.chord(Keys.CONTROL, "a"), Keys.DELETE);
+        } catch (Exception ignored) {
+            try {
+                element.clear();
+            } catch (Exception ignored2) {
+                // ignore
+            }
+        }
+    }
+
+    /**
+     * Điền text giữ khoảng trắng. Một số textarea UAT (địa chỉ chi tiết) nuốt space từ sendKeys
+     * → hiện "127LêLợi" dù log vẫn có dấu cách. Fallback: JS native setter, rồi NBSP.
+     */
+    private void typePreservingSpaces(WebElement element, String value) {
+        if (value == null) {
+            return;
+        }
+        if (!value.contains(" ")) {
+            element.sendKeys(value);
+            return;
+        }
+
+        element.sendKeys(value);
+        if (!spacesLost(value, readInputValue(element))) {
+            return;
+        }
+
+        setNativeInputValue(element, value);
+        if (!spacesLost(value, readInputValue(element))) {
+            return;
+        }
+
+        // Ô/UAT đôi khi strip ASCII space — NBSP vẫn hiện khoảng trắng trên UI.
+        setNativeInputValue(element, value.replace(' ', '\u00A0'));
+    }
+
+    private String readInputValue(WebElement el) {
+        try {
+            String val = el.getAttribute("value");
+            if (val != null && !val.isEmpty()) {
+                return val;
+            }
+        } catch (Exception ignored) {
+            // fall through
+        }
+        try {
+            String prop = el.getDomProperty("value");
+            return prop == null ? "" : prop;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static boolean spacesLost(String expected, String actual) {
+        if (expected == null || !expected.contains(" ") || actual == null) {
+            return false;
+        }
+        String actualNorm = actual.replace('\u00A0', ' ');
+        if (actualNorm.contains(" ")) {
+            return false;
+        }
+        return expected.replace(" ", "").equals(actualNorm.replace(" ", ""));
+    }
+
+    /** Gán value kiểu React-safe (native setter + input/change) — giữ nguyên khoảng trắng. */
+    private void setNativeInputValue(WebElement element, String value) {
+        JavascriptExecutor js = (JavascriptExecutor) driver;
+        js.executeScript(
+                "var el = arguments[0], val = arguments[1];"
+                        + "el.focus();"
+                        + "var tag = (el.tagName || '').toLowerCase();"
+                        + "var proto = tag === 'textarea'"
+                        + "  ? window.HTMLTextAreaElement.prototype"
+                        + "  : window.HTMLInputElement.prototype;"
+                        + "var desc = Object.getOwnPropertyDescriptor(proto, 'value');"
+                        + "var last = el.value;"
+                        + "if (desc && desc.set) { desc.set.call(el, val); } else { el.value = val; }"
+                        + "var tracker = el._valueTracker;"
+                        + "if (tracker) { tracker.setValue(last); }"
+                        + "el.dispatchEvent(new Event('input', { bubbles: true }));"
+                        + "el.dispatchEvent(new Event('change', { bubbles: true }));",
+                element, value);
     }
 
     public boolean isElementVisible(By by) {
@@ -562,12 +752,18 @@ public class WebUI {
     }
 
     /**
-     * Chờ chuyển bước — nếu hệ thống báo lỗi thì dừng ngay, ghi log và chụp ảnh.
+     * Chờ chuyển bước.
+     * <ul>
+     *   <li>Lỗi chặn luồng → chờ thêm {@link WaitConfig#BLOCKING_GRACE_SEC}s, vẫn không được thì
+     *       chụp ảnh và dừng case.</li>
+     *   <li>Thông báo không chặn (vd. VNeID) → chụp ảnh, ghi log, đi tiếp.</li>
+     * </ul>
      */
     public void waitForStepTransition(int stepNumber, String stepName, By marker,
                                       int timeoutSeconds, String description) {
         System.out.println(" ⏳ Chờ chuyển bước: " + description);
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        java.util.Set<String> softNoted = new java.util.LinkedHashSet<>();
         while (System.currentTimeMillis() < deadline) {
             failIfBrowserClosed();
             if (existsDisplayed(marker)) {
@@ -576,16 +772,127 @@ public class WebUI {
             }
             List<String> feedback = collectSystemFeedbackMessages();
             if (hasBlockingFeedback(feedback)) {
-                failStepWithSystemFeedback(stepNumber, stepName, description, feedback);
+                waitGraceThenFailIfStillBlocked(stepNumber, stepName, description, marker, feedback);
+                return;
             }
+            noteSoftFeedbackAndContinue(stepNumber, stepName, description, feedback, softNoted);
             sleepMillis(250);
         }
         List<String> feedback = collectSystemFeedbackMessages();
         if (hasBlockingFeedback(feedback)) {
-            failStepWithSystemFeedback(stepNumber, stepName, description, feedback);
+            waitGraceThenFailIfStillBlocked(stepNumber, stepName, description, marker, feedback);
+            return;
         }
-        throw new RuntimeException("❌ Hết thời gian chờ: [" + description + "] không hiển thị sau "
-                + timeoutSeconds + "s." + peekValidationHints());
+        noteSoftFeedbackAndContinue(stepNumber, stepName, description, feedback, softNoted);
+        // Hết thời gian chờ marker = không tiếp tục được → grace 10s rồi dừng + chụp ảnh.
+        System.out.println(" ⚠ Chưa chuyển bước — chờ thêm " + WaitConfig.BLOCKING_GRACE_SEC
+                + "s trước khi dừng case...");
+        long graceDeadline = System.currentTimeMillis() + WaitConfig.BLOCKING_GRACE_SEC * 1000L;
+        while (System.currentTimeMillis() < graceDeadline) {
+            failIfBrowserClosed();
+            if (existsDisplayed(marker)) {
+                System.out.println(" ✅ " + description + " (sau khi chờ thêm)");
+                return;
+            }
+            sleepMillis(250);
+        }
+        List<String> finalFeedback = collectSystemFeedbackMessages();
+        if (finalFeedback.isEmpty()) {
+            finalFeedback = List.of("Hết thời gian chờ: chưa chuyển sang bước tiếp theo sau "
+                    + timeoutSeconds + "+" + WaitConfig.BLOCKING_GRACE_SEC + "s"
+                    + peekValidationHints());
+        }
+        failStepWithSystemFeedback(stepNumber, stepName, description, finalFeedback);
+    }
+
+    /**
+     * Lỗi chặn: chụp ảnh ngay (giữ toast), rồi grace ngắn — trừ lỗi eform chắc chắn thì fail ngay.
+     */
+    private void waitGraceThenFailIfStillBlocked(int stepNumber, String stepName, String description,
+                                                 By marker, List<String> feedback) {
+        // Chụp ngay khi toast còn trên màn — grace 10s sẽ làm toast biến mất.
+        String earlyShot = takeScreenshotPreserveToast();
+        if (earlyShot != null) {
+            System.out.println(" 📸 Đã chụp ảnh lỗi (giữ toast) ngay khi phát hiện chặn luồng.");
+        }
+
+        if (isImmediateEformFailure(feedback)) {
+            System.out.println(" ⚠ Lỗi eform — fail ngay (không chờ grace): "
+                    + String.join(" | ", feedback));
+            failStepWithSystemFeedback(stepNumber, stepName, description, feedback, earlyShot);
+            return;
+        }
+
+        System.out.println(" ⚠ Lỗi chặn luồng — chờ thêm " + WaitConfig.BLOCKING_GRACE_SEC
+                + "s: " + String.join(" | ", feedback));
+        long graceDeadline = System.currentTimeMillis() + WaitConfig.BLOCKING_GRACE_SEC * 1000L;
+        while (System.currentTimeMillis() < graceDeadline) {
+            failIfBrowserClosed();
+            if (existsDisplayed(marker)) {
+                System.out.println(" ✅ " + description + " (hết lỗi sau khi chờ)");
+                noteSoftFeedbackAndContinue(stepNumber, stepName, description, feedback,
+                        new java.util.LinkedHashSet<>());
+                return;
+            }
+            sleepMillis(250);
+        }
+        failStepWithSystemFeedback(stepNumber, stepName, description, feedback, earlyShot);
+    }
+
+    /** Eform/host báo chưa phản hồi / bắt bấm Gửi trong form — coi là eform lỗi, fail ngay. */
+    private static boolean isImmediateEformFailure(List<String> feedback) {
+        if (feedback == null) {
+            return false;
+        }
+        for (String msg : feedback) {
+            if (msg == null) {
+                continue;
+            }
+            String lower = msg.toLowerCase(Locale.ROOT);
+            if (lower.contains("chưa phản hồi")
+                    || lower.contains("gửi ngay trong biểu mẫu")
+                    || lower.contains("biểu mẫu chưa")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Thông báo không chặn → chụp ảnh + ghi log, không dừng case. */
+    private void noteSoftFeedbackAndContinue(int stepNumber, String stepName, String context,
+                                             List<String> feedback, java.util.Set<String> alreadyNoted) {
+        if (feedback == null || feedback.isEmpty()) {
+            return;
+        }
+        List<String> soft = new ArrayList<>();
+        for (String msg : feedback) {
+            if (msg == null || msg.isBlank() || isBlockingMessage(msg)) {
+                continue;
+            }
+            if (alreadyNoted.add(msg)) {
+                soft.add(msg);
+            }
+        }
+        if (soft.isEmpty()) {
+            return;
+        }
+        String stepLabel = "Bước " + stepNumber + " — " + (stepName == null ? "" : stepName.trim());
+        String ctx = context == null || context.isBlank() ? "" : context.trim();
+        String joined = String.join(" | ", soft);
+        System.out.println(" ⚠ Thông báo (không chặn, đi tiếp) [" + stepLabel + "]: " + joined);
+        for (String msg : soft) {
+            TestActionLog.validation(ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx, msg);
+        }
+        String shot = takeScreenshotPreserveToast();
+        String reportBody = stepLabel
+                + (ctx.isEmpty() ? "" : "\nNgữ cảnh: " + ctx)
+                + "\nThông báo (không chặn): " + joined;
+        if (shot != null) {
+            System.out.println(" 📸 Đã chụp ảnh thông báo — đi tiếp");
+            ExtentReportManager.logWarningWithScreenshot(reportBody, shot);
+        } else {
+            ExtentReportManager.logWarning(reportBody);
+        }
     }
 
     /** Chỉ coi là chặn chuyển bước khi có lỗi bắt buộc — bỏ qua banner VNeID thông tin. */
@@ -594,20 +901,40 @@ public class WebUI {
             return false;
         }
         for (String msg : feedback) {
-            if (msg == null || msg.isBlank()) {
-                continue;
-            }
-            String lower = msg.toLowerCase();
-            if (lower.contains("bắt buộc")
-                    || lower.contains("vui lòng điền")
-                    || lower.contains("không hợp lệ")
-                    || lower.contains("phải nhập")
-                    || lower.contains("yêu cầu nhập")
-                    || lower.contains("chọn tỉnh")) {
+            if (isBlockingMessage(msg)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static boolean isBlockingMessage(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        // Banner thông tin VNeID / lỗi lưu định danh (không chặn wizard).
+        if (lower.contains("vneid")
+                || (lower.contains("định danh") && lower.contains("điền sẵn"))
+                || (lower.contains("định danh") && lower.contains("thất bại"))) {
+            return false;
+        }
+        return lower.contains("bắt buộc")
+                || lower.contains("vui lòng điền")
+                || lower.contains("vui lòng chọn")
+                || lower.contains("vui lòng bấm")
+                || lower.contains("chưa phản hồi")
+                || lower.contains("gửi ngay trong biểu mẫu")
+                || lower.contains("không hợp lệ")
+                || lower.contains("phải nhập")
+                || lower.contains("yêu cầu nhập")
+                || lower.contains("chọn tỉnh")
+                || lower.contains("chọn phường")
+                || lower.contains("có lỗi xảy ra")
+                || lower.contains("thất bại")
+                || lower.contains("không thành công")
+                || lower.contains("server error")
+                || lower.contains("internal server");
     }
 
     /**
@@ -615,6 +942,14 @@ public class WebUI {
      */
     public void failStepWithSystemFeedback(int stepNumber, String stepName, String context,
                                            List<String> messages) {
+        failStepWithSystemFeedback(stepNumber, stepName, context, messages, null);
+    }
+
+    /**
+     * @param preCapturedShot base64 đã chụp khi toast còn hiện (ưu tiên hơn chụp lại sau).
+     */
+    public void failStepWithSystemFeedback(int stepNumber, String stepName, String context,
+                                           List<String> messages, String preCapturedShot) {
         List<String> feedback = messages == null || messages.isEmpty()
                 ? collectSystemFeedbackMessages()
                 : messages;
@@ -625,20 +960,24 @@ public class WebUI {
         String ctx = context == null || context.isBlank() ? "" : context.trim();
         String joined = String.join(" | ", feedback);
 
-        System.out.println(" ❌ " + stepLabel + " — hệ thống trả về: " + joined);
+        // Console + Extent: chỉ qua logFail* (tránh in ❌ trùng với TestListener / logFail).
         for (String msg : feedback) {
             String logCtx = ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx;
             TestActionLog.validation(logCtx, msg);
         }
         TestActionLog.trangThaiBuoc("Thất bại");
 
-        String shot = takeScreenshotPreserveToast();
+        String shot = (preCapturedShot != null && !preCapturedShot.isBlank())
+                ? preCapturedShot
+                : takeScreenshotPreserveToast();
         if (shot != null) {
-            System.out.println(" 📸 Đã chụp ảnh lỗi — " + stepLabel);
+            System.out.println(" 📸 Đã chụp ảnh lỗi — " + stepLabel
+                    + (preCapturedShot != null ? " (toast lúc phát hiện)" : ""));
         }
         String reportBody = stepLabel
                 + (ctx.isEmpty() ? "" : "\nNgữ cảnh: " + ctx)
                 + "\nHệ thống trả về: " + joined;
+        // Extent một lần duy nhất — TestListener không logFail lại với StepBlockedException.
         if (shot != null) {
             ExtentReportManager.logFailWithScreenshot(reportBody, shot);
         } else {
@@ -718,16 +1057,44 @@ public class WebUI {
         return lower.equals("có") || lower.equals("không") || lower.contains("cursor-pointer");
     }
 
-    /** In console + Excel log mọi thông báo validate đang hiển thị. */
+    /** In console + Excel; thông báo không chặn thì chụp ảnh và đi tiếp. */
     public void logValidationMessages(String context) {
-        List<String> messages = collectValidationMessages();
+        List<String> messages = collectSystemFeedbackMessages();
+        if (messages.isEmpty()) {
+            messages = collectValidationMessages();
+        }
         if (messages.isEmpty()) {
             return;
         }
         String prefix = (context == null || context.isBlank()) ? "Biểu mẫu" : context.trim();
-        System.out.println(" ⚠ Validation [" + prefix + "]: " + String.join(" | ", messages));
+        List<String> blocking = new ArrayList<>();
+        List<String> soft = new ArrayList<>();
         for (String msg : messages) {
-            TestActionLog.validation(prefix, msg);
+            if (isBlockingMessage(msg)) {
+                blocking.add(msg);
+            } else {
+                soft.add(msg);
+            }
+        }
+        if (!soft.isEmpty()) {
+            System.out.println(" ⚠ Thông báo (không chặn) [" + prefix + "]: " + String.join(" | ", soft));
+            for (String msg : soft) {
+                TestActionLog.validation(prefix, msg);
+            }
+            String shot = takeScreenshotPreserveToast();
+            String body = prefix + "\nThông báo (không chặn): " + String.join(" | ", soft);
+            if (shot != null) {
+                System.out.println(" 📸 Đã chụp ảnh thông báo — đi tiếp");
+                ExtentReportManager.logWarningWithScreenshot(body, shot);
+            } else {
+                ExtentReportManager.logWarning(body);
+            }
+        }
+        if (!blocking.isEmpty()) {
+            System.out.println(" ⚠ Validation chặn [" + prefix + "]: " + String.join(" | ", blocking));
+            for (String msg : blocking) {
+                TestActionLog.validation(prefix, msg);
+            }
         }
     }
 
@@ -744,11 +1111,25 @@ public class WebUI {
     }
 
     public boolean isElementEnabled(By by) {
+        return isElementEnabledNow(by);
+    }
+
+    /** Kiểm tra enabled ngay — không chờ 5s khi element không có. */
+    public boolean isElementEnabledNow(By by) {
+        failIfBrowserClosed();
+        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
         try {
-            WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(5));
-            WebElement element = shortWait.until(ExpectedConditions.presenceOfElementLocated(by));
-            return element.isEnabled();
-        } catch (Exception e) {
+            for (WebElement element : driver.findElements(by)) {
+                try {
+                    if (element.isDisplayed()) {
+                        return element.isEnabled();
+                    }
+                } catch (StaleElementReferenceException ignored) {
+                }
+            }
+            return false;
+        } catch (WebDriverException e) {
+            failIfBrowserClosed(e);
             return false;
         }
     }
@@ -759,12 +1140,13 @@ public class WebUI {
             TestActionLog.boQua(elementName, "Giá trị trống — không nhập");
             return;
         }
-        if (!isElementVisible(by)) {
+        // existsNow — không isElementVisible (chờ tới 5s) khi ô ẩn → tránh lúc nhanh lúc chậm.
+        if (!existsNow(by)) {
             System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do biểu mẫu ẩn.");
             TestActionLog.boQua(elementName, "Biểu mẫu ẩn / không có trên giao diện");
             return;
         }
-        if (!isElementEnabled(by)) {
+        if (!isElementEnabledNow(by)) {
             System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do hệ thống khóa.");
             TestActionLog.boQua(elementName, "Ô bị khóa");
             return;
@@ -778,12 +1160,12 @@ public class WebUI {
             TestActionLog.boQua(elementName, "Giá trị trống — không nhập");
             return;
         }
-        if (!isElementVisible(by)) {
+        if (!existsNow(by)) {
             System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do biểu mẫu ẩn.");
             TestActionLog.boQua(elementName, "Biểu mẫu ẩn / không có trên giao diện");
             return;
         }
-        if (!isElementEnabled(by)) {
+        if (!isElementEnabledNow(by)) {
             System.out.println(" ⏩ Bỏ qua: [" + elementName + "] do hệ thống khóa.");
             TestActionLog.boQua(elementName, "Ô bị khóa");
             return;
@@ -841,8 +1223,8 @@ public class WebUI {
     private boolean trySelectFromDropdown(By dropdownLocator, By optionsLocator, String expectedText,
                                           String elementName, List<String> availableOptions) {
         clickElementQuiet(dropdownLocator, elementName);
-        sleepMillis(WaitConfig.SETTLE_MS);
-        for (int attempt = 0; attempt < 3; attempt++) {
+        sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        for (int attempt = 0; attempt < 2; attempt++) {
             for (WebElement option : driver.findElements(optionsLocator)) {
                 try {
                     if (!option.isDisplayed()) {
@@ -854,8 +1236,7 @@ public class WebUI {
                     }
                     if (optionMatches(expectedText, textOnWeb)) {
                         JavascriptExecutor js = (JavascriptExecutor) driver;
-                        js.executeScript("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", option);
-                        sleepMillis(300);
+                        js.executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", option);
                         option.click();
                         System.out.println(" ➔ Chọn Dropdown: '" + expectedText + "' tại [" + elementName + "]");
                         TestActionLog.chon(elementName, expectedText);
@@ -864,7 +1245,7 @@ public class WebUI {
                 } catch (StaleElementReferenceException ignored) {
                 }
             }
-            sleepMillis(250);
+            sleepMillis(WaitConfig.SETTLE_SHORT_MS);
         }
         dismissOpenDropdownsQuiet();
         return false;
@@ -913,7 +1294,7 @@ public class WebUI {
 
     public void selectDropdownWithSearch(By dropdownLocator, By searchInputLocator, By optionsLocator, String expectedText, String elementName) {
         RuntimeException lastError = null;
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
             try {
                 if (trySelectDropdownWithSearch(dropdownLocator, searchInputLocator, optionsLocator,
                         expectedText, elementName)) {
@@ -922,11 +1303,11 @@ public class WebUI {
             } catch (RuntimeException ex) {
                 lastError = ex;
             }
-            if (attempt < 3) {
+            if (attempt < 2) {
                 System.out.println(" ⏳ Dropdown [" + elementName + "] chưa có kết quả — thử lại ("
-                        + (attempt + 1) + "/3)...");
+                        + (attempt + 1) + "/2)...");
                 dismissOpenDropdownsQuiet();
-                sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                sleepMillis(WaitConfig.SETTLE_MS);
             }
         }
         if (lastError != null) {
@@ -939,14 +1320,14 @@ public class WebUI {
     private boolean trySelectDropdownWithSearch(By dropdownLocator, By searchInputLocator, By optionsLocator,
                                               String expectedText, String elementName) {
         clickElementQuiet(dropdownLocator, elementName);
-        sleepMillis(WaitConfig.SETTLE_MS);
+        sleepMillis(WaitConfig.SETTLE_SHORT_MS);
         try {
             WebElement searchInput = wait.until(ExpectedConditions.visibilityOfElementLocated(searchInputLocator));
             searchInput.clear();
             searchInput.sendKeys(expectedText);
             System.out.println(" ➔ Gõ tìm kiếm Dropdown: '" + expectedText + "'");
             TestActionLog.timKiemDropdown(expectedText);
-            sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            sleepMillis(WaitConfig.SETTLE_MS);
         } catch (Exception ignored) {
         }
 
@@ -986,6 +1367,25 @@ public class WebUI {
             By.xpath("//div[@role='listbox']//div[@role='option'] | //div[@role='option']");
 
     /**
+     * Thẻ địa chỉ UAT (bước 2/3 mọi loại đơn): tiêu đề Địa chỉ… + Tỉnh/TP + Phường/xã + Chi tiết.
+     * Markup: {@code rounded + border} card với font-semibold "Địa chỉ thường trú|liên lạc|…".
+     */
+    private static final String ADDRESS_CARD =
+            "//div[contains(@class,'rounded') and contains(@class,'border')]"
+                    + "[.//*[contains(@class,'font-semibold') and ("
+                    + "contains(normalize-space(.), 'Địa chỉ thường trú')"
+                    + " or contains(normalize-space(.), 'Địa chỉ liên lạc')"
+                    + " or contains(normalize-space(.), 'Địa chỉ nơi cư trú')"
+                    + " or contains(normalize-space(.), 'Địa chỉ trụ sở')"
+                    + " or contains(normalize-space(.), 'Nơi ở hiện tại')"
+                    + " or starts-with(normalize-space(.), 'Địa chỉ')"
+                    + ")]"
+                    + " and .//label[contains(., 'Tỉnh') and contains(., 'thành phố')]"
+                    + " and (.//label[contains(., 'Chi tiết') or contains(., 'số nhà')]"
+                    + " or .//textarea[contains(@placeholder, 'Số nhà') or contains(@placeholder, 'đường')"
+                    + " or contains(@placeholder, 'Nguyễn Huệ')])]";
+
+    /**
      * Chọn mục đầu tiên có text trong dropdown (dùng khi không biết trước giá trị, vd. Phường/xã sau Tỉnh).
      */
     public void selectFirstDropdownOption(By dropdownLocator, By optionsLocator, String elementName) {
@@ -1019,8 +1419,15 @@ public class WebUI {
                 + " | " + scope + "//label[contains(., 'Phường') and contains(., 'xã')]/following::textarea[1]");
     }
 
-    /** Textarea chi tiết theo khối địa chỉ (0 = thường trú, 1 = liên lạc…). */
+    /** Textarea chi tiết theo thẻ địa chỉ (0 = thường trú, 1 = liên lạc…). */
     public By addressDetailTextareaAtBlock(String scopeXPath, int blockIndex) {
+        String card = addressCardScope(scopeXPath, blockIndex);
+        if (card != null) {
+            return By.xpath(card + "//textarea[contains(@placeholder, 'Số nhà') or contains(@placeholder, 'đường')"
+                    + " or contains(@placeholder, 'Nguyễn Huệ') or contains(@placeholder, 'Chi tiết')]"
+                    + " | " + card + "//label[contains(., 'Chi tiết') or contains(., 'số nhà')]/following-sibling::textarea"
+                    + " | " + card + "//label[contains(., 'Chi tiết')]/parent::div//textarea");
+        }
         String scope = scopeXPath == null || scopeXPath.isBlank() ? "" : scopeXPath;
         int idx = blockIndex + 1;
         return By.xpath("(" + scope + "//textarea[contains(@placeholder, 'Số nhà') or contains(@placeholder, 'thôn')"
@@ -1031,6 +1438,19 @@ public class WebUI {
                 + " | " + scope + "//label[contains(., 'Chi tiết')]/following-sibling::div//textarea"
                 + " | " + scope + "//label[contains(., 'Địa chỉ thường trú')]/following-sibling::textarea"
                 + " | " + scope + "//label[contains(., 'Địa chỉ liên lạc')]/following-sibling::textarea)[" + idx + "]");
+    }
+
+    /** XPath một thẻ địa chỉ trong parent; null nếu UI chưa dùng card này. */
+    private String addressCardScope(String parentScope, int zeroBasedIndex) {
+        String parent = parentScope == null ? "" : parentScope;
+        String cardXpath = "(" + parent + ADDRESS_CARD + ")[" + (zeroBasedIndex + 1) + "]";
+        try {
+            if (existsNow(By.xpath(cardXpath))) {
+                return cardXpath;
+            }
+        } catch (RuntimeException ignored) {
+        }
+        return null;
     }
 
     /**
@@ -1045,9 +1465,21 @@ public class WebUI {
         selectAdministrativeAddressInScope(scopeXPath, null, null);
     }
 
-    /** Đếm số cặp dropdown Tỉnh/Phường hiển thị trong scope (form có thể có 2 khối địa chỉ). */
+    /** Đếm thẻ địa chỉ (ưu tiên) hoặc cặp Tỉnh/Phường trong scope. */
     public int countVisibleAddressBlocks(String scopeXPath) {
         String scope = scopeXPath == null ? "" : scopeXPath;
+        int cards = 0;
+        for (WebElement el : driver.findElements(By.xpath(scope + ADDRESS_CARD))) {
+            try {
+                if (el.isDisplayed()) {
+                    cards++;
+                }
+            } catch (StaleElementReferenceException ignored) {
+            }
+        }
+        if (cards > 0) {
+            return cards;
+        }
         int count = 0;
         By labels = By.xpath(scope + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')]");
         for (WebElement el : driver.findElements(labels)) {
@@ -1068,13 +1500,15 @@ public class WebUI {
 
     public void selectAdministrativeAddressBlockInScope(String scopeXPath, int blockIndex,
                                                         String provinceHint, String wardHint) {
-        String scope = scopeXPath == null ? "" : scopeXPath;
-        int idx = blockIndex + 1;
-        int total = countVisibleAddressBlocks(scope);
-        String blockSuffix = total > 1 ? " #" + idx : "";
+        String parent = scopeXPath == null ? "" : scopeXPath;
+        int total = countVisibleAddressBlocks(parent);
+        String blockSuffix = total > 1 ? " #" + (blockIndex + 1) : "";
+        String card = addressCardScope(parent, blockIndex);
+        String scope = card != null ? card : parent;
+        int idx = card != null ? 1 : blockIndex + 1;
 
         By btnTinh = adminDropdownButtonAt(scope, false, idx);
-        if (!isElementVisible(btnTinh)) {
+        if (!existsNow(btnTinh)) {
             return;
         }
         String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]";
@@ -1096,7 +1530,7 @@ public class WebUI {
             System.out.println(" ⏩ " + tinhName + " đã có giá trị — bỏ qua.");
         }
 
-        if (!isElementVisible(btnPhuong)) {
+        if (!existsNow(btnPhuong)) {
             if (hasWardFieldInBlock(scope, idx)) {
                 waitUntilVisible(btnPhuong, WaitConfig.FIELD, phuongName);
             } else {
@@ -1109,25 +1543,28 @@ public class WebUI {
             System.out.println(" ⏩ " + phuongName + " đã có giá trị — bỏ qua.");
             return;
         }
-        if (!provinceChanged && isElementVisible(btnPhuong)) {
+        if (!provinceChanged && existsNow(btnPhuong)) {
             waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
         }
+        // wardHint faker thường lệch tỉnh đã chọn → bỏ qua, chọn phường random 1 lần.
         selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName,
-                provinceHint, wardHint);
+                provinceHint, null);
     }
 
     /** Chọn lại phường/xã cho mọi khối địa chỉ (khi VNeID prefill lệch tỉnh). */
     public void forceSelectAdministrativeWardsInScope(String scopeXPath) {
-        String scope = scopeXPath == null ? "" : scopeXPath;
-        int total = countVisibleAddressBlocks(scope);
+        String parent = scopeXPath == null ? "" : scopeXPath;
+        int total = countVisibleAddressBlocks(parent);
         for (int i = 0; i < total; i++) {
-            int idx = i + 1;
-            String blockSuffix = total > 1 ? " #" + idx : "";
+            String blockSuffix = total > 1 ? " #" + (i + 1) : "";
+            String card = addressCardScope(parent, i);
+            String scope = card != null ? card : parent;
+            int idx = card != null ? 1 : i + 1;
             By btnTinh = adminDropdownButtonAt(scope, false, idx);
             By searchTinh = adminDropdownSearchAt(scope, false, idx);
             String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]";
             By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-            if (!isElementVisible(btnPhuong)) {
+            if (!existsNow(btnPhuong)) {
                 continue;
             }
             String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]";
@@ -1147,7 +1584,7 @@ public class WebUI {
         RuntimeException last = null;
         for (int attempt = 1; attempt <= 2; attempt++) {
             try {
-                if (attempt > 1 || !isElementVisible(btnPhuong) || !isWardDropdownInteractive(btnPhuong)) {
+                if (attempt > 1 || !existsNow(btnPhuong) || !isWardDropdownInteractive(btnPhuong)) {
                     waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
                 }
                 if (wardHint != null && !wardHint.isBlank()) {
@@ -1176,7 +1613,7 @@ public class WebUI {
 
     /** Chọn lại tỉnh ngẫu nhiên khác khi phường/xã chưa load (timing/API). */
     private void reselectProvinceForWard(By btnTinh, By searchTinh, String tinhName, String provinceHint) {
-        if (!isElementVisible(btnTinh)) {
+        if (!existsNow(btnTinh)) {
             return;
         }
         String current = "";
@@ -1232,16 +1669,25 @@ public class WebUI {
 
     public void ensureAdministrativeAddressBlockInScope(String scopeXPath, int blockIndex,
                                                         String chiTietValue, String logContext) {
-        String scope = scopeXPath == null ? "" : scopeXPath;
-        int idx = blockIndex + 1;
-        int total = effectiveAddressBlockCount(scope);
+        String parentScope = scopeXPath == null ? "" : scopeXPath;
+        int total = effectiveAddressBlockCount(parentScope);
         if (blockIndex >= total && total > 0) {
             return;
         }
         String ctx = logContext == null || logContext.isBlank() ? "" : " (" + logContext + ")";
-        String blockSuffix = total > 1 ? " #" + idx : "";
+        String blockSuffix = total > 1 ? " #" + (blockIndex + 1) : "";
 
-        focusAddressBlock(scope, blockIndex);
+        // Ưu tiên neo đúng thẻ "Địa chỉ …" (Tỉnh + Phường + Chi tiết) — có ở hầu hết bước 2/3.
+        String card = addressCardScope(parentScope, blockIndex);
+        String scope = card != null ? card : parentScope;
+        int idx = card != null ? 1 : blockIndex + 1;
+
+        if (isAdministrativeAddressBlockComplete(parentScope, blockIndex)) {
+            System.out.println(" ⏩ Chi tiết địa chỉ" + blockSuffix + ctx + " đã đủ — bỏ qua.");
+            return;
+        }
+
+        focusAddressBlock(parentScope, blockIndex);
 
         By btnTinh = adminDropdownButtonAt(scope, false, idx);
         By btnPhuong = adminDropdownButtonAt(scope, true, idx);
@@ -1250,97 +1696,121 @@ public class WebUI {
         String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]" + ctx;
         String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]" + ctx;
 
-        boolean hasProvince = existsNow(btnTinh) || isElementVisible(btnTinh);
-        if (!hasProvince) {
-            fillAddressDetailAtBlock(scope, blockIndex, chiTietValue,
+        String provinceHint = extractProvinceHint(chiTietValue);
+        // Không dùng ward hint từ faker — tên phường trong chuỗi chi tiết thường không có trong dropdown tỉnh đã chọn
+        // → mở dropdown 2 lần (thử hint fail rồi chọn random).
+
+        if (!existsNow(btnTinh)) {
+            fillAddressDetailAtBlock(parentScope, blockIndex, chiTietValue,
                     "Chi tiết địa chỉ" + blockSuffix + ctx);
             finishAddressBlock();
             return;
         }
 
         if (!isAdminDropdownFilledAt(btnTinh)) {
-            selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
+            boolean selected = false;
+            if (provinceHint != null && !provinceHint.isBlank()) {
+                selected = trySelectDropdownOption(btnTinh, searchTinh, GLOBAL_DROPDOWN_OPTIONS,
+                        provinceHint, tinhName);
+            }
+            if (!selected) {
+                selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
+            }
             dismissOpenDropdownsQuiet();
             sleepMillis(WaitConfig.SETTLE_SHORT_MS);
             waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
+        } else {
+            System.out.println(" ⏩ " + tinhName + " đã có giá trị — bỏ qua.");
         }
 
-        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName);
+        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName,
+                btnPhuong, searchPhuong, phuongName, null);
 
-        fillAddressDetailAtBlock(scope, blockIndex, chiTietValue,
+        fillAddressDetailAtBlock(parentScope, blockIndex, chiTietValue,
                 "Chi tiết địa chỉ" + blockSuffix + ctx);
         finishAddressBlock();
     }
 
+    /** Lấy gợi ý tỉnh/TP từ đoạn cuối địa chỉ chi tiết (vd. "... , Hà Nội"). */
+    static String extractProvinceHint(String diaChi) {
+        if (diaChi == null || diaChi.isBlank()) {
+            return null;
+        }
+        String[] parts = diaChi.split(",");
+        if (parts.length == 0) {
+            return null;
+        }
+        String last = parts[parts.length - 1].trim()
+                .replace('\u00A0', ' ')
+                .replaceAll("\\s+", " ");
+        if (last.isBlank()) {
+            return null;
+        }
+        return last.replaceFirst("(?i)^TP\\.\\s*", "")
+                .replaceFirst("(?i)^Thành phố\\s+", "")
+                .trim();
+    }
+
+    /** Lấy gợi ý phường/xã từ địa chỉ (đoạn chứa Phường/Xã). */
+    static String extractWardHint(String diaChi) {
+        if (diaChi == null || diaChi.isBlank()) {
+            return null;
+        }
+        for (String part : diaChi.split(",")) {
+            String p = part.trim();
+            if (p.regionMatches(true, 0, "Phường", 0, "Phường".length())
+                    || p.regionMatches(true, 0, "Xã", 0, "Xã".length())
+                    || p.toLowerCase(Locale.ROOT).startsWith("phuong")
+                    || p.toLowerCase(Locale.ROOT).startsWith("xa ")) {
+                return p;
+            }
+        }
+        return null;
+    }
+
     /**
-     * Chọn lại tỉnh + phường + chi tiết — dùng sau Người liên quan (UI hay reset state).
+     * Hoàn thiện địa chỉ — chọn lại phần còn thiếu (không ép chọn lại tỉnh/phường đã có).
+     * Tên force* giữ để tương thích gọi cũ; hành vi giống ensure (tránh chọn đi chọn lại).
      */
     public void forceEnsureAdministrativeAddressBlockInScope(String scopeXPath, int blockIndex,
                                                              String chiTietValue, String logContext) {
-        String scope = scopeXPath == null ? "" : scopeXPath;
-        int idx = blockIndex + 1;
-        String ctx = logContext == null || logContext.isBlank() ? "" : " (" + logContext + ")";
-        int total = effectiveAddressBlockCount(scope);
-        String blockSuffix = total > 1 ? " #" + idx : "";
-
-        focusAddressBlock(scope, blockIndex);
-
-        By btnTinh = adminDropdownButtonAt(scope, false, idx);
-        By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-        By searchTinh = adminDropdownSearchAt(scope, false, idx);
-        By searchPhuong = adminDropdownSearchAt(scope, true, idx);
-        String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]" + ctx;
-        String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]" + ctx;
-
-        if (!existsNow(btnTinh) && !isElementVisible(btnTinh)) {
-            fillAddressDetailAtBlock(scope, blockIndex, chiTietValue,
-                    "Chi tiết địa chỉ" + blockSuffix + ctx);
-            finishAddressBlock();
+        if (isAdministrativeAddressBlockComplete(scopeXPath, blockIndex)) {
+            String ctx = logContext == null || logContext.isBlank() ? "" : " (" + logContext + ")";
+            System.out.println(" ⏩ Chi tiết địa chỉ" + ctx + " đã đủ — bỏ qua chọn lại.");
             return;
         }
-
-        selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
-        dismissOpenDropdownsQuiet();
-        sleepMillis(WaitConfig.SETTLE_SHORT_MS);
-        waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
-        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName);
-
-        fillAddressDetailAtBlock(scope, blockIndex, chiTietValue,
-                "Chi tiết địa chỉ" + blockSuffix + ctx);
-        finishAddressBlock();
+        ensureAdministrativeAddressBlockInScope(scopeXPath, blockIndex, chiTietValue, logContext);
     }
 
     /** Bắt buộc chọn phường/xã trước chi tiết — tránh bỏ qua khi dropdown render chậm. */
     private void ensureWardSelectedBeforeDetail(String scope, int idx, By btnTinh, By searchTinh, String tinhName,
                                                 By btnPhuong, By searchPhuong, String phuongName) {
+        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName,
+                btnPhuong, searchPhuong, phuongName, null);
+    }
+
+    private void ensureWardSelectedBeforeDetail(String scope, int idx, By btnTinh, By searchTinh, String tinhName,
+                                                By btnPhuong, By searchPhuong, String phuongName,
+                                                String wardHint) {
         waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
         waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
 
-        boolean wardPresent = isElementVisible(btnPhuong) || existsNow(btnPhuong) || hasWardFieldInBlock(scope, idx);
+        boolean wardPresent = existsNow(btnPhuong) || hasWardFieldInBlock(scope, idx);
         if (!wardPresent) {
             return;
         }
-        if (!isElementVisible(btnPhuong) && !existsNow(btnPhuong)) {
+        if (!existsNow(btnPhuong)) {
             try {
                 waitUntilVisible(btnPhuong, WaitConfig.WARD_READY, phuongName);
             } catch (RuntimeException ignored) {
                 return;
             }
         }
-        if (!isAdminDropdownFilledAt(btnPhuong)) {
-            selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, null);
-            pauseBetweenAddressSteps();
+        if (isAdminDropdownFilledAt(btnPhuong)) {
+            return;
         }
-        if (!isAdminDropdownFilledAt(btnPhuong)) {
-            if (!isAdminDropdownFilledAt(btnTinh)) {
-                selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
-                dismissOpenDropdownsQuiet();
-                sleepMillis(WaitConfig.SETTLE_SHORT_MS);
-            }
-            waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
-            selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, null);
-            pauseBetweenAddressSteps();
-        }
+        selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, wardHint);
+        pauseBetweenAddressSteps();
     }
 
     /** Chọn phường/xã nếu dropdown có trong scope (sau khi đã chọn tỉnh). */
@@ -1361,14 +1831,18 @@ public class WebUI {
     private void focusAddressBlock(String scope, int blockIndex) {
         dismissOpenDropdownsQuiet();
         sleepMillis(WaitConfig.SETTLE_SHORT_MS);
-        int idx = blockIndex + 1;
-        By anchor = adminDropdownButtonAt(scope, false, idx);
+        String card = addressCardScope(scope, blockIndex);
+        String effective = card != null ? card : (scope == null ? "" : scope);
+        int idx = card != null ? 1 : blockIndex + 1;
+        By anchor = adminDropdownButtonAt(effective, false, idx);
         if (!existsNow(anchor)) {
-            anchor = By.xpath("(" + scope + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')])["
+            anchor = By.xpath("(" + effective + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')])["
                     + idx + "]");
         }
         if (existsNow(anchor)) {
             scrollToElement(anchor);
+        } else if (card != null) {
+            scrollToElement(By.xpath(card));
         } else if (scope != null && !scope.isBlank()) {
             scrollToElement(By.xpath(scope));
         }
@@ -1427,9 +1901,13 @@ public class WebUI {
         return hasWardFieldInBlock(scope, oneBasedIndex);
     }
 
-    /** Điền chi tiết (số nhà, đường…) sau khi tỉnh/phường đã chọn. */
+    /** Điền chi tiết (số nhà, đường…) — không ghi lại Phường/Tỉnh (đã chọn ở dropdown). */
     public void fillAddressDetailAtBlock(String scopeXPath, int blockIndex, String value, String logLabel) {
         if (value == null || value.isBlank()) {
+            return;
+        }
+        String streetOnly = toAddressStreetDetail(value);
+        if (streetOnly == null || streetOnly.isBlank()) {
             return;
         }
         dismissOpenDropdownsQuiet();
@@ -1440,37 +1918,69 @@ public class WebUI {
             detail = addressDetailTextareaInScope(scope);
         }
         if (existsNow(detail)) {
+            if (isAddressDetailFilledInBlock(scope, blockIndex)) {
+                System.out.println(" ⏩ Ô nhập [" + logLabel + "] đã có nội dung — bỏ qua.");
+                return;
+            }
             waitUntilVisible(detail, WaitConfig.FIELD, logLabel);
             scrollToElement(detail);
             sleepMillis(WaitConfig.SETTLE_SHORT_MS);
-            setTextWithCheck(detail, value, "Ô nhập [" + logLabel + "]");
+            setTextWithCheck(detail, streetOnly, "Ô nhập [" + logLabel + "]");
             return;
         }
         By legacy = By.xpath(scope + "//label[contains(., 'Địa chỉ') and not(contains(., 'trụ sở'))]"
                 + "/following-sibling::textarea | " + scope
                 + "//label[contains(., 'Địa chỉ')]/parent::div//textarea");
-        if (isElementVisible(legacy)) {
-            setTextWithCheck(legacy, value, "Ô nhập [" + logLabel + "]");
+        if (existsNow(legacy)) {
+            setTextWithCheck(legacy, streetOnly, "Ô nhập [" + logLabel + "]");
         }
+    }
+
+    /**
+     * Ô "Chi tiết (số nhà, đường…)" chỉ cần số nhà/đường — bỏ đoạn Phường/Xã và Tỉnh/TP
+     * (vd. {@code 95 Nguyễn Huệ, Phường 1, Bắc Ninh} → {@code 95 Nguyễn Huệ}).
+     */
+    public static String toAddressStreetDetail(String diaChi) {
+        if (diaChi == null || diaChi.isBlank()) {
+            return null;
+        }
+        String trimmed = diaChi.replace('\u00A0', ' ').trim();
+        int cut = -1;
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        for (String marker : List.of(", phường", ", xã", ", thị trấn", ", p.", ", x.")) {
+            int i = lower.indexOf(marker);
+            if (i > 0 && (cut < 0 || i < cut)) {
+                cut = i;
+            }
+        }
+        if (cut > 0) {
+            return trimmed.substring(0, cut).trim();
+        }
+        if (trimmed.contains(",")) {
+            return trimmed.substring(0, trimmed.indexOf(',')).trim();
+        }
+        return trimmed;
     }
 
     /** Khối địa chỉ đã có tỉnh, phường và chi tiết hợp lệ. */
     public boolean isAdministrativeAddressBlockComplete(String scopeXPath, int blockIndex) {
-        String scope = scopeXPath == null ? "" : scopeXPath;
-        int total = effectiveAddressBlockCount(scope);
+        String parent = scopeXPath == null ? "" : scopeXPath;
+        int total = effectiveAddressBlockCount(parent);
         if (blockIndex < 0 || blockIndex >= total) {
             return true;
         }
-        int idx = blockIndex + 1;
+        String card = addressCardScope(parent, blockIndex);
+        String scope = card != null ? card : parent;
+        int idx = card != null ? 1 : blockIndex + 1;
         By btnTinh = adminDropdownButtonAt(scope, false, idx);
         By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-        if ((existsNow(btnTinh) || isElementVisible(btnTinh)) && !isAdminDropdownFilledAt(btnTinh)) {
+        if ((existsNow(btnTinh)) && !isAdminDropdownFilledAt(btnTinh)) {
             return false;
         }
         if (hasWardFieldInBlock(scope, idx) && !isAdminDropdownFilledAt(btnPhuong)) {
             return false;
         }
-        return isAddressDetailFilledInBlock(scope, blockIndex);
+        return isAddressDetailFilledInBlock(parent, blockIndex);
     }
 
     private boolean isAddressDetailFilledInBlock(String scope, int blockIndex) {
@@ -1500,7 +2010,7 @@ public class WebUI {
         if (text == null || text.isBlank()) {
             return false;
         }
-        String trimmed = text.trim();
+        String trimmed = text.replace('\u00A0', ' ').trim();
         if (trimmed.length() < 3) {
             return false;
         }
@@ -1545,6 +2055,16 @@ public class WebUI {
             if (!el.isDisplayed()) {
                 return "";
             }
+            for (String attr : List.of("aria-label", "title", "data-value", "data-state")) {
+                try {
+                    String a = el.getAttribute(attr);
+                    if (a != null && !a.isBlank() && !isAdminPlaceholderText(a)
+                            && !"open".equalsIgnoreCase(a) && !"closed".equalsIgnoreCase(a)) {
+                        return a.trim();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
             for (WebElement span : el.findElements(By.xpath(".//span[normalize-space(.)!='']"))) {
                 try {
                     if (!span.isDisplayed()) {
@@ -1558,7 +2078,17 @@ public class WebUI {
                 }
             }
             String text = readElementText(el).trim();
-            return isAdminPlaceholderText(text) ? "" : text;
+            if (!isAdminPlaceholderText(text)) {
+                return text;
+            }
+            String raw = el.getAttribute("textContent");
+            if (raw != null) {
+                String cleaned = raw.replace('\u00A0', ' ').replaceAll("\\s+", " ").trim();
+                if (!isAdminPlaceholderText(cleaned)) {
+                    return cleaned;
+                }
+            }
+            return "";
         } catch (Exception ignored) {
             return "";
         }
@@ -1612,14 +2142,22 @@ public class WebUI {
             picks = new ArrayList<>(Arrays.asList(catalog));
         }
         Collections.shuffle(picks);
+        // Giới hạn thử — tránh click dropdown hàng chục lần khi catalog dài.
+        int maxTries = Math.min(4, picks.size());
         RuntimeException last = null;
-        for (String pick : picks) {
+        for (int i = 0; i < maxTries; i++) {
+            String pick = picks.get(i);
             try {
-                if (searchInput != null && existsNow(searchInput)) {
-                    selectDropdownWithSearch(dropdownLocator, searchInput, GLOBAL_DROPDOWN_OPTIONS, pick, elementName);
-                } else {
-                    selectCustomDropdown(dropdownLocator, GLOBAL_DROPDOWN_OPTIONS, pick, elementName);
-                }
+                selectCustomDropdown(dropdownLocator, GLOBAL_DROPDOWN_OPTIONS, pick, elementName);
+                return;
+            } catch (RuntimeException e) {
+                last = e;
+                dismissOpenDropdownsQuiet();
+            }
+        }
+        if (searchInput != null) {
+            try {
+                selectDropdownWithSearch(dropdownLocator, searchInput, GLOBAL_DROPDOWN_OPTIONS, picks.get(0), elementName);
                 return;
             } catch (RuntimeException e) {
                 last = e;
@@ -1631,7 +2169,7 @@ public class WebUI {
     /** Mở dropdown phường/xã, chọn trực tiếp trong listbox (không đóng rồi mở lại). */
     private void selectRandomWardOption(By dropdownLocator, By searchInput, String elementName) {
         RuntimeException last = new RuntimeException("Không có option phường/xã khả dụng");
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
             try {
                 if (trySelectRandomWardOnce(dropdownLocator, searchInput, elementName)) {
                     return;
@@ -1640,9 +2178,9 @@ public class WebUI {
                 last = e;
             }
             dismissOpenDropdownsQuiet();
-            sleepMillis(WaitConfig.SETTLE_LONG_MS);
-            if (attempt < 3) {
-                System.out.println(" ⏳ " + elementName + " — thử chọn phường/xã lại (" + (attempt + 1) + "/3)...");
+            sleepMillis(WaitConfig.SETTLE_MS);
+            if (attempt < 2) {
+                System.out.println(" ⏳ " + elementName + " — thử chọn phường/xã lại (" + (attempt + 1) + "/2)...");
             }
         }
         dismissOpenDropdownsQuiet();
@@ -1652,7 +2190,7 @@ public class WebUI {
     private boolean trySelectRandomWardOnce(By dropdownLocator, By searchInput, String elementName) {
         scrollToElement(dropdownLocator);
         clickElementQuiet(dropdownLocator, elementName);
-        sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        sleepMillis(WaitConfig.SETTLE_MS);
         List<String> texts = collectValidDropdownOptionTexts(GLOBAL_DROPDOWN_OPTIONS, WaitConfig.DROPDOWN);
         if (!texts.isEmpty()) {
             List<String> picks = new ArrayList<>(texts);
@@ -1886,16 +2424,14 @@ public class WebUI {
     }
 
     /**
-     * Chụp viewport giữ nguyên toast/notify (không ESC, không đóng overlay).
-     * Dùng ngay sau khi toast Gửi đơn hiện.
+     * Chụp viewport giữ nguyên toast/notify.
+     * Không scroll / không ESC — scroll dễ làm toast tắt hoặc host gửi lại request (toast x2).
      */
     public String takeScreenshotPreserveToast() {
         if (!screenshotsEnabled()) {
             return null;
         }
         try {
-            scrollWindowTo(0);
-            sleepMillis(150);
             String shot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64);
             return (shot == null || shot.isBlank()) ? null : shot;
         } catch (Exception e) {

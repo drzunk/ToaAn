@@ -21,6 +21,11 @@ public final class WaitConfig {
      */
     public static final int STEP = 15;
 
+    /**
+     * Lỗi chặn luồng: chờ thêm trước khi dừng case (để toast/API kịp hiện đủ).
+     */
+    public static final int BLOCKING_GRACE_SEC = 10;
+
     /** Form trong card sau khi chọn Cá nhân / Tổ chức. */
     public static final int FORM = 10;
 
@@ -53,10 +58,10 @@ public final class WaitConfig {
     public static final int REVIEW_EDIT_PROBE = 4;
 
     /** Nghỉ sau khối địa chỉ (tỉnh → chờ phường → chi tiết). */
-    public static final long SETTLE_ADDRESS_MS = 450;
+    public static final long SETTLE_ADDRESS_MS = 280;
 
     /** Nghỉ giữa hai khối địa chỉ liên tiếp (thường trú / liên lạc, bị đơn #1 / #2…). */
-    public static final long ADDRESS_BLOCK_GAP_MS = 550;
+    public static final long ADDRESS_BLOCK_GAP_MS = 350;
 
     /** Nghỉ ngắn sau scroll / click nhẹ (ms). */
     public static final long SETTLE_SHORT_MS = 120;
