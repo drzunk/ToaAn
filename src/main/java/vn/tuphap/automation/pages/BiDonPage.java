@@ -20,7 +20,7 @@ public class BiDonPage {
      * Khối bước 3 chứa card bị đơn / người bị kiện và nút Thêm.
      * Không phụ thuộc tab Cá nhân (Hành chính không có tab đó).
      */
-    private static final String BIDON_SECTION =
+    public static final String BIDON_SECTION =
             "//button[(contains(@class,'border-dashed') or .//svg[contains(@class,'lucide-plus')])"
                     + " and (" + UiSynonyms.containsAnyDot(UiSynonyms.THEM_BI_DON) + ")]"
                     + "/ancestor::div[.//span[starts-with(normalize-space(.), 'Bị đơn ')"
@@ -77,7 +77,7 @@ public class BiDonPage {
     /**
      * Markup demo: button border-dashed + svg.lucide-plus + text Thêm bị đơn / biến thể.
      */
-    private static final By BTN_THEM_BI_DON = By.xpath(
+    public static final By BTN_THEM_BI_DON = By.xpath(
             "//button[(contains(@class,'border-dashed') or .//svg[contains(@class,'lucide-plus')])"
                     + " and (" + UiSynonyms.containsAnyDot(UiSynonyms.THEM_BI_DON) + ")]");
     private static final By HON_NHAN_H2_ANY =
@@ -118,13 +118,14 @@ public class BiDonPage {
             return byBadge;
         }
         if (index <= 1) {
-            String byCaNhan = "(" + CARD_CA_NHAN + ")[1]";
-            if (webUI.existsNow(By.xpath(byCaNhan))) {
-                return byCaNhan;
-            }
+            // Hành chính: card cơ quan bị kiện — ưu tiên trước CARD_CA_NHAN (wrapper tab Cá nhân hay false-positive).
             String byCoQuan = "(" + CARD_TEN_CO_QUAN + ")[1]";
             if (webUI.existsNow(By.xpath(byCoQuan))) {
                 return byCoQuan;
+            }
+            String byCaNhan = "(" + CARD_CA_NHAN + ")[1]";
+            if (webUI.existsNow(By.xpath(byCaNhan))) {
+                return byCaNhan;
             }
             return byCaNhan;
         }
@@ -352,6 +353,48 @@ public class BiDonPage {
         return inputInScope(loaiDon, index, "contains(., 'Năm sinh')");
     }
 
+    private By getTxtNgaySinh(int index, String loaiDon) {
+        return inputInScope(loaiDon, index, "contains(., 'Ngày sinh') or contains(., 'Ngày, tháng, năm sinh')");
+    }
+
+    private static String ngaySinhTuNamSinh(String namSinh) {
+        if (namSinh != null && namSinh.trim().matches("\\d{4}")) {
+            return "01/01/" + namSinh.trim();
+        }
+        return "01/01/1990";
+    }
+
+    private void dienSinhBiDonCaNhan(int index, String loaiDon, String namSinh, String who) {
+        By txtNamSinh = getTxtNamSinh(index, loaiDon);
+        By txtNgaySinh = getTxtNgaySinh(index, loaiDon);
+        if (webUI.isElementVisible(txtNamSinh)) {
+            webUI.setTextWithCheck(txtNamSinh, namSinh, "Ô nhập [Năm sinh] (" + who + ")");
+        } else if (webUI.isElementVisible(txtNgaySinh)) {
+            webUI.setTextForMaskedInput(txtNgaySinh, ngaySinhTuNamSinh(namSinh),
+                    "Ô nhập [Ngày sinh] (" + who + ")");
+        } else {
+            webUI.setTextWithCheck(txtNamSinh, namSinh, "Ô nhập [Năm sinh] (" + who + ")");
+        }
+    }
+
+    private void chonGioiTinhBiDon(int index, String loaiDon, String gioiTinh, String who) {
+        String scope = scoped(loaiDon, index);
+        if (scope.isBlank()) {
+            return;
+        }
+        String tuKhoa = gioiTinh == null || gioiTinh.isBlank() ? "nam" : gioiTinh.trim().toLowerCase();
+        String value = tuKhoa.contains("nữ") || tuKhoa.contains("nu") ? "Nữ"
+                : (tuKhoa.contains("khác") || tuKhoa.contains("khac") ? "Khác" : "Nam");
+        By by = By.xpath(scope
+                + "//label[contains(., 'Giới tính')]/following-sibling::div//div[contains(text(), '" + value + "')]"
+                + " | " + scope
+                + "//label[contains(., 'Giới tính')]/following-sibling::div//div[contains(@class,'cursor-pointer') and contains(., '"
+                + value + "')]");
+        if (webUI.isElementVisible(by)) {
+            webUI.clickElement(by, "Giới tính (" + who + "): [" + value + "]");
+        }
+    }
+
     private By getTxtDiaChiCaNhan(int index, String loaiDon) {
         return inputInScope(loaiDon, index, "contains(., 'Địa chỉ') and not(contains(., 'trụ sở'))");
     }
@@ -382,7 +425,7 @@ public class BiDonPage {
     }
 
     private By getTxtTenCoQuan(int index) {
-        String scope = biDonCard(index);
+        String scope = "(" + CARD_TEN_CO_QUAN + ")[" + index + "]";
         return By.xpath(scope + "//label[contains(., 'Tên cơ quan')]/parent::div//input"
                 + " | " + scope + "//label[contains(., 'Tên cơ quan')]/following-sibling::input");
     }
@@ -602,6 +645,105 @@ public class BiDonPage {
         webUI.waitUntilExists(marker, WaitConfig.FORM, "Biểu mẫu bị đơn #" + index + " [" + (toChuc ? "Tổ chức" : "Cá nhân") + "]");
     }
 
+    /** Tỉnh/Phường + chi tiết trong card bị đơn. */
+    private void dienDiaChiBiDon(String loaiDon, int index, String diaChi, boolean truSo, String who) {
+        if (diaChi == null || diaChi.isBlank()) {
+            return;
+        }
+        String scope = scoped(loaiDon, index);
+        if (scope.isBlank()) {
+            return;
+        }
+        webUI.scrollToElement(By.xpath(scope));
+        webUI.dismissOpenDropdowns();
+        webUI.ensureAdministrativeAddressBlockInScope(scope, 0, diaChi, who);
+    }
+
+    /** Hoàn thiện lại địa chỉ mọi bị đơn + người liên quan — gọi sau NLQ (UI reset form). */
+    public void damBaoDiaChiTatCaBiDon(TaoDonScenario s) {
+        int total = Math.max(1, s.soLuongBiDon());
+        for (int i = 1; i <= total; i++) {
+            if (i > 1 && !hasConfirmedSlot(i, s.loaiDon())) {
+                continue;
+            }
+            BiDonData data = (i == 2 && s.biDonThem() != null) ? s.biDonThem() : s.biDonChinh();
+            if (data == null) {
+                continue;
+            }
+            String diaChi = DataDictionary.isHanhChinh(s.loaiDon()) ? data.diaChiTruSo()
+                    : (DataDictionary.isPhaSan(s.loaiDon()) ? data.diaChiTruSo() : data.diaChiCaNhan());
+            String who = DataDictionary.isPhaSan(s.loaiDon()) ? "Doanh nghiệp bị yêu cầu" : "Bị đơn " + i;
+            if (i > 1) {
+                webUI.dismissOpenDropdowns();
+                webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
+            }
+            forceDiaChiBiDon(s.loaiDon(), i, diaChi, who);
+        }
+        damBaoDiaChiNguoiLienQuan(s);
+    }
+
+    private void forceDiaChiBiDon(String loaiDon, int index, String diaChi, String who) {
+        if (diaChi == null || diaChi.isBlank()) {
+            return;
+        }
+        String scope = scoped(loaiDon, index);
+        if (scope.isBlank()) {
+            return;
+        }
+        webUI.scrollToElement(By.xpath(scope));
+        webUI.dismissOpenDropdowns();
+        webUI.forceEnsureAdministrativeAddressBlockInScope(scope, 0, diaChi, who);
+    }
+
+    /** Địa chỉ nơi cư trú người liên quan (khối thứ 3 khi NLQ = Có). */
+    private void damBaoDiaChiNguoiLienQuan(TaoDonScenario s) {
+        if (s.coNguoiLienQuan() == null || !s.coNguoiLienQuan().trim().equalsIgnoreCase("có")) {
+            return;
+        }
+        String scope = nguoiLienQuanFormScope(s.loaiDon());
+        if (scope.isBlank()) {
+            return;
+        }
+        By tinhLabel = By.xpath(scope + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')]");
+        if (!webUI.existsNow(tinhLabel)) {
+            return;
+        }
+        String diaChi = s.thuongTru();
+        if (diaChi == null || diaChi.isBlank()) {
+            diaChi = s.biDonChinh() != null ? s.biDonChinh().diaChiCaNhan() : "";
+        }
+        if (diaChi == null || diaChi.isBlank()) {
+            return;
+        }
+        webUI.scrollToElement(By.xpath(scope));
+        webUI.dismissOpenDropdowns();
+        webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
+        webUI.forceEnsureAdministrativeAddressBlockInScope(scope, 0, diaChi, "Người liên quan");
+    }
+
+    private String nguoiLienQuanFormScope(String loaiDon) {
+        if (DataDictionary.isHonNhanGiaDinh(loaiDon)) {
+            return honNhanSectionScope();
+        }
+        String byHoTen = "//label[contains(., 'Họ tên') and contains(., 'liên quan')"
+                + " or contains(., 'Họ tên người liên quan')]"
+                + "/ancestor::div[contains(@class,'border') and contains(@class,'rounded')][1]";
+        if (webUI.existsNow(By.xpath(byHoTen + "//label[contains(., 'Tỉnh')]"))) {
+            return byHoTen;
+        }
+        return "//div[contains(@class,'border') and contains(@class,'rounded')]"
+                + "[(.//label[contains(., 'Họ tên') and contains(., 'liên quan')]"
+                + " or .//label[contains(., 'Họ tên người liên quan')]"
+                + " or .//label[contains(., 'Lý do liên quan')]"
+                + " or .//*[contains(., 'Người có quyền lợi') and contains(., 'liên quan')])"
+                + " and .//label[contains(., 'Tỉnh') and contains(., 'thành phố')]][1]";
+    }
+
+    /** @deprecated dùng {@link #damBaoDiaChiTatCaBiDon} sau khi điền xong bước 3. */
+    public void chuanBiDiaChiTruocTiepTheo(TaoDonScenario s) {
+        damBaoDiaChiTatCaBiDon(s);
+    }
+
     public void dienThongTinCaNhan(int index, String loaiDon, String hoTen, String cccd, String namSinh,
                                    String diaChi, String sdt, String email) {
         String who = DataDictionary.isHonNhanGiaDinh(loaiDon) ? honNhanWhoLabel(index) : "Bị đơn " + index;
@@ -613,8 +755,9 @@ public class BiDonPage {
         webUI.waitUntilVisible(getTxtHoTen(index, loaiDon), WaitConfig.FIELD, "Ô [Họ và tên] (" + who + ")");
         webUI.setText(getTxtHoTen(index, loaiDon), hoTen, "Ô nhập [Họ và tên] (" + who + ")");
         webUI.setTextWithCheck(getTxtCCCD(index, loaiDon), cccd, "Ô nhập [Số CCCD/CMND] (" + who + ")");
-        webUI.setTextWithCheck(getTxtNamSinh(index, loaiDon), namSinh, "Ô nhập [Năm sinh] (" + who + ")");
-        webUI.setTextWithCheck(getTxtDiaChiCaNhan(index, loaiDon), diaChi, "Ô nhập [Địa chỉ] (" + who + ")");
+        dienSinhBiDonCaNhan(index, loaiDon, namSinh, who);
+        chonGioiTinhBiDon(index, loaiDon, "Nam", who);
+        dienDiaChiBiDon(loaiDon, index, diaChi, false, who);
         webUI.setTextWithCheck(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại] (" + who + ")");
         webUI.setTextWithCheck(getTxtEmail(index, loaiDon), email, "Ô nhập [Email] (" + who + ")");
     }
@@ -636,7 +779,7 @@ public class BiDonPage {
                     "Dropdown [Loại hình] (" + who + ")");
         }
         webUI.setTextWithCheck(getTxtMaSoThue(index, loaiDon), mst, "Ô nhập [Mã số thuế] (" + who + ")");
-        webUI.setTextWithCheck(getTxtDiaChiTruSo(index, loaiDon), diaChi, "Ô nhập [Địa chỉ trụ sở] (" + who + ")");
+        dienDiaChiBiDon(loaiDon, index, diaChi, true, who);
         webUI.setTextWithCheck(getTxtNguoiDaiDien(index, loaiDon), nguoiDaiDien, "Ô nhập [Người đại diện] (" + who + ")");
         webUI.setTextWithCheck(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại tổ chức] (" + who + ")");
     }
@@ -644,9 +787,12 @@ public class BiDonPage {
     public void dienThongTinNguoiBiKienHanhChinh(int index, String loaiDon, String tenCoQuan, String diaChi,
                                                  String chucDanh, String nguoiThamQuyen, String sdt) {
         String who = "Bị kiện " + index;
+        webUI.waitUntilVisible(
+                By.xpath("(" + CARD_TEN_CO_QUAN + ")[" + index + "]//label[contains(., 'Tên cơ quan')]"),
+                WaitConfig.STEP, "Biểu mẫu [Tên cơ quan] (" + who + ")");
         webUI.waitUntilVisible(getTxtTenCoQuan(index), WaitConfig.FIELD, "Ô [Tên cơ quan] (" + who + ")");
         webUI.setText(getTxtTenCoQuan(index), tenCoQuan, "Ô nhập [Tên cơ quan] (" + who + ")");
-        webUI.setTextWithCheck(getTxtDiaChiTruSo(index, loaiDon), diaChi, "Ô nhập [Địa chỉ trụ sở] (" + who + ")");
+        dienDiaChiBiDon(loaiDon, index, diaChi, true, who);
         webUI.setTextWithCheck(getTxtChucDanh(index), chucDanh, "Ô nhập [Chức danh] (" + who + ")");
         webUI.setTextWithCheck(getTxtNguoiCoThamQuyen(index), nguoiThamQuyen,
                 "Ô nhập [Người có thẩm quyền] (" + who + ")");
@@ -695,6 +841,7 @@ public class BiDonPage {
         }
 
         dienNguoiLienQuan(s.loaiDon(), s.coNguoiLienQuan(), s.hoTenNLQ(), s.lyDoNLQ(), s.thongTinLienLacNLQ());
+        damBaoDiaChiTatCaBiDon(s);
     }
 
     public void dienMotBiDon(int index, String loaiDon, BiDonData data) {

@@ -46,8 +46,23 @@ public final class WaitConfig {
     /** Bước 3 Hôn nhân — UI đặc thù, đôi khi render chậm. */
     public static final int HON_NHAN = 15;
 
+    /** Chờ phường/xã load sau chọn tỉnh — thoát ngay khi dropdown hiện + enabled. */
+    public static final int WARD_READY = 4;
+
+    /** Thử nhanh sau bấm Chỉnh sửa trên màn Xem lại (tránh treo 15s/nút). */
+    public static final int REVIEW_EDIT_PROBE = 4;
+
+    /** Nghỉ sau khối địa chỉ (tỉnh → chờ phường → chi tiết). */
+    public static final long SETTLE_ADDRESS_MS = 450;
+
+    /** Nghỉ giữa hai khối địa chỉ liên tiếp (thường trú / liên lạc, bị đơn #1 / #2…). */
+    public static final long ADDRESS_BLOCK_GAP_MS = 550;
+
+    /** Nghỉ ngắn sau scroll / click nhẹ (ms). */
+    public static final long SETTLE_SHORT_MS = 120;
+
     /** Nghỉ ngắn sau click / đóng nháp (ms). */
-    public static final long SETTLE_MS = 400;
+    public static final long SETTLE_MS = 280;
 
     /** Nghỉ sau thao tác nặng hơn (thêm bị đơn, đổi tab). */
     public static final long SETTLE_LONG_MS = 700;

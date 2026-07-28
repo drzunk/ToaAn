@@ -17,7 +17,8 @@ public class TaoDonPage {
             "//button[contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]");
     private By listOptionsLoaiViec = By.xpath(
             "//button[contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]"
-                    + "/following-sibling::div//div[@role='option']");
+                    + "/following-sibling::div//div[@role='option']"
+                    + " | //div[@role='listbox']//div[@role='option']");
 
     private By btnDropdownToaAn = By.xpath(
             "//button[contains(., 'Chọn tòa án nhận đơn') or contains(., 'tòa án nhận đơn')]");
@@ -31,6 +32,11 @@ public class TaoDonPage {
     private By txtTomTat = By.xpath("//textarea[@placeholder='Mô tả ngắn gọn nội dung tranh chấp (tuỳ chọn, có thể bổ sung sau)']");
     private By btnTiepTheo = By.xpath("//button[contains(., 'Tiếp theo')]");
     private By btnBatDauMoi = By.xpath("//button[contains(., 'Bắt đầu mới')]");
+
+    /** Marker bước 1 — chọn loại đơn / loại việc / tòa án. */
+    public static final By MARKER_BUOC1 = By.xpath(
+            "//button[contains(., 'Chọn loại việc') or contains(., 'loại việc cụ thể')]"
+                    + " | //textarea[contains(@placeholder, 'Mô tả ngắn gọn')]");
 
     private By getCardLoaiDon(String tenLoaiDon) {
         return LoaiDonLocator.card(tenLoaiDon);
@@ -69,6 +75,8 @@ public class TaoDonPage {
 
         // Phá sản không có danh sách thả xuống loại việc trên UI
         if (DataDictionary.hasLoaiViecDropdown(loaiDon)) {
+            webUI.waitUntilVisible(btnDropdownLoaiViec, WaitConfig.DROPDOWN, "Dropdown [Loại việc cụ thể]");
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
             webUI.selectDropdownWithCheck(btnDropdownLoaiViec, listOptionsLoaiViec, loaiViecCuThe,
                     "Dropdown [Loại việc cụ thể]");
         } else {
@@ -76,12 +84,27 @@ public class TaoDonPage {
                     + "] không có trên biểu mẫu (nhãn danh mục: " + loaiViecCuThe + ").");
             TestActionLog.boQua("Dropdown [Loại việc cụ thể]",
                     "Loại đơn [" + loaiDon + "] không có trên biểu mẫu");
+            webUI.waitUntilVisible(btnDropdownToaAn, WaitConfig.DROPDOWN, "Dropdown [Tòa án nhận đơn]");
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
         }
 
         webUI.selectToaAnWithCheck(btnDropdownToaAn, inputSearchToaAn, listOptionsToaAn, toaAn,
                 "Dropdown [Tòa án nhận đơn]");
 
         webUI.setTextWithCheck(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
+    }
+
+    /** Điền phần còn lại bước 1 khi loại đơn + loại việc đã chọn sẵn (vd. sau scrape catalog). */
+    public void dienToaAnVaTomTat(String toaAn, String tomTat) {
+        webUI.waitUntilVisible(btnDropdownToaAn, WaitConfig.DROPDOWN, "Dropdown [Tòa án nhận đơn]");
+        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        webUI.selectToaAnWithCheck(btnDropdownToaAn, inputSearchToaAn, listOptionsToaAn, toaAn,
+                "Dropdown [Tòa án nhận đơn]");
+        webUI.setTextWithCheck(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
+    }
+
+    public void waitForBuoc1Ready() {
+        webUI.waitUntilVisible(btnDropdownToaAn, WaitConfig.DROPDOWN, "Dropdown [Tòa án nhận đơn]");
     }
 
     public void clickTiepTheo() {

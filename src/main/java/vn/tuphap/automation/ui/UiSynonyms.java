@@ -37,6 +37,11 @@ public final class UiSynonyms {
             "Thêm bị đơn", "Thêm người bị yêu cầu", "Thêm người bị kiện", "Thêm người được yêu cầu"
     };
 
+    public static final String[] THEM_DONG_NGUYEN_DON = {
+            "Thêm nguyên đơn", "Thêm người khởi kiện",
+            "Thêm đồng nguyên đơn", "Thêm đồng người khởi kiện"
+    };
+
     /**
      * Prefix badge đánh số slot bước 3 (kèm số: "Bị đơn 1", "Người bị kiện 2", …).
      * Không gồm "Người yêu cầu 2" (UI vợ/chồng Hôn nhân — xử lý riêng).
@@ -71,6 +76,17 @@ public final class UiSynonyms {
 
     public static By buttonThemBiDonVariants() {
         return By.xpath("//button[" + containsAnyDot(THEM_BI_DON) + "]");
+    }
+
+    public static By buttonThemDongNguyenDonVariants() {
+        return By.xpath("//button[(contains(@class,'border-dashed') or .//svg[contains(@class,'lucide-plus')])"
+                + " and (" + containsAnyDot(THEM_DONG_NGUYEN_DON) + ")]");
+    }
+
+    /** Mọi nút Thêm dạng border-dashed trên form hiện tại. */
+    public static By anyThemButton() {
+        return By.xpath("//button[(contains(@class,'border-dashed') or .//svg[contains(@class,'lucide-plus')])"
+                + " and starts-with(normalize-space(.), 'Thêm')]");
     }
 
     public static String xpathLiteral(String value) {

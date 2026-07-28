@@ -26,8 +26,13 @@ public class LoginPage {
     }
 
     public void openPage() {
-        driver.get(pageUrl);
-        System.out.println("Đã mở trang: " + pageUrl);
+        try {
+            driver.get(pageUrl);
+            System.out.println("Đã mở trang: " + pageUrl);
+        } catch (Exception e) {
+            webUI.failIfBrowserClosed(e);
+            throw e;
+        }
     }
 
     public String getPageUrl() {

@@ -11,6 +11,7 @@ import org.openqa.selenium.WebDriver;
 import org.testng.ITestContext;
 import org.testng.ITestListener;
 import org.testng.ITestResult;
+import vn.tuphap.automation.ui.WebUI;
 
 public class TestListener implements ITestListener {
 
@@ -85,7 +86,7 @@ public class TestListener implements ITestListener {
     @Override
     public void onTestSkipped(ITestResult result) {
         String skipMessage = result.getThrowable() != null
-                ? result.getThrowable().getMessage()
+                ? WebUI.friendlyBrowserMessage(result.getThrowable())
                 : "Không có lý do chi tiết";
         ExtentReportManager.logSkip(skipMessage);
         TaoDonExcelTestLog.setGhiChuKetQua(rutGonLoiChoTester(skipMessage));
@@ -119,7 +120,20 @@ public class TestListener implements ITestListener {
         if (raw == null || raw.isBlank()) {
             return "";
         }
+        if (raw.contains("dừng kịch bản ngay")) {
+            return raw.replace("❌ ", "").trim();
+        }
+        if (WebUI.isBrowserClosed(new RuntimeException(raw))
+                || raw.toLowerCase().contains("no such window")
+                || raw.toLowerCase().contains("target window already closed")
+                || raw.toLowerCase().contains("web view not found")) {
+            return "Trình duyệt đã đóng hoặc mất kết nối — không nhận được phản hồi từ trang web.";
+        }
         String msg = raw.replace("❌ ", "").trim();
+        String lower = msg.toLowerCase();
+        if (lower.contains("timeout") || lower.contains("hết thời gian chờ")) {
+            return "Không nhận được phản hồi từ trang web trong thời gian chờ.";
+        }
         if (msg.length() > 300) {
             return msg.substring(0, 300) + "…";
         }
@@ -142,11 +156,7 @@ public class TestListener implements ITestListener {
         if (result.getThrowable() == null) {
             return "Lỗi không xác định";
         }
-        String msg = result.getThrowable().getMessage();
-        if (msg == null || msg.isBlank()) {
-            return result.getThrowable().getClass().getSimpleName();
-        }
-        return msg;
+        return WebUI.friendlyBrowserMessage(result.getThrowable());
     }
 
     private static void attachScreenshotOnFailure(ITestResult result, String errorMsg) {

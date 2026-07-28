@@ -70,6 +70,11 @@ public final class TaoDonScenario {
     /** Bị đơn / bên bị kiện thứ 2 (null nếu chỉ 1). */
     private final BiDonData biDonThem;
 
+    /** Có đồng nguyên đơn / đồng người khởi kiện (Có = bấm Thêm và điền form con). */
+    private final String coDongNguyenDon;
+    /** Dữ liệu form con đồng nguyên đơn (null nếu Không). */
+    private final DongNguyenDonData dongNguyenDon;
+
     private TaoDonScenario(Builder b) {
         this.stt = b.stt;
         this.loaiDon = b.loaiDon;
@@ -124,6 +129,8 @@ public final class TaoDonScenario {
         this.tuCachNopDon = b.tuCachNopDon;
         this.soLuongBiDon = Math.max(1, b.soLuongBiDon);
         this.biDonThem = b.biDonThem;
+        this.coDongNguyenDon = b.coDongNguyenDon;
+        this.dongNguyenDon = b.dongNguyenDon;
     }
 
     public static Builder builder() {
@@ -183,6 +190,8 @@ public final class TaoDonScenario {
     public String tuCachNopDon() { return tuCachNopDon; }
     public int soLuongBiDon() { return soLuongBiDon; }
     public BiDonData biDonThem() { return biDonThem; }
+    public String coDongNguyenDon() { return coDongNguyenDon; }
+    public DongNguyenDonData dongNguyenDon() { return dongNguyenDon; }
 
     /** Bị đơn #1 gom từ các field BD hiện có. */
     public BiDonData biDonChinh() {
@@ -259,6 +268,8 @@ public final class TaoDonScenario {
         private String tuCachNopDon = "";
         private int soLuongBiDon = 1;
         private BiDonData biDonThem;
+        private String coDongNguyenDon = "Không";
+        private DongNguyenDonData dongNguyenDon;
 
         public Builder stt(String v) { this.stt = nullToEmpty(v); return this; }
         public Builder loaiDon(String v) { this.loaiDon = nullToEmpty(v); return this; }
@@ -313,6 +324,8 @@ public final class TaoDonScenario {
         public Builder tuCachNopDon(String v) { this.tuCachNopDon = nullToEmpty(v); return this; }
         public Builder soLuongBiDon(int v) { this.soLuongBiDon = Math.max(1, v); return this; }
         public Builder biDonThem(BiDonData v) { this.biDonThem = v; return this; }
+        public Builder coDongNguyenDon(String v) { this.coDongNguyenDon = nullToEmpty(v); return this; }
+        public Builder dongNguyenDon(DongNguyenDonData v) { this.dongNguyenDon = v; return this; }
 
         public TaoDonScenario build() {
             return new TaoDonScenario(this);

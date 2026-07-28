@@ -1,6 +1,7 @@
 package vn.tuphap.automation.report;
 
 import vn.tuphap.automation.data.BiDonData;
+import vn.tuphap.automation.data.DongNguyenDonData;
 
 import vn.tuphap.automation.data.TaoDonScenario;
 
@@ -40,6 +41,8 @@ public final class TaoDonExcelLogBuilder {
                 s.soLuongBiDon() > 1 ? "Có dùng nút Thêm bị đơn" : "Chỉ 1 bên");
         add(rows, b0, "Có người liên quan?", yesNo(s.coNguoiLienQuan()), "");
         add(rows, b0, "Có tài liệu bổ sung?", yesNo(s.coTaiLieuBoSung()), "");
+        add(rows, b0, "Có đồng nguyên đơn / đồng người khởi kiện?", yesNo(s.coDongNguyenDon()),
+                "50/50 trên cả 7 loại đơn — UI không có khối Thêm thì framework bỏ qua");
         if (DataDictionary.isPhaSan(s.loaiDon())) {
             add(rows, b0, "Tư cách người nộp đơn (Phá sản)",
                     blank(s.tuCachNopDon()) ? "—" : s.tuCachNopDon(), "");
@@ -95,6 +98,30 @@ public final class TaoDonExcelLogBuilder {
                     blank(s.tuCachNopDon()) ? "(Không nhập / không có trên biểu mẫu)" : s.tuCachNopDon(),
                     "Chỉ loại đơn Phá sản");
         }
+        if (DataDictionary.allowsDongNguyenDon(s.loaiDon())) {
+            add(rows, b2, "Có đồng nguyên đơn / đồng người khởi kiện?", yesNo(s.coDongNguyenDon()), "");
+            if (isCo(s.coDongNguyenDon()) && s.dongNguyenDon() != null) {
+                DongNguyenDonData d = s.dongNguyenDon();
+                add(rows, b2, "Đồng ND — loại chủ thể", moTaChuThe(d.loai()), d.loai());
+                if (DataDictionary.isToChuc(d.loai())) {
+                    add(rows, b2, "Đồng ND — tên tổ chức", d.tenToChuc(), "");
+                    add(rows, b2, "Đồng ND — loại hình", d.loaiHinh(), "");
+                    add(rows, b2, "Đồng ND — MST", d.mst(), "");
+                    add(rows, b2, "Đồng ND — địa chỉ trụ sở", d.diaChiTruSo(), "");
+                    add(rows, b2, "Đồng ND — người đại diện", d.nguoiDaiDien(), "");
+                    add(rows, b2, "Đồng ND — chức vụ", d.chucVu(), "");
+                } else {
+                    add(rows, b2, "Đồng ND — họ và tên", d.hoTen(), "");
+                    add(rows, b2, "Đồng ND — ngày sinh", d.ngaySinh(), "");
+                    add(rows, b2, "Đồng ND — CCCD", d.cccd(), "");
+                    add(rows, b2, "Đồng ND — địa chỉ cư trú", d.diaChiCuTru(), "");
+                    add(rows, b2, "Đồng ND — nơi ở hiện tại", d.noiOHienTai(), "");
+                    add(rows, b2, "Đồng ND — nghề nghiệp", d.ngheNghiep(), "");
+                }
+                add(rows, b2, "Đồng ND — SĐT", d.sdt(), "");
+                add(rows, b2, "Đồng ND — email", d.email(), "");
+            }
+        }
 
         // —— Bước 3 ——
         String b3 = "Bước 3 — Thông tin bị đơn / bên bị kiện";
@@ -135,8 +162,8 @@ public final class TaoDonExcelLogBuilder {
 
         // —— Bước 5 ——
         String b5 = "Bước 5 — Tài liệu và chứng cứ";
-        add(rows, b5, "Tệp dùng để tải lên", "tệp mẫu.pdf (tệp mẫu trong dự án)",
-                "Áp dụng cho mọi mục tài liệu bắt buộc trên biểu mẫu");
+        add(rows, b5, "Tệp dùng để tải lên", "tệp mẫu.pdf / .xlsx / .docx (ngẫu nhiên từng mục)",
+                "Mỗi mục tài liệu bắt buộc chọn ngẫu nhiên PDF, Excel hoặc Word");
         add(rows, b5, "Tài liệu bắt buộc", "Đã tải đủ các mục bắt buộc hiển thị trên biểu mẫu",
                 "Số lượng mục phụ thuộc loại đơn / loại việc");
         add(rows, b5, "Có tải tài liệu bổ sung?", yesNo(s.coTaiLieuBoSung()),

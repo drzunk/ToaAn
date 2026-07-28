@@ -91,6 +91,20 @@ public class DataDictionary {
                 || normalized.contains("sở hữu trí tuệ");
     }
 
+    /** Bước 2 — generator gán nhánh đồng nguyên đơn cho mọi loại đơn trong catalog (7 loại). */
+    public static boolean allowsDongNguyenDon(String loaiDon) {
+        if (loaiDon == null || loaiDon.isBlank()) {
+            return false;
+        }
+        String trimmed = loaiDon.trim();
+        for (String option : getLoaiDon()) {
+            if (option.equals(trimmed)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Bước 4 — Giá trị tranh chấp bắt buộc (có dấu *). */
     public static boolean isGiaTriTranhChapRequired(String loaiDon) {
         if (loaiDon == null) {

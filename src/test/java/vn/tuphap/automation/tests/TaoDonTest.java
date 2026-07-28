@@ -87,7 +87,7 @@ public class TaoDonTest extends TaoDonBaseTest {
     @Test(groups = {"smoke", "mid", "full", "chinhSua"},
             description = "Từ màn Xem lại, bấm Chỉnh sửa phần Nội dung đơn, cập nhật yêu cầu cụ thể, rồi quay lại Xem lại để đối chiếu (không gửi đơn)")
     public void testChinhSuaNoiDungTuXemLai() {
-        TaoDonScenario s = DataGenerator.generateOneRandomScenario();
+        TaoDonScenario s = DataGenerator.generateScenarioForReviewEdit();
         TaoDonReportBuilder.logScenarioOverview(s);
         ExtentReportManager.logInfo("Kiểm tra Chỉnh sửa Nội dung đơn từ Xem lại (không gửi đơn).");
 

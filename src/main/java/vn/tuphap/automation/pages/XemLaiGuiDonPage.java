@@ -3,11 +3,17 @@ package vn.tuphap.automation.pages;
 import vn.tuphap.automation.report.TestActionLog;
 
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
+import org.openqa.selenium.Keys;
+import org.openqa.selenium.TimeoutException;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import vn.tuphap.automation.ui.WaitConfig;
 import vn.tuphap.automation.ui.WebUI;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -15,15 +21,28 @@ public class XemLaiGuiDonPage {
     private final WebDriver driver;
     private final WebUI webUI;
 
-    private static final String REVIEW_SECTION =
-            "//h2[contains(., 'Xem lại') and contains(., 'Gửi đơn')]/parent::div";
+    /** Card bước 6 — tránh khớp label/checkbox ở vùng khác trên trang. */
+    private static final String REVIEW_CARD =
+            "//h2[contains(normalize-space(.), 'Xem lại')]/ancestor::div[contains(@class,'ds-card')][1]";
 
-    private final By stepReadyMarker = By.xpath(REVIEW_SECTION
-            + "//span[contains(., 'Loại đơn') or contains(., 'Nguyên đơn')]");
-    private final By chkXacNhan = By.xpath(REVIEW_SECTION
-            + "//label[contains(., 'Tôi xác nhận')]//input[@type='checkbox']");
-    private final By lblXacNhan = By.xpath(REVIEW_SECTION
-            + "//label[contains(., 'Tôi xác nhận')]");
+    private static final String REVIEW_SECTION =
+            REVIEW_CARD
+                    + " | //h2[contains(., 'Xem lại')]/parent::div"
+                    + " | //h2[contains(., 'Gửi đơn') and (contains(., 'Xem') or contains(., 'xem'))]/parent::div";
+
+    /** Marker bước 6 — dùng chung TaoDonFlow. */
+    public static final By MARKER_STEP_READY = By.xpath(
+            REVIEW_SECTION + "//span[contains(., 'Loại đơn') or contains(., 'Nguyên đơn')]"
+                    + " | " + REVIEW_SECTION + "//label[contains(., 'Tôi xác nhận')]"
+                    + " | //button[contains(., 'Gửi đơn')]/ancestor::div[.//h2[contains(., 'Xem lại')]][1]"
+                    + " | //div[contains(@class,'rounded') and contains(@class,'border')]"
+                    + "[.//span[contains(., 'Loại đơn')] and .//button[contains(., 'Chỉnh sửa')]]");
+
+    private final By stepReadyMarker = MARKER_STEP_READY;
+    private final By chkXacNhan = By.xpath(
+            REVIEW_CARD + "//label[contains(., 'Tôi xác nhận')]//input[@type='checkbox']");
+    private final By lblXacNhan = By.xpath(
+            REVIEW_CARD + "//label[contains(., 'Tôi xác nhận')]");
     private final By btnGuiDon = By.xpath("//button[contains(., 'Gửi đơn')]");
 
     /** Toast/notify góc màn hình — ưu tiên lấy message sạch từ đây. */
@@ -60,7 +79,11 @@ public class XemLaiGuiDonPage {
     public static final String MUC_NGUYEN_DON = "Nguyên đơn";
     public static final String MUC_BI_DON = "Bị đơn";
     public static final String MUC_NOI_DUNG = "Nội dung";
+    public static final String MUC_NOI_DUNG_DON = "Nội dung đơn";
+    /** UI mới: mục xem trước PDF đơn — nút Chỉnh sửa quay về bước Nội dung. */
+    public static final String MUC_XEM_TRUOC_DON = "Xem trước đơn";
     public static final String MUC_TAI_LIEU = "Tài liệu";
+    public static final String MUC_DANH_SACH_TAI_LIEU = "Danh sách tài liệu";
 
     public XemLaiGuiDonPage(WebDriver driver) {
         this.driver = driver;
@@ -72,23 +95,73 @@ public class XemLaiGuiDonPage {
     }
 
     private By chinhSuaTrongMuc(String tenMuc) {
+        String titleMatch = tieuDeMucMatch(tenMuc);
         return By.xpath(REVIEW_SECTION
                 + "//div[contains(@class, 'border') and contains(@class, 'rounded')"
-                + " and .//span[contains(@class, 'font-bold') and contains(normalize-space(.), '"
-                + tenMuc + "')]]"
+                + " and (.//span[" + titleMatch + "]"
+                + " or .//*[self::span or self::h3 or self::p][contains(@class, 'font-bold') and (" + titleMatch + ")]"
+                + " or .//*[self::span or self::h3][contains(normalize-space(.), '" + tenMuc + "')])"
+                + " and .//button[contains(normalize-space(.), 'Chỉnh sửa')]]"
                 + "//button[contains(normalize-space(.), 'Chỉnh sửa')]");
+    }
+
+    /** Marker bước 4 wizard — có Tiếp theo (không phải summary read-only trên Xem lại). */
+    private static final By MARKER_BUOC4_WIZARD_FORM = By.xpath(
+            "//div[.//h2[contains(normalize-space(.), 'Nội dung đơn')]"
+                    + " and .//button[contains(normalize-space(.), 'Tiếp theo')]]"
+                    + "//label[contains(., 'Yêu cầu cụ thể') or contains(., 'Thời điểm phát sinh')]"
+                    + " | //div[.//h2[contains(normalize-space(.), 'Nội dung đơn')]"
+                    + " and .//button[contains(normalize-space(.), 'Tiếp theo')]]//textarea");
+
+    /** Khớp tiêu đề card — tránh nhầm text "nội dung đơn" trong checkbox / summary. */
+    private static String tieuDeMucMatch(String tenMuc) {
+        if ("Danh sách tài liệu".equals(tenMuc)) {
+            return "starts-with(normalize-space(.), '" + tenMuc + "')";
+        }
+        if ("Xem trước đơn".equals(tenMuc)) {
+            return "starts-with(normalize-space(.), '" + tenMuc + "')";
+        }
+        if ("Nội dung đơn".equals(tenMuc)) {
+            return "normalize-space(.) = 'Nội dung đơn'"
+                    + " or normalize-space(.) = 'Nội dung đơn *'"
+                    + " or starts-with(normalize-space(.), 'Nội dung đơn (')";
+        }
+        if ("Nội dung".equals(tenMuc)) {
+            return "(normalize-space(.) = 'Nội dung'"
+                    + " or normalize-space(.) = 'Nội dung *'"
+                    + " or starts-with(normalize-space(.), 'Nội dung ('))"
+                    + " and not(contains(normalize-space(.), 'Nội dung đơn'))";
+        }
+        return "normalize-space(.) = '" + tenMuc + "'"
+                + " or normalize-space(.) = '" + tenMuc + " *'"
+                + " or starts-with(normalize-space(.), '" + tenMuc + " (')";
     }
 
     /**
      * Bấm [Chỉnh sửa] tại một mục trên màn Xem lại và chờ biểu mẫu bước tương ứng hiển thị.
      */
     public void clickChinhSua(String tenMuc, By stepMarker, String moTaBuoc) {
+        clickChinhSuaFirstAvailable(List.of(tenMuc), stepMarker, moTaBuoc);
+    }
+
+    /** Thử lần lượt các tên mục (UI cũ / mới) cho đến khi thấy nút Chỉnh sửa. */
+    private void clickChinhSuaFirstAvailable(List<String> tenMucCandidates, By stepMarker, String moTaBuoc) {
         waitStepReady();
-        By btnChinhSua = chinhSuaTrongMuc(tenMuc);
-        if (!webUI.isElementVisible(btnChinhSua)) {
-            throw new RuntimeException("❌ Không thấy nút [Chỉnh sửa] tại mục [" + tenMuc + "].");
+        String matched = null;
+        By btnChinhSua = null;
+        for (String tenMuc : tenMucCandidates) {
+            By candidate = chinhSuaTrongMuc(tenMuc);
+            if (webUI.isElementVisible(candidate)) {
+                matched = tenMuc;
+                btnChinhSua = candidate;
+                break;
+            }
         }
-        webUI.clickElement(btnChinhSua, "Nút [Chỉnh sửa] — " + tenMuc);
+        if (btnChinhSua == null) {
+            throw new RuntimeException("❌ Không thấy nút [Chỉnh sửa] tại các mục: " + tenMucCandidates + ".");
+        }
+        WebElement btnEl = driver.findElement(btnChinhSua);
+        clickChinhSuaElement(btnEl, "Nút [Chỉnh sửa] — " + matched);
         webUI.waitUntilVisible(stepMarker, WaitConfig.STEP, moTaBuoc);
     }
 
@@ -118,19 +191,341 @@ public class XemLaiGuiDonPage {
                 "Bước 3 [Bị đơn]");
     }
 
-    /** Quay lại bước 4 — Nội dung đơn. */
+    /** Quay lại bước 4 — Nội dung đơn (UI cũ / mới / thanh tiến trình wizard). */
     public void clickChinhSuaNoiDung() {
-        clickChinhSua(MUC_NOI_DUNG,
-                By.xpath("//h2[contains(., 'Nội dung đơn')]"
-                        + "/parent::div//label[contains(., 'Thời điểm phát sinh')]"),
-                "Bước 4 [Nội dung đơn]");
+        waitStepReady();
+        dismissUiOverlays();
+
+        try {
+            clickChinhSuaFirstAvailable(
+                    List.of(MUC_NOI_DUNG_DON, MUC_NOI_DUNG),
+                    MARKER_BUOC4_WIZARD_FORM,
+                    "Bước 4 [Nội dung đơn]");
+            return;
+        } catch (RuntimeException fromCard) {
+            System.out.println(" ℹ Chỉnh sửa card chưa mở wizard — thử điều hướng bước 4...");
+            if (!bamChinhSuaNoiDung()) {
+                moBuoc4TuChinhSuaTheoThuTu(3, 4);
+            }
+            if (!dieuHuongWizardBuoc4Aggressive()) {
+                throw fromCard;
+            }
+            webUI.waitUntilVisible(MARKER_BUOC4_WIZARD_FORM, WaitConfig.STEP,
+                    "Bước 4 [Nội dung đơn]");
+        }
+    }
+
+    /** Bấm Chỉnh sửa tại mục Nội dung đơn hoặc Nội dung (không chờ form — dùng kèm điều hướng wizard). */
+    private boolean bamChinhSuaNoiDung() {
+        for (String muc : List.of(MUC_NOI_DUNG_DON, MUC_NOI_DUNG)) {
+            By btn = chinhSuaTrongMuc(muc);
+            if (!webUI.isElementVisible(btn)) {
+                continue;
+            }
+            clickChinhSuaElement(driver.findElement(btn), "Nút [Chỉnh sửa] — " + muc);
+            return true;
+        }
+        return false;
+    }
+
+    /** Thử mọi nút stepper / tab / số bước 4 trên trang (ngoài card Xem lại). */
+    private boolean dieuHuongWizardBuoc4Aggressive() {
+        List<By> step4Nav = List.of(
+                By.xpath("//*[contains(@class,'step') or contains(@class,'Step')]"
+                        + "][contains(., 'Nội dung') or normalize-space(.)='4'"
+                        + " or contains(normalize-space(.), 'Bước 4')]"
+                        + "[not(contains(., 'Chỉnh sửa'))]"),
+                By.xpath("//button[normalize-space(.)='4' or contains(@aria-label, 'Nội dung')"
+                        + " or contains(@title, 'Nội dung')]"),
+                By.xpath("//*[@role='tab' and (contains(., 'Nội dung đơn') or contains(., 'Nội dung'))]"),
+                By.xpath("//nav//*[contains(., 'Nội dung') and not(contains(., 'Chỉnh sửa'))]"
+                        + " | //nav//*[normalize-space(.)='4']"),
+                By.xpath("//header//*[contains(., 'Nội dung đơn') or contains(., 'Nội dung')]"
+                        + "[not(contains(., 'Chỉnh sửa'))]"),
+                By.xpath("//div[contains(@class,'sticky') or contains(@class,'top-0')]"
+                        + "//*[contains(., 'Nội dung đơn') and not(contains(., 'Chỉnh sửa'))]"),
+                By.xpath("(//button[contains(., 'Nội dung đơn') and not(contains(., 'Chỉnh sửa'))])[1]"),
+                By.xpath("//ol//li[4]//*[self::button or self::a or self::div[@role='button']]"),
+                By.xpath("//*[contains(@class,'ds-step') or contains(@class,'progress')]"
+                        + "//*[contains(., 'Nội dung') or normalize-space(.)='4']")
+        );
+        for (By by : step4Nav) {
+            if (!webUI.isElementVisible(by)) {
+                continue;
+            }
+            try {
+                webUI.clickElement(by, "Stepper — bước 4 [Nội dung đơn]");
+                webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                if (isBuoc4EditReady()) {
+                    return true;
+                }
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (moBuoc4TuThanhTienTrinh()) {
+            return true;
+        }
+        return moBuoc4TuHeaderWizard();
+    }
+
+    /** Form bước 4 đang hiển thị và có thể nhập liệu. */
+    private boolean isBuoc4EditReady() {
+        webUI.switchToDefaultContent();
+        if (webUI.isElementVisible(MARKER_BUOC4_WIZARD_FORM)) {
+            return true;
+        }
+        if (hasWizardStep4Form()) {
+            return true;
+        }
+        if (webUI.isElementVisible(NoiDungDonPage.IFRAME_NOI_DUNG)) {
+            webUI.switchToIframe(NoiDungDonPage.IFRAME_NOI_DUNG);
+            try {
+                return webUI.isElementVisible(NoiDungDonPage.MARKER_IFRAME_READY);
+            } finally {
+                webUI.switchToDefaultContent();
+            }
+        }
+        return false;
+    }
+
+    private boolean hasWizardStep4Form() {
+        if (!webUI.isElementVisible(By.xpath("//h2[contains(normalize-space(.), 'Nội dung đơn')]"))) {
+            return false;
+        }
+        boolean coTiepTheo = webUI.isElementVisible(
+                By.xpath("//h2[contains(., 'Nội dung đơn')]/ancestor::div[1]"
+                        + "//button[contains(normalize-space(.), 'Tiếp theo')]"));
+        if (!coTiepTheo) {
+            return false;
+        }
+        return webUI.isElementVisible(MARKER_BUOC4_YEU_CAU_TEXTAREA)
+                || webUI.isElementVisible(By.xpath(
+                "//h2[contains(., 'Nội dung đơn')]/ancestor::div[1]"
+                        + "//label[contains(., 'Thời điểm phát sinh')]"));
+    }
+
+    private static final By MARKER_BUOC4_YEU_CAU_TEXTAREA = By.xpath(
+            "//div[.//h2[contains(., 'Nội dung đơn')] and .//button[contains(., 'Tiếp theo')]]"
+                    + "//label[contains(., 'Yêu cầu cụ thể')]/following-sibling::textarea"
+                    + " | //div[.//h2[contains(., 'Nội dung đơn')] and .//button[contains(., 'Tiếp theo')]]"
+                    + "//label[contains(., 'Yêu cầu cụ thể')]/parent::div//textarea");
+
+    private boolean hasEnabledBuoc4Field() {
+        return hasWizardStep4Form();
+    }
+
+    /** @deprecated dùng {@link #isBuoc4EditReady()} */
+    private boolean isWizardBuoc4Editable() {
+        return isBuoc4EditReady();
+    }
+
+    /** Modal xem trước PDF — không phải form chỉnh sửa bước 4. */
+    private void dismissPreviewModal() {
+        List<By> closeTargets = List.of(
+                By.xpath("//div[contains(@role,'dialog')]"
+                        + "[.//*[contains(., 'Xem trước') or contains(., 'xem trước')]]"
+                        + "//button[@aria-label='Close' or @aria-label='Đóng'"
+                        + " or contains(@class,'close') or .//*[contains(@class,'lucide-x')]]"),
+                By.xpath("//div[contains(@class,'fixed') and contains(@class,'inset-0')]"
+                        + "[.//*[contains(., 'Xem trước')]]//button[.//*[contains(@class,'lucide-x')]]"),
+                By.xpath("//button[contains(normalize-space(.), 'Đóng')"
+                        + " and ancestor::div[contains(@role,'dialog') or contains(@class,'modal')]]")
+        );
+        for (By close : closeTargets) {
+            if (webUI.isElementVisible(close)) {
+                webUI.clickElement(close, "Nút [Đóng xem trước đơn]");
+                webUI.sleepMillis(WaitConfig.SETTLE_MS);
+                return;
+            }
+        }
+        try {
+            driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+        } catch (Exception ignored) {
+        }
+        webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+    }
+
+    private void dismissUiOverlays() {
+        try {
+            driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+        } catch (Exception ignored) {
+        }
+        webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        List<By> closeButtons = List.of(
+                By.xpath("//button[@aria-label='Close' or @aria-label='Đóng']"),
+                By.xpath("//div[contains(@class,'dialog') or contains(@role,'dialog')]"
+                        + "//button[contains(@class,'close') or .//*[contains(@class,'lucide-x')]]"),
+                By.xpath("//button[.//*[contains(@class,'lucide-x')]"
+                        + " and ancestor::div[contains(@class,'fixed') or contains(@role,'dialog')]]")
+        );
+        for (By close : closeButtons) {
+            if (webUI.isElementVisible(close)) {
+                webUI.clickElement(close, "Nút [Đóng overlay/dialog]");
+                webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                break;
+            }
+        }
+    }
+
+    private void clickChinhSuaElement(WebElement btn, String logName) {
+        try {
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            js.executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", btn);
+            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            btn.click();
+        } catch (Exception e) {
+            JavascriptExecutor js = (JavascriptExecutor) driver;
+            js.executeScript("arguments[0].click();", btn);
+        }
+        System.out.println(" ➔ Click vào: [" + logName + "]");
+        TestActionLog.click(logName);
+        webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+    }
+
+    /** Bấm nút Chỉnh sửa theo thứ tự card trên màn Xem lại (0 = Loại đơn, 3 ≈ Nội dung…). */
+    private boolean moBuoc4TuChinhSuaTheoThuTu(int... zeroBasedIndices) {
+        By allEdit = By.xpath(REVIEW_CARD + "//button[contains(normalize-space(.), 'Chỉnh sửa')]");
+        List<WebElement> visible = new ArrayList<>();
+        for (WebElement el : driver.findElements(allEdit)) {
+            try {
+                if (el.isDisplayed() && el.isEnabled()) {
+                    visible.add(el);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        for (int idx : zeroBasedIndices) {
+            if (idx < 0 || idx >= visible.size()) {
+                continue;
+            }
+            clickChinhSuaElement(visible.get(idx), "Nút [Chỉnh sửa] — card #" + (idx + 1));
+            if (choHienBuoc4(WaitConfig.REVIEW_EDIT_PROBE)) {
+                return true;
+            }
+            dismissPreviewModal();
+            dismissUiOverlays();
+        }
+        return false;
+    }
+
+    private boolean moBuoc4TuHeaderWizard() {
+        List<By> step4Nav = List.of(
+                By.xpath("//*[contains(@class,'step') and contains(@class,'cursor-pointer')]"
+                        + "[normalize-space(.)='4' or contains(normalize-space(.), 'Nội dung đơn')"
+                        + " or contains(normalize-space(.), 'Nội dung')]"),
+                By.xpath("//button[contains(@class,'step') and (normalize-space(.)='4'"
+                        + " or contains(., 'Nội dung đơn') or contains(., 'Nội dung'))]"),
+                By.xpath("//header//button[contains(normalize-space(.), 'Nội dung')]"
+                        + " | //header//a[contains(normalize-space(.), 'Nội dung')]"),
+                By.xpath("//div[contains(@class,'sticky') or contains(@class,'top-0')]"
+                        + "//button[contains(normalize-space(.), 'Nội dung đơn')"
+                        + " or contains(normalize-space(.), 'Nội dung')]"
+                        + " | //div[contains(@class,'sticky') or contains(@class,'top-0')]"
+                        + "//*[@role='tab' and contains(., 'Nội dung')]"),
+                By.xpath("//*[@role='tab' and contains(., 'Nội dung đơn')]")
+        );
+        for (By by : step4Nav) {
+            if (!webUI.isElementVisible(by)) {
+                continue;
+            }
+            webUI.clickElement(by, "Thanh wizard — Nội dung đơn (bước 4)");
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            if (isBuoc4EditReady()) {
+                return true;
+            }
+            dismissUiOverlays();
+        }
+        return false;
+    }
+
+    private boolean moBuoc4TuChinhSuaMuc(List<String> mucs) {
+        for (String muc : mucs) {
+            By btn = chinhSuaTrongMuc(muc);
+            WebElement visibleBtn = null;
+            for (WebElement el : driver.findElements(btn)) {
+                try {
+                    if (el.isDisplayed() && el.isEnabled()) {
+                        visibleBtn = el;
+                        break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            if (visibleBtn == null) {
+                continue;
+            }
+            clickChinhSuaElement(visibleBtn, "Nút [Chỉnh sửa] — " + muc);
+            if (choHienBuoc4(WaitConfig.REVIEW_EDIT_PROBE)) {
+                return true;
+            }
+            dismissPreviewModal();
+            dismissUiOverlays();
+        }
+        return false;
+    }
+
+    private boolean moBuoc4TuThanhTienTrinh() {
+        List<By> step4Nav = List.of(
+                By.xpath("//nav//button[contains(normalize-space(.), 'Nội dung')]"
+                        + " | //nav//a[contains(normalize-space(.), 'Nội dung')]"
+                        + " | //nav//*[normalize-space(.)='4']"),
+                By.xpath("//button[contains(normalize-space(.), 'Nội dung đơn')"
+                        + " and not(contains(normalize-space(.), 'Chỉnh sửa'))]"),
+                By.xpath("//*[contains(@class,'step') and contains(., 'Nội dung')]//button"),
+                By.xpath("//*[contains(@class,'stepper')]//*[normalize-space(.)='4']")
+        );
+        for (By by : step4Nav) {
+            if (!webUI.isElementVisible(by)) {
+                continue;
+            }
+            webUI.clickElement(by, "Thanh tiến trình — Nội dung đơn (bước 4)");
+            webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            if (isBuoc4EditReady()) {
+                return true;
+            }
+            dismissUiOverlays();
+        }
+        return false;
+    }
+
+    private boolean choHienBuoc4(int timeoutSeconds) {
+        long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (isBuoc4EditReady()) {
+                System.out.println(" ✅ Đã hiển thị: Bước 4 [Nội dung đơn]");
+                return true;
+            }
+            webUI.sleepMillis(250);
+        }
+        return false;
+    }
+
+    private boolean isBuoc4FormReady() {
+        return isBuoc4EditReady();
+    }
+
+    /** Modal / panel xem trước PDF — không phải wizard bước 4. */
+    private boolean isPreviewModalOpen() {
+        return webUI.isElementVisible(By.xpath(
+                "//div[contains(@role,'dialog') or contains(@class,'modal')]"
+                        + "[.//*[contains(., 'Xem trước') or contains(., 'xem trước')]]"))
+                || webUI.isElementVisible(By.xpath(
+                REVIEW_CARD + "//div[contains(@class,'border')]"
+                        + "[.//*[starts-with(normalize-space(.), 'Xem trước đơn')]"
+                        + " and .//iframe and not(.//textarea)]"));
+    }
+
+    /** Màn Xem lại vẫn hiển thị (nút Gửi đơn trên card review). */
+    private boolean isStillOnReviewPage() {
+        By guiDonOnReview = By.xpath(REVIEW_CARD + "//button[contains(normalize-space(.), 'Gửi đơn')]");
+        return webUI.isElementVisible(guiDonOnReview);
     }
 
     /** Quay lại bước 5 — Tài liệu & chứng cứ. */
     public void clickChinhSuaTaiLieu() {
-        clickChinhSua(MUC_TAI_LIEU,
-                By.xpath("//h2[contains(., 'Tài liệu') and contains(., 'chứng')]"
-                        + "/parent::div//div[contains(., 'Tài liệu bắt buộc')]"),
+        clickChinhSuaFirstAvailable(
+                List.of(MUC_TAI_LIEU, MUC_DANH_SACH_TAI_LIEU),
+                TaiLieuPage.MARKER_STEP_READY,
                 "Bước 5 [Tài liệu & chứng cứ]");
     }
 
@@ -151,26 +546,65 @@ public class XemLaiGuiDonPage {
     }
 
     public void xacNhanThongTin() {
-        if (!webUI.isElementVisible(chkXacNhan)) {
+        waitStepReady();
+        if (!webUI.isElementVisible(lblXacNhan)) {
             throw new RuntimeException("❌ Không thấy Checkbox xác nhận ở Bước 6.");
         }
-        WebElement checkbox = driver.findElement(chkXacNhan);
-        if (!checkbox.isSelected()) {
-            webUI.clickElement(lblXacNhan, "Checkbox [Xác nhận thông tin đơn]");
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        } else {
-            System.out.println(" ⏩ Checkbox [Xác nhận thông tin] đã được chọn sẵn.");
-            TestActionLog.chon("Checkbox [Xác nhận thông tin đơn]", "Đã chọn sẵn");
+        webUI.clickCheckboxInLabel(lblXacNhan, "Checkbox [Xác nhận thông tin đơn]");
+        waitForSubmitReady(WaitConfig.FIELD);
+    }
+
+    /** Chờ checkbox đã tick và nút Gửi đơn sẵn sàng — một vòng poll, không sleep riêng. */
+    private void waitForSubmitReady(int timeoutSeconds) {
+        try {
+            new WebDriverWait(driver, Duration.ofSeconds(timeoutSeconds))
+                    .pollingEvery(Duration.ofMillis(100))
+                    .until(d -> isXacNhanDaChon() && isGuiDonEnabled());
+        } catch (TimeoutException e) {
+            if (!isXacNhanDaChon()) {
+                throw new RuntimeException(
+                        "❌ Checkbox xác nhận chưa được tích — kiểm tra lỗi xem trước đơn trên màn hình.");
+            }
+            throw new RuntimeException(
+                    "❌ Nút [Gửi đơn] vẫn bị khóa sau khi tick Checkbox xác nhận ở Bước 6.");
         }
     }
 
-    public void clickGuiDon() {
-        webUI.waitUntilVisible(btnGuiDon, WaitConfig.FIELD, "Nút [Gửi đơn]");
-        WebElement button = driver.findElement(btnGuiDon);
-        if (!button.isEnabled()) {
-            throw new RuntimeException("❌ Nút [Gửi đơn] vẫn bị khóa — hãy tick Checkbox xác nhận trước.");
+    private WebElement findXacNhanInput() {
+        for (WebElement el : driver.findElements(chkXacNhan)) {
+            try {
+                if (el.isDisplayed()) {
+                    return el;
+                }
+            } catch (Exception ignored) {
+            }
         }
-        webUI.clickElement(btnGuiDon, "Nút [Gửi đơn]");
+        WebElement label = driver.findElement(lblXacNhan);
+        return label.findElement(By.xpath(".//input[@type='checkbox']"));
+    }
+
+    private boolean isXacNhanDaChon() {
+        try {
+            return webUI.isCheckboxChecked(findXacNhanInput());
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean isGuiDonEnabled() {
+        try {
+            for (WebElement btn : driver.findElements(btnGuiDon)) {
+                if (btn.isDisplayed() && btn.isEnabled()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    public void clickGuiDon() {
+        webUI.clickElement(btnGuiDon, "Nút [Gửi đơn]", WaitConfig.FIELD);
     }
 
     public void choGuiDonThanhCong() {

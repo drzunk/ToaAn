@@ -12,6 +12,23 @@ public class DataGenerator {
     private static final long FAKER_SEED = 20240724L;
     private static final int SMOKE_ROW_COUNT = 3;
 
+    /** Địa chỉ kiểu Việt Nam — tránh faker US (Apt./AZ…) bị UAT reject. */
+    private static String vietnameseAddress(Faker faker) {
+        int soNha = faker.number().numberBetween(1, 999);
+        String[] streets = {"Nguyễn Huệ", "Lê Lợi", "Trần Phú", "Hoàng Diệu", "Phan Đình Phùng", "Bà Triệu"};
+        String[] wards = {"Phường Bồ Đề", "Phường Minh Khai", "Phường Cầu Giấy", "Phường 1", "Phường 5"};
+        String[] cities = {"Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ", "Bắc Ninh", "Ninh Bình"};
+        return soNha + " " + streets[faker.number().numberBetween(0, streets.length)]
+                + ", " + wards[faker.number().numberBetween(0, wards.length)]
+                + ", " + cities[faker.number().numberBetween(0, cities.length)];
+    }
+
+    /** CCCD 12 số — format gần thực tế, tránh chuỗi ngẫu nhiên bị UAT chặn. */
+    private static String generateCccd(Faker faker) {
+        return "0" + String.format("%02d", faker.number().numberBetween(1, 96))
+                + faker.number().digits(9);
+    }
+
     /**
      * Full mức B (pairwise): mọi cặp loại đơn–việc, 4 tư cách Phá sản,
      * xoay đủ nhánh CN/TC / đại diện / số BD / NLQ / TLBS.
@@ -39,6 +56,8 @@ public class DataGenerator {
                         + scenario.loaiDon() + " / " + scenario.loaiViec()
                         + " — ND=" + scenario.loaiChuThe()
                         + ", BD×" + scenario.soLuongBiDon()
+                        + (DataDictionary.allowsDongNguyenDon(scenario.loaiDon())
+                        ? ", đồngND=" + scenario.coDongNguyenDon() : "")
                         + (DataDictionary.isPhaSan(scenario.loaiDon())
                         ? ", tư cách=" + scenario.tuCachNopDon() : ""));
             }
@@ -116,6 +135,49 @@ public class DataGenerator {
         return (TaoDonScenario) generateDynamicData(1)[0][0];
     }
 
+    /**
+     * Kịch bản có tài liệu bắt buộc ở bước 5 — phù hợp test Chỉnh sửa từ Xem lại (UI mới).
+     * Tránh Hành chính/Hôn nhân không có hồ sơ bắt buộc → xem trước đơn lỗi.
+     */
+    public static TaoDonScenario generateScenarioForReviewEdit() {
+        Faker faker = new Faker(new Locale("vi"));
+        TaoDonScenario preferred = pickReviewEditScenario(faker, true);
+        if (preferred != null) {
+            return preferred;
+        }
+        TaoDonScenario fallback = pickReviewEditScenario(faker, false);
+        if (fallback != null) {
+            return fallback;
+        }
+        return generateOneRandomScenario();
+    }
+
+    private static TaoDonScenario pickReviewEditScenario(Faker faker, boolean preferDanSuOrShtt) {
+        for (int i = 0; i < 25; i++) {
+            RowSelections selections = buildRandomSelections(faker);
+            normalizePhaSanSelections(selections, i);
+            validateSelections(selections);
+            if (DataDictionary.isHanhChinh(selections.loaiDon)
+                    || DataDictionary.isHonNhanGiaDinh(selections.loaiDon)
+                    || DataDictionary.isPhaSan(selections.loaiDon)) {
+                continue;
+            }
+            if (preferDanSuOrShtt
+                    && !"Dân sự".equals(selections.loaiDon)
+                    && !"Sở hữu trí tuệ".equals(selections.loaiDon)) {
+                continue;
+            }
+            if (DataDictionary.isToChuc(selections.loaiChuTheNguyenDon)) {
+                continue;
+            }
+            TaoDonScenario scenario = buildScenario(i, selections, faker);
+            System.out.println(" 🎲 Kịch bản chỉnh sửa Xem lại: "
+                    + scenario.loaiDon() + " / " + scenario.loaiViec());
+            return scenario;
+        }
+        return null;
+    }
+
     public static Object[][] generateDynamicData(int soLuongKichBan) {
         Object[][] data = new Object[soLuongKichBan][1];
         Faker faker = new Faker(new Locale("vi"));
@@ -180,9 +242,7 @@ public class DataGenerator {
                 .thoiDiemPhatSinh(sdf.format(faker.date().past(800, java.util.concurrent.TimeUnit.DAYS)))
                 .tomTatQuaTrinh(longText(faker, 100))
                 .yeuCauCuThe(faker.lorem().sentence(12))
-                .canCuPhapLy(Math.floorMod(index, 2) == 0
-                        ? "Điều " + faker.number().numberBetween(1, 500) + " Bộ luật Dân sự năm 2015"
-                        : "")
+                .canCuPhapLy("Điều " + faker.number().numberBetween(1, 500) + " Bộ luật Dân sự năm 2015")
                 .coTaiLieuBoSung(selections.coTaiLieuBoSung)
                 .tuCachNopDon(selections.tuCachNopDon)
                 .soLuongBiDon(selections.soLuongBiDon);
@@ -191,19 +251,24 @@ public class DataGenerator {
             b.hoTen(faker.name().fullName())
                     .ngaySinh(sdf.format(faker.date().birthday(18, 60)))
                     .gioiTinh(selections.gioiTinh)
-                    .cccd(faker.number().digits(12))
+                    .cccd(generateCccd(faker))
                     .ngayCap(sdf.format(faker.date().past(1500, java.util.concurrent.TimeUnit.DAYS)))
                     .noiCap(selections.noiCap)
-                    .thuongTru(faker.address().fullAddress())
+                    .thuongTru(vietnameseAddress(faker))
                     // 50/50: giống thường trú / địa chỉ liên lạc riêng
-                    .lienLac(Math.floorMod(index, 2) == 0 ? "Giống thường trú" : faker.address().fullAddress());
+                    .lienLac(Math.floorMod(index, 2) == 0 ? "Giống thường trú" : vietnameseAddress(faker));
         } else {
             b.tenToChuc(cleanCompanyName(faker.company().name()))
                     .loaiHinhToChuc(selections.loaiHinhToChuc)
                     .mst(faker.number().digits(10))
-                    .diaChiToChuc(faker.address().fullAddress())
+                    .diaChiToChuc(vietnameseAddress(faker))
                     .nguoiDaiDienToChuc(faker.name().fullName())
-                    .chucVuToChuc("Giám đốc");
+                    .chucVuToChuc("Giám đốc")
+                    .ngaySinh(sdf.format(faker.date().birthday(18, 60)))
+                    .gioiTinh(selections.gioiTinh)
+                    .cccd(generateCccd(faker))
+                    .ngayCap(sdf.format(faker.date().past(1500, java.util.concurrent.TimeUnit.DAYS)))
+                    .noiCap(selections.noiCap);
         }
 
         if ("Có".equals(selections.coNguoiDaiDien)
@@ -217,13 +282,13 @@ public class DataGenerator {
                     .tenToChucBD(cleanCompanyName(faker.company().name()))
                     .loaiHinhBD(selections.loaiHinhBiDon)
                     .mstBD(faker.number().digits(10))
-                    .diaChiTruSoBD(faker.address().fullAddress())
+                    .diaChiTruSoBD(vietnameseAddress(faker))
                     .nguoiDaiDienBD(faker.name().fullName());
         } else {
             b.hoTenBD(faker.name().fullName())
-                    .cccdBD(faker.number().digits(12))
+                    .cccdBD(generateCccd(faker))
                     .namSinhBD(String.valueOf(faker.number().numberBetween(1960, 2000)))
-                    .diaChiCaNhanBD(faker.address().fullAddress());
+                    .diaChiCaNhanBD(vietnameseAddress(faker));
         }
 
         if ("Có".equals(selections.coNguoiLienQuan)) {
@@ -236,7 +301,7 @@ public class DataGenerator {
             b.tenCoQuanHC("UBND " + faker.address().cityName())
                     .chucDanhHC("Chủ tịch UBND")
                     .nguoiThamQuyenHC(faker.name().fullName())
-                    .diaChiTruSoBD(faker.address().fullAddress());
+                    .diaChiTruSoBD(vietnameseAddress(faker));
         }
 
         if (DataDictionary.hasGiaTriTranhChap(selections.loaiDon)) {
@@ -247,7 +312,21 @@ public class DataGenerator {
             b.biDonThem(buildExtraBiDon(selections, faker));
         }
 
+        String coDongNguyenDon = normalizeCoDongNguyenDon(selections);
+        b.coDongNguyenDon(coDongNguyenDon);
+        if ("Có".equals(coDongNguyenDon)) {
+            b.dongNguyenDon(buildDongNguyenDon(faker, index));
+        }
+
         return b.build();
+    }
+
+    private static String normalizeCoDongNguyenDon(RowSelections selections) {
+        if (!DataDictionary.allowsDongNguyenDon(selections.loaiDon)) {
+            return "Không";
+        }
+        String raw = selections.coDongNguyenDon;
+        return (raw == null || raw.isBlank()) ? "Không" : raw.trim();
     }
 
     private static BiDonData buildExtraBiDon(RowSelections selections, Faker faker) {
@@ -262,7 +341,7 @@ public class DataGenerator {
             return extra.tenCoQuanHC("Sở " + faker.address().cityName())
                     .chucDanhHC("Giám đốc Sở")
                     .nguoiThamQuyenHC(faker.name().fullName())
-                    .diaChiTruSo(faker.address().fullAddress())
+                    .diaChiTruSo(vietnameseAddress(faker))
                     .build();
         }
         extra.loai(loai2);
@@ -270,14 +349,14 @@ public class DataGenerator {
             return extra.tenToChuc(cleanCompanyName(faker.company().name()))
                     .loaiHinh(faker.options().option(DataDictionary.getLoaiHinhToChuc()))
                     .mst(faker.number().digits(10))
-                    .diaChiTruSo(faker.address().fullAddress())
+                    .diaChiTruSo(vietnameseAddress(faker))
                     .nguoiDaiDien(faker.name().fullName())
                     .build();
         }
         return extra.hoTen(faker.name().fullName())
-                .cccd(faker.number().digits(12))
+                .cccd(generateCccd(faker))
                 .namSinh(String.valueOf(faker.number().numberBetween(1965, 1998)))
-                .diaChiCaNhan(faker.address().fullAddress())
+                .diaChiCaNhan(vietnameseAddress(faker))
                 .build();
     }
 
@@ -323,6 +402,7 @@ public class DataGenerator {
         String coTaiLieuBoSung;
         String tuCachNopDon;
         int soLuongBiDon;
+        String coDongNguyenDon;
     }
 
     private static void normalizePhaSanSelections(RowSelections s, int index) {
@@ -366,7 +446,52 @@ public class DataGenerator {
         s.coTaiLieuBoSung = spec.coTaiLieuBoSung() ? "Có" : "Không";
         s.soLuongBiDon = Math.max(1, spec.soLuongBiDon());
         s.tuCachNopDon = spec.tuCachNopDon();
+        s.coDongNguyenDon = pickCoDongNguyenDon(spec.loaiDon(), spec.seedIndex());
         return s;
+    }
+
+    /** 50/50 Có/Không đồng nguyên đơn — áp dụng cho cả 7 loại đơn (theo seed/index). */
+    private static String pickCoDongNguyenDon(String loaiDon, int index) {
+        if (!DataDictionary.allowsDongNguyenDon(loaiDon)) {
+            return "Không";
+        }
+        return Math.floorMod(index, 2) == 0 ? "Có" : "Không";
+    }
+
+    /** 50/50 ngẫu nhiên — dùng cho smoke / kịch bản random. */
+    private static String pickCoDongNguyenDonRandom(Faker faker) {
+        return faker.options().option(DataDictionary.getCoKhong());
+    }
+
+    private static DongNguyenDonData buildDongNguyenDon(Faker faker, int index) {
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+        // 50/50 Cá nhân / Tổ chức — form đồng ND cũng có tab giống nguyên đơn chính.
+        boolean toChuc = Math.floorMod(index, 2) == 1;
+        if (toChuc) {
+            return DongNguyenDonData.builder()
+                    .loai("Tổ chức")
+                    .tenToChuc(cleanCompanyName(faker.company().name()))
+                    .loaiHinh(DataDictionary.pick(DataDictionary.getLoaiHinhToChuc(), index))
+                    .mst(faker.number().digits(10))
+                    .diaChiTruSo(vietnameseAddress(faker))
+                    .nguoiDaiDien(faker.name().fullName())
+                    .chucVu("Giám đốc")
+                    .sdt("09" + faker.number().digits(8))
+                    .email("dongnd.tc." + index + "@test.example.com")
+                    .build();
+        }
+        return DongNguyenDonData.builder()
+                .loai("Cá nhân")
+                .hoTen(faker.name().fullName())
+                .ngaySinh(sdf.format(faker.date().birthday(18, 60)))
+                .gioiTinh(DataDictionary.pick(DataDictionary.getGioiTinh(), index))
+                .cccd(generateCccd(faker))
+                .diaChiCuTru(vietnameseAddress(faker))
+                .noiOHienTai(vietnameseAddress(faker))
+                .ngheNghiep("Kỹ sư phần mềm")
+                .sdt("09" + faker.number().digits(8))
+                .email("dongnd.cn." + index + "@test.example.com")
+                .build();
     }
 
     private static RowSelections buildPhaSanSelections(Faker faker, int index) {
@@ -388,6 +513,7 @@ public class DataGenerator {
         s.coTaiLieuBoSung = DataDictionary.pick(DataDictionary.getCoKhong(), index + 2);
         s.tuCachNopDon = DataDictionary.pick(DataDictionary.getTuCachNopDonPhaSan(), index);
         s.soLuongBiDon = 1;
+        s.coDongNguyenDon = pickCoDongNguyenDon(s.loaiDon, index);
         return s;
     }
 
@@ -413,6 +539,7 @@ public class DataGenerator {
         if (DataDictionary.isPhaSan(s.loaiDon)) {
             s.tuCachNopDon = DataDictionary.pick(DataDictionary.getTuCachNopDonPhaSan(), i);
         }
+        s.coDongNguyenDon = pickCoDongNguyenDon(s.loaiDon, i);
         return s;
     }
 
@@ -439,6 +566,7 @@ public class DataGenerator {
         if (DataDictionary.isPhaSan(s.loaiDon)) {
             s.tuCachNopDon = faker.options().option(DataDictionary.getTuCachNopDonPhaSan());
         }
+        s.coDongNguyenDon = pickCoDongNguyenDonRandom(faker);
         return s;
     }
 

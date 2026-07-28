@@ -82,6 +82,12 @@ public final class TestActionLog {
         add("Ghi chú", "", "", noiDung == null ? "" : noiDung);
     }
 
+    /** Thông báo validate / server trên biểu mẫu. */
+    public static void validation(String buoc, String message) {
+        add("Validation", buoc == null ? "" : buoc.trim(), message == null ? "" : message.trim(),
+                "Thông báo từ biểu mẫu / server");
+    }
+
     /**
      * Đánh dấu đầu một khối bước/page trong báo cáo Excel.
      *
