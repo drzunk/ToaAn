@@ -69,6 +69,9 @@ public class NoiDungDonPage {
 
     private Step4Mode step4Mode = Step4Mode.LEGACY;
 
+    /** Chế độ bước 4 vừa resolve — dùng bước 6 quyết định có chờ preview eform hay không. */
+    private static volatile Step4Mode lastResolvedStep4Mode = Step4Mode.LEGACY;
+
     public NoiDungDonPage(WebDriver driver) {
         this.driver = driver;
         this.webUI = new WebUI(driver);
@@ -76,6 +79,14 @@ public class NoiDungDonPage {
 
     public Step4Mode getStep4Mode() {
         return step4Mode;
+    }
+
+    public static Step4Mode getLastResolvedStep4Mode() {
+        return lastResolvedStep4Mode;
+    }
+
+    public static boolean wasLastStep4Iframe() {
+        return lastResolvedStep4Mode == Step4Mode.IFRAME;
     }
 
     public boolean isIframeMode() {
@@ -88,6 +99,7 @@ public class NoiDungDonPage {
 
     public void waitStepReady() {
         step4Mode = resolveStep4Mode();
+        lastResolvedStep4Mode = step4Mode;
         logStep4Mode();
         webUI.switchToDefaultContent();
         switch (step4Mode) {
@@ -523,6 +535,144 @@ public class NoiDungDonPage {
         }
     }
 
+    /** Bấm [Gửi ngay] trong iframe nếu có — host yêu cầu trước khi wizard nhận postMessage. */
+    private boolean clickGuiNgayInIframe() {
+        By btnGuiNgay = By.xpath(
+                "//button[contains(normalize-space(.), 'Gửi ngay') or contains(normalize-space(.), 'Gửi Ngay')"
+                        + " or contains(normalize-space(.), 'GUI NGAY')]"
+                        + " | //div[contains(@class,'pf-nav')]//button[contains(., 'Gửi')]"
+                        + " | //div[contains(@class,'pf-wrap')]//button[contains(., 'Gửi ngay')]"
+                        + " | //*[@role='button' and contains(., 'Gửi ngay')]");
+        if (webUI.existsNow(btnGuiNgay)) {
+            webUI.clickElementOnceJs(btnGuiNgay, "Nút [Gửi ngay] trong iframe eform", WaitConfig.FIELD);
+            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+            System.out.println(" ℹ Iframe — đã bấm [Gửi ngay] đồng bộ nội dung với host.");
+            return true;
+        }
+        try {
+            Object clicked = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
+                    "var btns=[...document.querySelectorAll('button,[role=button]')];"
+                            + "for (var b of btns){"
+                            + " if(!b.offsetParent&&b.getBoundingClientRect().height===0) continue;"
+                            + " var t=(b.textContent||'').replace(/\\s+/g,' ').trim();"
+                            + " if(/gửi\\s*ngay/i.test(t)||(/^gửi$/i.test(t)&&!/đơn/i.test(t))){"
+                            + "   b.click(); return t;"
+                            + " }"
+                            + "}"
+                            + "return null;");
+            if (clicked != null && !String.valueOf(clicked).isBlank()) {
+                webUI.sleepMillis(WaitConfig.SETTLE_MS);
+                System.out.println(" ℹ Iframe — đã bấm [" + clicked + "] (JS) đồng bộ host.");
+                return true;
+            }
+        } catch (Exception e) {
+            System.out.println(" ⚠ Không bấm được Gửi ngay trong iframe: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /** Kích hoạt dirty state iframe — host cần trước khi nhận postMessage. */
+    private void nudgeIframeDirtyState() {
+        try {
+            List<WebElement> fields = findIframeEditableFields();
+            for (WebElement field : fields) {
+                try {
+                    if (!field.isDisplayed() || !field.isEnabled()) {
+                        continue;
+                    }
+                    if ("text".equalsIgnoreCase(safe(field.getAttribute("type")))
+                            || "textarea".equalsIgnoreCase(safe(field.getTagName()))) {
+                        field.click();
+                        field.sendKeys(Keys.END);
+                        field.sendKeys(Keys.BACK_SPACE);
+                        field.sendKeys(" ");
+                        field.sendKeys(Keys.BACK_SPACE);
+                        break;
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+            commitIframeFieldState();
+        } catch (Exception e) {
+            System.out.println(" ⚠ Không nudge được iframe: " + e.getMessage());
+        }
+    }
+
+    /** Chờ toast host ghi nhận nội dung eform sau Gửi ngay / commit. */
+    private void waitForEformHostAck(int timeoutMs) {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            if (WebUI.hasEformAckInFeedback(webUI.collectSystemFeedbackMessages())) {
+                System.out.println(" ✅ Host đã ghi nhận nội dung eform.");
+                return;
+            }
+            webUI.sleepMillis(300);
+        }
+        System.out.println(" ℹ Chưa thấy toast ghi nhận eform — vẫn thử Tiếp theo wizard.");
+    }
+
+    /** Commit + Gửi ngay (nếu có) + chờ ack trước khi bấm Tiếp theo wizard. */
+    private void syncIframeEformWithHost() {
+        commitIframeFieldState();
+        nudgeIframeDirtyState();
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            if (clickGuiNgayInIframe()) {
+                break;
+            }
+            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        }
+        webUI.switchToDefaultContent();
+        waitForEformHostAck(8000);
+    }
+
+    /**
+     * Sau Chỉnh sửa từ Xem lại: ghi đè ít nhất một ô iframe để host nhận thay đổi.
+     */
+    public void prepareIframeResubmitAfterEdit(String yeuCauMoi) {
+        waitStepReady();
+        webUI.switchToIframe(IFRAME_NOI_DUNG);
+        try {
+            webUI.waitUntilVisible(MARKER_IFRAME_READY, WaitConfig.FIELD, "Iframe .pf-wrap sẵn sàng");
+            String text = (yeuCauMoi == null || yeuCauMoi.isBlank())
+                    ? "Kiểm thử eform — cập nhật sau chỉnh sửa." : yeuCauMoi;
+            overwriteFirstMatchingField(
+                    List.of("chi tiết hộ tịch", "chi tiết", "yêu cầu", "hộ tịch", "nội dung"),
+                    text, "Cập nhật nội dung (iframe sau chỉnh sửa)");
+            nudgeIframeDirtyState();
+        } finally {
+            webUI.switchToDefaultContent();
+        }
+    }
+
+    private void overwriteFirstMatchingField(List<String> labelHints, String value, String logName) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        for (WebElement field : findIframeEditableFields()) {
+            try {
+                if (!field.isDisplayed() || !field.isEnabled()) {
+                    continue;
+                }
+                String blob = (nearestLabelText(field) + " " + safe(field.getAttribute("placeholder"))
+                        + " " + safe(field.getAttribute("name")) + " " + safe(field.getAttribute("aria-label")))
+                        .toLowerCase(Locale.ROOT);
+                boolean match = false;
+                for (String hint : labelHints) {
+                    if (blob.contains(hint.toLowerCase(Locale.ROOT))) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) {
+                    continue;
+                }
+                typeIntoField(field, value, false, logName);
+                return;
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     /** Bảng dữ liệu eform — bấm Thêm dòng nếu chưa có hàng. */
     private void ensureTableHasRow() {
         By themDong = By.xpath(
@@ -913,6 +1063,7 @@ public class NoiDungDonPage {
                     fillIframeCustomDropdowns();
                 }
                 commitIframeFieldState();
+                syncIframeEformWithHost();
             } finally {
                 webUI.switchToDefaultContent();
             }

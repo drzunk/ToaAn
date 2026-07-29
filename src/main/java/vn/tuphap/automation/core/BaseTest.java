@@ -39,6 +39,7 @@ public class BaseTest {
         prefs.put("credentials_enable_service", false);
         prefs.put("profile.password_manager_enabled", false);
         options.setExperimentalOption("prefs", prefs);
+        options.setCapability("goog:loggingPrefs", java.util.Map.of("browser", "ALL"));
 
         try {
             driver = new ChromeDriver(options);

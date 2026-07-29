@@ -303,8 +303,7 @@ public class ExtentReportManager {
     }
 
     public static void logFailWithScreenshot(String message, String base64Image) {
-        String detail = "Kịch bản thất bại. Chi tiết lỗi: " + nullToEmpty(message)
-                + ". Bước đang thực hiện gần nhất: " + getLastStep();
+        String detail = "Kịch bản thất bại. Chi tiết lỗi: " + compactFailMessage(nullToEmpty(message));
         ExtentTest t = testOrNull();
         if (t == null) {
             System.out.println("❌ [THẤT BẠI] (chưa gắn kịch bản báo cáo) " + message);
@@ -312,6 +311,11 @@ public class ExtentReportManager {
         }
         logFailInternal(t, detail, base64Image);
         System.out.println("❌ " + message);
+    }
+
+    /** Một dòng gọn — bỏ xuống dòng thừa, không kèm bước gần nhất. */
+    private static String compactFailMessage(String message) {
+        return message.replace('\n', ' ').replaceAll("\\s+", " ").trim();
     }
 
     public static void logSkip(String message) {

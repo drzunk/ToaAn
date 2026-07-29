@@ -1,5 +1,8 @@
 package vn.tuphap.automation.ui;
 
+import org.openqa.selenium.logging.LogEntries;
+import org.openqa.selenium.logging.LogEntry;
+import org.openqa.selenium.logging.LogType;
 import vn.tuphap.automation.report.TestActionLog;
 
 import vn.tuphap.automation.report.ExtentReportManager;
@@ -748,7 +751,117 @@ public class WebUI {
         LinkedHashSet<String> merged = new LinkedHashSet<>();
         merged.addAll(collectValidationMessages());
         merged.addAll(collectToastMessages());
+        merged.addAll(collectFrontendCrashMessages());
         return new ArrayList<>(merged);
+    }
+
+    /** Lỗi JS frontend (API danhSach undefined) — thường crash cả trang. */
+    public static boolean isFrontendCrashMessage(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        return lower.contains("cannot read properties of undefined")
+                || lower.contains("reading 'danhsach'")
+                || lower.contains("reading \"danhsach\"")
+                || (lower.contains("danhsach") && lower.contains("undefined"))
+                || lower.contains("something went wrong")
+                || lower.contains("application error")
+                || lower.contains("minified react error");
+    }
+
+    public boolean hasFrontendCrashVisible() {
+        for (String msg : collectFrontendCrashMessages()) {
+            if (isFrontendCrashMessage(msg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean shouldRetryAfterFrontendCrash(Throwable error) {
+        if (hasFrontendCrashVisible()) {
+            return true;
+        }
+        if (error != null && error.getMessage() != null && isFrontendCrashMessage(error.getMessage())) {
+            return true;
+        }
+        return error != null && error.getMessage() != null && error.getMessage().contains("FRONTEND_CRASH");
+    }
+
+    /** F5 khi trang crash — trả về true nếu đã refresh. */
+    public boolean recoverFromFrontendCrash() {
+        if (!hasFrontendCrashVisible()) {
+            return false;
+        }
+        System.out.println(" ⚠ Crash frontend (danhSach/API) — tải lại trang (F5)...");
+        takeScreenshotPreserveToast();
+        driver.navigate().refresh();
+        sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        dismissOpenDropdownsQuiet();
+        return true;
+    }
+
+    /**
+     * Sau khi bấm thẻ Loại đơn — chờ dropdown loại việc enabled, API catalog ổn định.
+     */
+    public void waitForStableFormAfterLoaiDon(By loaiViecDropdown, int timeoutSec) {
+        System.out.println(" ⏳ Chờ catalog loại việc sau chọn loại đơn...");
+        long deadline = System.currentTimeMillis() + timeoutSec * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (hasFrontendCrashVisible()) {
+                throw new RuntimeException("FRONTEND_CRASH: danhSach/API khi load catalog loại việc");
+            }
+            if (existsNow(loaiViecDropdown) && isElementEnabledNow(loaiViecDropdown)) {
+                sleepMillis(WaitConfig.SETTLE_MS);
+                if (!hasFrontendCrashVisible()) {
+                    System.out.println(" ✅ Catalog loại việc sẵn sàng.");
+                    return;
+                }
+                throw new RuntimeException("FRONTEND_CRASH: trang crash ngay sau khi catalog hiện");
+            }
+            sleepMillis(300);
+        }
+        if (hasFrontendCrashVisible()) {
+            throw new RuntimeException("FRONTEND_CRASH: danhSach/API khi load catalog loại việc");
+        }
+        waitUntilVisible(loaiViecDropdown, Math.min(WaitConfig.FIELD, timeoutSec),
+                "Dropdown [Loại việc cụ thể]");
+    }
+
+    private List<String> collectFrontendCrashMessages() {
+        List<String> hints = new ArrayList<>();
+        collectTexts(driver.findElements(By.xpath(
+                "//*[contains(., 'Cannot read properties')"
+                        + " or contains(., 'reading') and contains(., 'danhSach')"
+                        + " or contains(., 'Something went wrong')"
+                        + " or contains(., 'Application error')]"
+                        + "[string-length(normalize-space(.)) < 400]")), hints);
+        for (String msg : collectToastMessages()) {
+            if (isFrontendCrashMessage(msg)) {
+                hints.add(msg);
+            }
+        }
+        hints.addAll(readRecentBrowserCrashLogs());
+        return hints;
+    }
+
+    private List<String> readRecentBrowserCrashLogs() {
+        List<String> errors = new ArrayList<>();
+        try {
+            LogEntries logs = driver.manage().logs().get(LogType.BROWSER);
+            for (LogEntry entry : logs) {
+                if (entry == null || entry.getMessage() == null) {
+                    continue;
+                }
+                String msg = entry.getMessage();
+                if (isFrontendCrashMessage(msg)) {
+                    errors.add(msg.length() > 220 ? msg.substring(0, 219) + "…" : msg);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return errors;
     }
 
     /**
@@ -810,6 +923,10 @@ public class WebUI {
      */
     private void waitGraceThenFailIfStillBlocked(int stepNumber, String stepName, String description,
                                                  By marker, List<String> feedback) {
+        if (existsDisplayed(marker)) {
+            System.out.println(" ✅ " + description + " (đã chuyển bước — bỏ qua toast tạm)");
+            return;
+        }
         // Chụp ngay khi toast còn trên màn — grace 10s sẽ làm toast biến mất.
         String earlyShot = takeScreenshotPreserveToast();
         if (earlyShot != null) {
@@ -839,23 +956,51 @@ public class WebUI {
         failStepWithSystemFeedback(stepNumber, stepName, description, feedback, earlyShot);
     }
 
-    /** Eform/host báo chưa phản hồi / bắt bấm Gửi trong form — coi là eform lỗi, fail ngay. */
+    /** Eform/host báo chưa phản hồi — chờ grace (host có thể ack async sau Gửi ngay / commit). */
     private static boolean isImmediateEformFailure(List<String> feedback) {
+        return false;
+    }
+
+    /** Toast host đã ghi nhận nội dung iframe. */
+    public static boolean isEformAckMessage(String msg) {
+        return isEformBridgeAcknowledged(msg);
+    }
+
+    public static boolean hasEformAckInFeedback(List<String> feedback) {
+        return isEformBridgeSettledInFeedback(feedback);
+    }
+
+    /** Có toast "Đã ghi nhận…" trong cùng lượt feedback → bỏ qua cảnh báo bridge tạm. */
+    private static boolean isEformBridgeSettledInFeedback(List<String> feedback) {
         if (feedback == null) {
             return false;
         }
         for (String msg : feedback) {
-            if (msg == null) {
-                continue;
-            }
-            String lower = msg.toLowerCase(Locale.ROOT);
-            if (lower.contains("chưa phản hồi")
-                    || lower.contains("gửi ngay trong biểu mẫu")
-                    || lower.contains("biểu mẫu chưa")) {
+            if (isEformBridgeAcknowledged(msg)) {
                 return true;
             }
         }
         return false;
+    }
+
+    /** Host đã ack nội dung iframe — toast "chưa phản hồi" kèm theo là cảnh báo tạm, không chặn wizard. */
+    private static boolean isEformBridgeAcknowledged(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        return lower.contains("đã ghi nhận nội dung")
+                || lower.contains("da ghi nhan noi dung");
+    }
+
+    private static boolean isEformBridgePendingWarning(String msg) {
+        if (msg == null || msg.isBlank() || isEformBridgeAcknowledged(msg)) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        return lower.contains("chưa phản hồi")
+                || lower.contains("gửi ngay trong biểu mẫu")
+                || lower.contains("biểu mẫu chưa");
     }
 
     /** Thông báo không chặn → chụp ảnh + ghi log, không dừng case. */
@@ -865,34 +1010,27 @@ public class WebUI {
             return;
         }
         List<String> soft = new ArrayList<>();
-        for (String msg : feedback) {
+        List<String> successAck = new ArrayList<>();
+        for (String msg : filterFeedbackNoise(feedback)) {
             if (msg == null || msg.isBlank() || isBlockingMessage(msg)) {
                 continue;
             }
-            if (alreadyNoted.add(msg)) {
+            if (!alreadyNoted.add(msg)) {
+                continue;
+            }
+            if (isEformBridgeAcknowledged(msg)) {
+                successAck.add(msg);
+            } else if (isVneidPrefillNotice(msg) || isIdentitySaveFailureMessage(msg)) {
+                // VNeID / lưu định danh chỉ log tại tick checkbox — tránh banner cũ khi replay wizard.
+            } else {
                 soft.add(msg);
             }
         }
-        if (soft.isEmpty()) {
-            return;
-        }
         String stepLabel = "Bước " + stepNumber + " — " + (stepName == null ? "" : stepName.trim());
         String ctx = context == null || context.isBlank() ? "" : context.trim();
-        String joined = String.join(" | ", soft);
-        System.out.println(" ⚠ Thông báo (không chặn, đi tiếp) [" + stepLabel + "]: " + joined);
-        for (String msg : soft) {
-            TestActionLog.validation(ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx, msg);
-        }
-        String shot = takeScreenshotPreserveToast();
-        String reportBody = stepLabel
-                + (ctx.isEmpty() ? "" : "\nNgữ cảnh: " + ctx)
-                + "\nThông báo (không chặn): " + joined;
-        if (shot != null) {
-            System.out.println(" 📸 Đã chụp ảnh thông báo — đi tiếp");
-            ExtentReportManager.logWarningWithScreenshot(reportBody, shot);
-        } else {
-            ExtentReportManager.logWarning(reportBody);
-        }
+        String prefix = ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx;
+        emitSuccessAckReport(prefix, successAck);
+        emitSoftWarningReport(prefix, soft);
     }
 
     /** Chỉ coi là chặn chuyển bước khi có lỗi bắt buộc — bỏ qua banner VNeID thông tin. */
@@ -900,7 +1038,14 @@ public class WebUI {
         if (feedback == null || feedback.isEmpty()) {
             return false;
         }
+        boolean eformAcked = isEformBridgeSettledInFeedback(feedback);
         for (String msg : feedback) {
+            if (msg == null || msg.isBlank()) {
+                continue;
+            }
+            if (eformAcked && isEformBridgePendingWarning(msg)) {
+                continue;
+            }
             if (isBlockingMessage(msg)) {
                 return true;
             }
@@ -912,6 +1057,12 @@ public class WebUI {
         if (msg == null || msg.isBlank()) {
             return false;
         }
+        if (isFormFieldDumpMessage(msg)) {
+            return false;
+        }
+        if (msg.length() > 120 && msg.contains("Họ và tên") && msg.contains("Phường / xã")) {
+            return false;
+        }
         String lower = msg.toLowerCase(Locale.ROOT);
         // Banner thông tin VNeID / lỗi lưu định danh (không chặn wizard).
         if (lower.contains("vneid")
@@ -919,12 +1070,19 @@ public class WebUI {
                 || (lower.contains("định danh") && lower.contains("thất bại"))) {
             return false;
         }
+        if (isEformBridgeAcknowledged(msg)) {
+            return false;
+        }
+        if (isEformBridgePendingWarning(msg)) {
+            return true;
+        }
+        if (isFrontendCrashMessage(msg)) {
+            return true;
+        }
         return lower.contains("bắt buộc")
                 || lower.contains("vui lòng điền")
                 || lower.contains("vui lòng chọn")
                 || lower.contains("vui lòng bấm")
-                || lower.contains("chưa phản hồi")
-                || lower.contains("gửi ngay trong biểu mẫu")
                 || lower.contains("không hợp lệ")
                 || lower.contains("phải nhập")
                 || lower.contains("yêu cầu nhập")
@@ -953,15 +1111,27 @@ public class WebUI {
         List<String> feedback = messages == null || messages.isEmpty()
                 ? collectSystemFeedbackMessages()
                 : messages;
-        if (feedback.isEmpty()) {
-            feedback = List.of("(không đọc được nội dung thông báo)");
+        List<String> clean = filterFeedbackNoise(feedback);
+        if (clean.isEmpty() && feedback != null && !feedback.isEmpty()) {
+            clean = new ArrayList<>();
+            for (String msg : feedback) {
+                String extracted = extractReportableMessage(msg);
+                if (extracted != null && !clean.contains(extracted)) {
+                    clean.add(extracted);
+                }
+            }
+        }
+        if (clean.isEmpty()) {
+            clean = List.of("(không đọc được nội dung thông báo)");
         }
         String stepLabel = "Bước " + stepNumber + " — " + (stepName == null ? "" : stepName.trim());
         String ctx = context == null || context.isBlank() ? "" : context.trim();
-        String joined = String.join(" | ", feedback);
+        String joined = String.join(" | ", clean);
+        if (hasEformPendingInList(clean)) {
+            joined = formatEformFailMessage(joined);
+        }
 
-        // Console + Extent: chỉ qua logFail* (tránh in ❌ trùng với TestListener / logFail).
-        for (String msg : feedback) {
+        for (String msg : clean) {
             String logCtx = ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx;
             TestActionLog.validation(logCtx, msg);
         }
@@ -975,15 +1145,44 @@ public class WebUI {
                     + (preCapturedShot != null ? " (toast lúc phát hiện)" : ""));
         }
         String reportBody = stepLabel
-                + (ctx.isEmpty() ? "" : "\nNgữ cảnh: " + ctx)
-                + "\nHệ thống trả về: " + joined;
-        // Extent một lần duy nhất — TestListener không logFail lại với StepBlockedException.
+                + (ctx.isEmpty() ? "" : " Ngữ cảnh: " + ctx)
+                + " Hệ thống trả về: " + joined;
         if (shot != null) {
             ExtentReportManager.logFailWithScreenshot(reportBody, shot);
         } else {
             ExtentReportManager.logFail(reportBody);
         }
         throw new StepBlockedException(stepNumber, stepName, joined, shot);
+    }
+
+    private static boolean hasEformPendingInList(List<String> messages) {
+        if (messages == null) {
+            return false;
+        }
+        for (String msg : messages) {
+            if (isEformBridgePendingWarning(msg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String formatEformFailMessage(String joined) {
+        String core = joined;
+        int idx = joined.toLowerCase(Locale.ROOT).indexOf("biểu mẫu chưa phản hồi");
+        if (idx >= 0) {
+            core = joined.substring(idx);
+            int dot = core.indexOf('.');
+            if (dot > 0) {
+                core = core.substring(0, dot).trim();
+            } else {
+                int vui = core.toLowerCase(Locale.ROOT).indexOf("vui lòng");
+                if (vui > 0) {
+                    core = core.substring(0, vui).trim();
+                }
+            }
+        }
+        return core + " -> lỗi eform";
     }
 
     public List<String> collectValidationMessages() {
@@ -1011,7 +1210,9 @@ public class WebUI {
                     + " or contains(normalize-space(.), 'không hợp lệ')"
                     + " or contains(normalize-space(.), 'Không hợp lệ')"
                     + " or contains(normalize-space(.), 'yêu cầu nhập')"
-                    + " or contains(normalize-space(.), 'phải nhập'))]";
+                    + " or contains(normalize-space(.), 'phải nhập')"
+                    + " or contains(normalize-space(.), 'VNeID')"
+                    + " or contains(normalize-space(.), 'điền sẵn'))]";
         }
         return root + "//*[contains(@class,'text-red') or contains(@class,'text-destructive')"
                 + " or contains(@class,'border-red') or contains(@class,'ring-red')"
@@ -1021,7 +1222,13 @@ public class WebUI {
                 + " | " + root + "//label/following-sibling::p[string-length(normalize-space(.)) > 0"
                 + " and string-length(normalize-space(.)) < 300]"
                 + " | " + root + "//label/following-sibling::span[string-length(normalize-space(.)) > 0"
-                + " and string-length(normalize-space(.)) < 300]";
+                + " and string-length(normalize-space(.)) < 300]"
+                + " | " + root + "//*[@role='status' or @role='note'][string-length(normalize-space(.)) > 10"
+                + " and string-length(normalize-space(.)) < 400]"
+                + " | " + root + "//*[contains(@class,'bg-') and (contains(@class,'amber')"
+                + " or contains(@class,'yellow') or contains(@class,'blue') or contains(@class,'sky')"
+                + " or contains(@class,'info'))][string-length(normalize-space(.)) > 10"
+                + " and string-length(normalize-space(.)) < 400]";
     }
 
     private static void collectTexts(List<WebElement> elements, List<String> hints) {
@@ -1053,49 +1260,266 @@ public class WebUI {
     }
 
     private static boolean isNoiseValidationText(String text) {
+        if (isFormFieldDumpMessage(text)) {
+            return true;
+        }
         String lower = text.toLowerCase();
         return lower.equals("có") || lower.equals("không") || lower.contains("cursor-pointer");
     }
 
+    /** Text scrape cả form (nhiều nhãn field) — không phải toast/banner thật. */
+    static boolean isFormFieldDumpMessage(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        if (msg.contains("Họ và tên *") && msg.contains("Email *")) {
+            return true;
+        }
+        if (msg.length() < 60) {
+            return false;
+        }
+        int markers = 0;
+        if (msg.contains("Họ và tên")) {
+            markers++;
+        }
+        if (msg.contains("Ngày sinh") || msg.contains("Giới tính")) {
+            markers++;
+        }
+        if (msg.contains("Phường") && msg.contains("xã")) {
+            markers++;
+        }
+        if (msg.contains("CCCD") || msg.contains("CMND")) {
+            markers++;
+        }
+        if (msg.contains("Địa chỉ thường trú") || msg.contains("Tỉnh / thành phố")) {
+            markers++;
+        }
+        return markers >= 3;
+    }
+
+    static boolean isVneidPrefillNotice(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        if (lower.contains("thất bại")) {
+            return false;
+        }
+        return (lower.contains("vneid") && lower.contains("điền sẵn"))
+                || (lower.contains("điền sẵn") && lower.contains("định danh"));
+    }
+
+    static boolean isIdentitySaveFailureMessage(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return false;
+        }
+        String lower = msg.toLowerCase(Locale.ROOT);
+        return lower.contains("định danh") && lower.contains("thất bại");
+    }
+
+    private static boolean isIdentitySaveFeedbackContext(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            return false;
+        }
+        return prefix.contains("Sau tick") || prefix.contains("Đồng ý lưu Thông tin định danh");
+    }
+
+    /** Rút gọn message hệ thống — bỏ scrape form, giữ 1 câu banner/toast. */
+    static String extractReportableMessage(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return null;
+        }
+        String trimmed = msg.trim().replaceAll("\\s+", " ");
+        if (isFormFieldDumpMessage(trimmed)) {
+            return null;
+        }
+        if (isVneidPrefillNotice(trimmed)) {
+            int dot = trimmed.indexOf('.');
+            if (dot > 20 && dot < 220) {
+                return trimmed.substring(0, dot + 1).trim();
+            }
+        }
+        if (isIdentitySaveFailureMessage(trimmed)) {
+            return trimmed.replaceAll("\\s*Sao chép mã\\s*$", "").trim();
+        }
+        if (isEformBridgePendingWarning(trimmed)) {
+            int dot = trimmed.indexOf('.');
+            if (dot > 10) {
+                return trimmed.substring(0, dot + 1).trim();
+            }
+            int vui = trimmed.toLowerCase(Locale.ROOT).indexOf("vui lòng");
+            if (vui > 10) {
+                return trimmed.substring(0, vui).trim().replaceAll("[.,;]+$", "") + ".";
+            }
+        }
+        if (trimmed.length() > 160) {
+            int dot = trimmed.indexOf('.');
+            if (dot > 20 && dot < 160) {
+                return trimmed.substring(0, dot + 1).trim();
+            }
+            return trimmed.substring(0, 157) + "…";
+        }
+        return trimmed;
+    }
+
+    private static List<String> splitFeedbackParts(String msg) {
+        if (msg == null || msg.isBlank()) {
+            return List.of();
+        }
+        if (!msg.contains(" | ")) {
+            return List.of(msg);
+        }
+        return Arrays.asList(msg.split("\\s\\|\\s"));
+    }
+
+    /** Bỏ scrape form / text nhiễu trước khi log hoặc quyết định chặn bước. */
+    public List<String> filterFeedbackNoise(List<String> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return List.of();
+        }
+        List<String> clean = new ArrayList<>();
+        for (String msg : messages) {
+            for (String part : splitFeedbackParts(msg)) {
+                String extracted = extractReportableMessage(part);
+                if (extracted != null && !extracted.isBlank() && !clean.contains(extracted)) {
+                    clean.add(extracted);
+                }
+            }
+        }
+        return clean;
+    }
+
+    /**
+     * Chờ banner/toast sau thao tác (vd. tick Đồng ý lưu định danh) rồi chụp ảnh ngay.
+     */
+    public void logFeedbackAfterIdentitySave() {
+        logFeedbackAfterAction("Sau tick Đồng ý lưu Thông tin định danh", WaitConfig.FIELD * 1000L);
+    }
+
+    public void logFeedbackAfterAction(String context, long maxWaitMs) {
+        long deadline = System.currentTimeMillis() + Math.max(500, maxWaitMs);
+        while (System.currentTimeMillis() < deadline) {
+            List<String> messages = filterFeedbackNoise(collectSystemFeedbackMessages());
+            if (!messages.isEmpty()) {
+                if (isIdentitySaveFeedbackContext(context) && !hasIdentitySaveFailure(messages)) {
+                    sleepMillis(600);
+                    List<String> later = filterFeedbackNoise(collectSystemFeedbackMessages());
+                    if (!later.isEmpty()) {
+                        messages = later;
+                    }
+                }
+                emitValidationWarnings(context, messages);
+                return;
+            }
+            sleepMillis(250);
+        }
+    }
+
+    private static boolean hasIdentitySaveFailure(List<String> messages) {
+        if (messages == null) {
+            return false;
+        }
+        for (String msg : messages) {
+            if (isIdentitySaveFailureMessage(msg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** In console + Excel; thông báo không chặn thì chụp ảnh và đi tiếp. */
     public void logValidationMessages(String context) {
-        List<String> messages = collectSystemFeedbackMessages();
+        List<String> messages = filterFeedbackNoise(collectSystemFeedbackMessages());
         if (messages.isEmpty()) {
-            messages = collectValidationMessages();
+            return;
         }
-        if (messages.isEmpty()) {
+        emitValidationWarnings(context, messages);
+    }
+
+    private void emitValidationWarnings(String context, List<String> messages) {
+        if (messages == null || messages.isEmpty()) {
             return;
         }
         String prefix = (context == null || context.isBlank()) ? "Biểu mẫu" : context.trim();
         List<String> blocking = new ArrayList<>();
         List<String> soft = new ArrayList<>();
+        List<String> successAck = new ArrayList<>();
+        List<String> identityErrors = new ArrayList<>();
         for (String msg : messages) {
             if (isBlockingMessage(msg)) {
                 blocking.add(msg);
+            } else if (isEformBridgeAcknowledged(msg)) {
+                successAck.add(msg);
+            } else if (isIdentitySaveFailureMessage(msg)) {
+                if (isIdentitySaveFeedbackContext(prefix)) {
+                    identityErrors.add(msg);
+                }
+            } else if (isVneidPrefillNotice(msg)) {
+                // Banner VNeID prefill — chỉ ghi console, không đưa vào báo cáo.
+                if (isIdentitySaveFeedbackContext(prefix)) {
+                    System.out.println(" ℹ VNeID prefill (không ghi báo cáo): " + msg);
+                }
             } else {
                 soft.add(msg);
             }
         }
-        if (!soft.isEmpty()) {
-            System.out.println(" ⚠ Thông báo (không chặn) [" + prefix + "]: " + String.join(" | ", soft));
-            for (String msg : soft) {
-                TestActionLog.validation(prefix, msg);
-            }
-            String shot = takeScreenshotPreserveToast();
-            String body = prefix + "\nThông báo (không chặn): " + String.join(" | ", soft);
-            if (shot != null) {
-                System.out.println(" 📸 Đã chụp ảnh thông báo — đi tiếp");
-                ExtentReportManager.logWarningWithScreenshot(body, shot);
-            } else {
-                ExtentReportManager.logWarning(body);
-            }
-        }
+        emitSuccessAckReport(prefix, successAck);
+        emitSoftWarningReport(prefix, identityErrors);
+        emitSoftWarningReport(prefix, soft);
         if (!blocking.isEmpty()) {
             System.out.println(" ⚠ Validation chặn [" + prefix + "]: " + String.join(" | ", blocking));
             for (String msg : blocking) {
                 TestActionLog.validation(prefix, msg);
             }
         }
+    }
+
+    /** Eform host ack — coi là đạt, chụp ảnh, không ghi cảnh báo. */
+    private void emitSuccessAckReport(String prefix, List<String> ack) {
+        if (ack == null || ack.isEmpty()) {
+            return;
+        }
+        String joined = String.join(" | ", ack);
+        System.out.println(" ✅ [" + prefix + "]: " + joined);
+        for (String msg : ack) {
+            TestActionLog.validation(prefix, msg);
+        }
+        String shot = takeScreenshotForFeedback(ack);
+        String body = prefix + " — " + joined;
+        if (shot != null) {
+            System.out.println(" 📸 Đã chụp ảnh xác nhận eform");
+            ExtentReportManager.logPassWithScreenshot(body, shot);
+        } else {
+            ExtentReportManager.logPass(body);
+        }
+    }
+
+    /** Chỉ log cảnh báo khi có thông báo mềm thật — không phải ack/pass hay banner VNeID. */
+    private void emitSoftWarningReport(String prefix, List<String> soft) {
+        if (soft == null || soft.isEmpty()) {
+            return;
+        }
+        String joined = String.join(" | ", soft);
+        System.out.println(" ⚠ Thông báo (không chặn) [" + prefix + "]: " + joined);
+        for (String msg : soft) {
+            TestActionLog.validation(prefix, msg);
+        }
+        String shot = takeScreenshotForFeedback(soft);
+        String body = formatSoftWarningReport(prefix, soft);
+        if (shot != null) {
+            System.out.println(" 📸 Đã chụp ảnh thông báo — đi tiếp");
+            ExtentReportManager.logWarningWithScreenshot(body, shot);
+        } else {
+            ExtentReportManager.logWarning(body);
+        }
+    }
+
+    private static String formatSoftWarningReport(String prefix, List<String> soft) {
+        String joined = String.join(" | ", soft);
+        if (prefix.contains("Đồng ý lưu Thông tin định danh") || prefix.contains("Sau tick")) {
+            return "Click [Đồng ý lưu Thông tin định danh] — hệ thống báo: " + joined;
+        }
+        return prefix + " — " + joined;
     }
 
     public void waitUntilExists(By by, int timeoutSeconds, String description) {
@@ -1294,7 +1718,11 @@ public class WebUI {
 
     public void selectDropdownWithSearch(By dropdownLocator, By searchInputLocator, By optionsLocator, String expectedText, String elementName) {
         RuntimeException lastError = null;
-        for (int attempt = 1; attempt <= 2; attempt++) {
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            if (hasFrontendCrashVisible()) {
+                recoverFromFrontendCrash();
+                sleepMillis(WaitConfig.SETTLE_LONG_MS);
+            }
             try {
                 if (trySelectDropdownWithSearch(dropdownLocator, searchInputLocator, optionsLocator,
                         expectedText, elementName)) {
@@ -1302,10 +1730,15 @@ public class WebUI {
                 }
             } catch (RuntimeException ex) {
                 lastError = ex;
+                if (shouldRetryAfterFrontendCrash(ex)) {
+                    recoverFromFrontendCrash();
+                    sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                    continue;
+                }
             }
-            if (attempt < 2) {
+            if (attempt < 3) {
                 System.out.println(" ⏳ Dropdown [" + elementName + "] chưa có kết quả — thử lại ("
-                        + (attempt + 1) + "/2)...");
+                        + (attempt + 1) + "/3)...");
                 dismissOpenDropdownsQuiet();
                 sleepMillis(WaitConfig.SETTLE_MS);
             }
@@ -1319,8 +1752,12 @@ public class WebUI {
 
     private boolean trySelectDropdownWithSearch(By dropdownLocator, By searchInputLocator, By optionsLocator,
                                               String expectedText, String elementName) {
+        if (hasFrontendCrashVisible()) {
+            throw new RuntimeException("FRONTEND_CRASH trước khi chọn [" + elementName + "]");
+        }
         clickElementQuiet(dropdownLocator, elementName);
         sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+        waitForDropdownOptionsLoaded(optionsLocator, WaitConfig.DROPDOWN);
         try {
             WebElement searchInput = wait.until(ExpectedConditions.visibilityOfElementLocated(searchInputLocator));
             searchInput.clear();
@@ -1361,6 +1798,29 @@ public class WebUI {
         throw new RuntimeException("❌ Lỗi dữ liệu: Không tìm thấy ['" + expectedText + "'] trong Dropdown [" + elementName
                 + "]. Tuỳ chọn giao diện hiện có: " + availableOptions
                 + ". Cập nhật master-data.properties hoặc chạy đồng bộ dữ liệu gốc.");
+    }
+
+    /** Chờ listbox có option — tránh gõ tìm kiếm khi API danhSach chưa về. */
+    private void waitForDropdownOptionsLoaded(By optionsLocator, int timeoutSec) {
+        long deadline = System.currentTimeMillis() + timeoutSec * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (hasFrontendCrashVisible()) {
+                throw new RuntimeException("FRONTEND_CRASH: dropdown options chưa load");
+            }
+            try {
+                for (WebElement option : driver.findElements(optionsLocator)) {
+                    if (!option.isDisplayed()) {
+                        continue;
+                    }
+                    String text = readElementText(option);
+                    if (text != null && !text.isBlank() && !isAdminPlaceholderText(text)) {
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {
+            }
+            sleepMillis(250);
+        }
     }
 
     private static final By GLOBAL_DROPDOWN_OPTIONS =
@@ -1554,26 +2014,41 @@ public class WebUI {
     /** Chọn lại phường/xã cho mọi khối địa chỉ (khi VNeID prefill lệch tỉnh). */
     public void forceSelectAdministrativeWardsInScope(String scopeXPath) {
         String parent = scopeXPath == null ? "" : scopeXPath;
-        int total = countVisibleAddressBlocks(parent);
+        int total = Math.max(countVisibleAddressBlocks(parent), effectiveAddressBlockCount(parent));
+        if (total <= 0) {
+            total = 1;
+        }
         for (int i = 0; i < total; i++) {
             String blockSuffix = total > 1 ? " #" + (i + 1) : "";
             String card = addressCardScope(parent, i);
             String scope = card != null ? card : parent;
             int idx = card != null ? 1 : i + 1;
-            By btnTinh = adminDropdownButtonAt(scope, false, idx);
-            By searchTinh = adminDropdownSearchAt(scope, false, idx);
-            String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]";
-            By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-            if (!existsNow(btnPhuong)) {
+            if (!hasWardFieldInBlock(scope, idx) && !hasWardLabelVisible(parent, i)) {
                 continue;
             }
+            By btnTinh = resolveAdminDropdownButton(parent, i, false);
+            By btnPhuong = findWardButtonForBlock(parent, i);
+            if (btnPhuong == null || !existsNow(btnPhuong)) {
+                waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
+                btnPhuong = findWardButtonForBlock(parent, i);
+            }
+            if (btnPhuong == null || !existsNow(btnPhuong)) {
+                System.out.println(" ⚠ Không tìm thấy dropdown phường/xã" + blockSuffix + " — bỏ qua.");
+                continue;
+            }
+            String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]";
             String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]";
-            By searchPhuong = adminDropdownSearchAt(scope, true, idx);
-            if (!isAdminDropdownFilledAt(btnTinh)) {
+            By searchTinh = resolveAdminDropdownSearch(parent, i, false);
+            By searchPhuong = resolveAdminDropdownSearch(parent, i, true);
+            if (btnTinh != null && !isAdminDropdownFilledAt(btnTinh)) {
                 selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
                 sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
             }
-            selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, null);
+            if (!isAdminDropdownFilledAt(btnPhuong)) {
+                System.out.println(" ➔ Chọn phường/xã bắt buộc" + blockSuffix + "...");
+                selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, null);
+            }
             sleepMillis(WaitConfig.SETTLE_MS);
         }
     }
@@ -1682,25 +2157,25 @@ public class WebUI {
         String scope = card != null ? card : parentScope;
         int idx = card != null ? 1 : blockIndex + 1;
 
-        if (isAdministrativeAddressBlockComplete(parentScope, blockIndex)) {
+        if (isAdministrativeAddressBlockComplete(parentScope, blockIndex)
+                && !isWardRequiredAndUnfilled(parentScope, blockIndex)) {
             System.out.println(" ⏩ Chi tiết địa chỉ" + blockSuffix + ctx + " đã đủ — bỏ qua.");
             return;
         }
 
         focusAddressBlock(parentScope, blockIndex);
 
-        By btnTinh = adminDropdownButtonAt(scope, false, idx);
-        By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-        By searchTinh = adminDropdownSearchAt(scope, false, idx);
-        By searchPhuong = adminDropdownSearchAt(scope, true, idx);
+        By btnTinh = resolveAdminDropdownButton(parentScope, blockIndex, false);
+        By btnPhuong = resolveAdminDropdownButton(parentScope, blockIndex, true);
+        By searchTinh = resolveAdminDropdownSearch(parentScope, blockIndex, false);
+        By searchPhuong = resolveAdminDropdownSearch(parentScope, blockIndex, true);
         String tinhName = "Dropdown [Tỉnh / thành phố" + blockSuffix + "]" + ctx;
         String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]" + ctx;
 
         String provinceHint = extractProvinceHint(chiTietValue);
-        // Không dùng ward hint từ faker — tên phường trong chuỗi chi tiết thường không có trong dropdown tỉnh đã chọn
-        // → mở dropdown 2 lần (thử hint fail rồi chọn random).
+        String wardHint = extractWardHint(chiTietValue);
 
-        if (!existsNow(btnTinh)) {
+        if (btnTinh == null || !existsNow(btnTinh)) {
             fillAddressDetailAtBlock(parentScope, blockIndex, chiTietValue,
                     "Chi tiết địa chỉ" + blockSuffix + ctx);
             finishAddressBlock();
@@ -1718,13 +2193,20 @@ public class WebUI {
             }
             dismissOpenDropdownsQuiet();
             sleepMillis(WaitConfig.SETTLE_SHORT_MS);
-            waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
+            if (btnPhuong != null) {
+                waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
+            }
         } else {
             System.out.println(" ⏩ " + tinhName + " đã có giá trị — bỏ qua.");
         }
 
-        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName,
-                btnPhuong, searchPhuong, phuongName, null);
+        if (hasWardFieldInBlock(scope, idx) || hasWardLabelVisible(parentScope, blockIndex)) {
+            waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
+            btnPhuong = findWardButtonForBlock(parentScope, blockIndex);
+            searchPhuong = resolveAdminDropdownSearch(parentScope, blockIndex, true);
+        }
+        ensureWardSelectedBeforeDetail(parentScope, blockIndex, scope, idx, btnTinh, searchTinh, tinhName,
+                btnPhuong, searchPhuong, phuongName, provinceHint, wardHint);
 
         fillAddressDetailAtBlock(parentScope, blockIndex, chiTietValue,
                 "Chi tiết địa chỉ" + blockSuffix + ctx);
@@ -1783,33 +2265,46 @@ public class WebUI {
     }
 
     /** Bắt buộc chọn phường/xã trước chi tiết — tránh bỏ qua khi dropdown render chậm. */
-    private void ensureWardSelectedBeforeDetail(String scope, int idx, By btnTinh, By searchTinh, String tinhName,
-                                                By btnPhuong, By searchPhuong, String phuongName) {
-        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName,
-                btnPhuong, searchPhuong, phuongName, null);
-    }
-
-    private void ensureWardSelectedBeforeDetail(String scope, int idx, By btnTinh, By searchTinh, String tinhName,
+    private void ensureWardSelectedBeforeDetail(String parentScope, int blockIndex, String scope, int idx,
+                                                By btnTinh, By searchTinh, String tinhName,
                                                 By btnPhuong, By searchPhuong, String phuongName,
-                                                String wardHint) {
-        waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
-        waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
-
-        boolean wardPresent = existsNow(btnPhuong) || hasWardFieldInBlock(scope, idx);
-        if (!wardPresent) {
+                                                String provinceHint, String wardHint) {
+        By wardBtn = findWardButtonForBlock(parentScope, blockIndex);
+        if (wardBtn == null) {
+            wardBtn = btnPhuong;
+        }
+        if ((wardBtn == null || !existsNow(wardBtn)) && hasWardLabelVisible(parentScope, blockIndex)) {
+            waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
+            wardBtn = findWardButtonForBlock(parentScope, blockIndex);
+        }
+        if (wardBtn == null || !existsNow(wardBtn)) {
+            if (hasWardLabelVisible(parentScope, blockIndex)) {
+                System.out.println(" ⚠ Nhãn phường/xã hiển thị nhưng chưa tìm được dropdown — thử lại sau.");
+            }
             return;
         }
-        if (!existsNow(btnPhuong)) {
+        By wardSearch = resolveAdminDropdownSearch(parentScope, blockIndex, true);
+        if (wardSearch == null || !existsNow(wardSearch)) {
+            wardSearch = searchPhuong;
+        }
+        waitForWardDropdownReady(wardBtn, WaitConfig.WARD_READY);
+        waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
+        if (!existsNow(wardBtn)) {
             try {
-                waitUntilVisible(btnPhuong, WaitConfig.WARD_READY, phuongName);
+                waitUntilVisible(wardBtn, WaitConfig.WARD_READY, phuongName);
             } catch (RuntimeException ignored) {
-                return;
+                wardBtn = resolveAdminDropdownButton(parentScope, blockIndex, true);
+                if (wardBtn == null || !existsNow(wardBtn)) {
+                    System.out.println(" ⚠ Không tìm thấy dropdown phường/xã — thử chọn ngẫu nhiên sau khi có tỉnh.");
+                    return;
+                }
             }
         }
-        if (isAdminDropdownFilledAt(btnPhuong)) {
+        if (isAdminDropdownFilledAt(wardBtn)) {
             return;
         }
-        selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, wardHint);
+        selectWardWithRetry(btnTinh, searchTinh, tinhName, wardBtn, wardSearch, phuongName,
+                provinceHint, wardHint);
         pauseBetweenAddressSteps();
     }
 
@@ -1821,10 +2316,11 @@ public class WebUI {
 
     private void selectWardIfNeeded(String scope, int idx, By btnTinh, By searchTinh, String tinhName,
                                     By btnPhuong, By searchPhuong, String phuongName, boolean force) {
-        if (!force && isAdminDropdownFilledAt(btnPhuong)) {
+        if (!force && btnPhuong != null && isAdminDropdownFilledAt(btnPhuong)) {
             return;
         }
-        ensureWardSelectedBeforeDetail(scope, idx, btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName);
+        ensureWardSelectedBeforeDetail(scope, Math.max(0, idx - 1), scope, idx, btnTinh, searchTinh, tinhName,
+                btnPhuong, searchPhuong, phuongName, null, null);
     }
 
     /** Cuộn tới khối địa chỉ, đóng dropdown — tránh các khối dính nhau khi điền liên tiếp. */
@@ -1915,9 +2411,13 @@ public class WebUI {
         String scope = scopeXPath == null ? "" : scopeXPath;
         By detail = addressDetailTextareaAtBlock(scope, blockIndex);
         if (!existsNow(detail)) {
-            detail = addressDetailTextareaInScope(scope);
+            if (blockIndex > 0) {
+                detail = null;
+            } else {
+                detail = addressDetailTextareaInScope(scope);
+            }
         }
-        if (existsNow(detail)) {
+        if (detail != null && existsNow(detail)) {
             if (isAddressDetailFilledInBlock(scope, blockIndex)) {
                 System.out.println(" ⏩ Ô nhập [" + logLabel + "] đã có nội dung — bỏ qua.");
                 return;
@@ -1969,23 +2469,73 @@ public class WebUI {
         if (blockIndex < 0 || blockIndex >= total) {
             return true;
         }
-        String card = addressCardScope(parent, blockIndex);
-        String scope = card != null ? card : parent;
-        int idx = card != null ? 1 : blockIndex + 1;
-        By btnTinh = adminDropdownButtonAt(scope, false, idx);
-        By btnPhuong = adminDropdownButtonAt(scope, true, idx);
-        if ((existsNow(btnTinh)) && !isAdminDropdownFilledAt(btnTinh)) {
+        if (isWardRequiredAndUnfilled(parent, blockIndex)) {
             return false;
         }
-        if (hasWardFieldInBlock(scope, idx) && !isAdminDropdownFilledAt(btnPhuong)) {
+        By btnTinh = resolveAdminDropdownButton(parent, blockIndex, false);
+        By btnPhuong = findWardButtonForBlock(parent, blockIndex);
+        if (btnTinh != null && existsNow(btnTinh) && !isAdminDropdownFilledAt(btnTinh)) {
+            return false;
+        }
+        if (btnPhuong != null && existsNow(btnPhuong) && !isAdminDropdownFilledAt(btnPhuong)) {
             return false;
         }
         return isAddressDetailFilledInBlock(parent, blockIndex);
     }
 
+    private boolean isWardRequiredAndUnfilled(String parentScope, int blockIndex) {
+        if (!hasWardLabelVisible(parentScope, blockIndex)) {
+            return false;
+        }
+        By wardBtn = findWardButtonForBlock(parentScope, blockIndex);
+        if (wardBtn == null || !existsNow(wardBtn)) {
+            return true;
+        }
+        return !isAdminDropdownFilledAt(wardBtn);
+    }
+
+    private boolean hasWardLabelVisible(String parentScope, int blockIndex) {
+        String parent = parentScope == null ? "" : parentScope;
+        String card = addressCardScope(parent, blockIndex);
+        String scope = card != null ? card : parent;
+        int idx = card != null ? 1 : blockIndex + 1;
+        return hasWardFieldInBlock(scope, idx);
+    }
+
+    /** Tìm nút dropdown phường/xã — thử card scope, parent scope, và neo theo nhãn. */
+    private By findWardButtonForBlock(String parentScope, int blockIndex) {
+        String parent = parentScope == null ? "" : parentScope;
+        By resolved = resolveAdminDropdownButton(parent, blockIndex, true);
+        if (resolved != null && existsNow(resolved)) {
+            return resolved;
+        }
+        String card = addressCardScope(parent, blockIndex);
+        String scope = card != null ? card : parent;
+        int idx = card != null ? 1 : blockIndex + 1;
+        By byLabel = By.xpath("(" + scope + "//label[contains(., 'Phường') and contains(., 'xã')]"
+                + "/following::button[1])[" + idx + "]");
+        if (existsNow(byLabel)) {
+            return byLabel;
+        }
+        byLabel = By.xpath(scope + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1]");
+        if (existsNow(byLabel)) {
+            return byLabel;
+        }
+        By inCards = By.xpath("(" + parent + ADDRESS_CARD
+                + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1])["
+                + (blockIndex + 1) + "]");
+        if (existsNow(inCards)) {
+            return inCards;
+        }
+        return resolved;
+    }
+
     private boolean isAddressDetailFilledInBlock(String scope, int blockIndex) {
         By detail = addressDetailTextareaAtBlock(scope, blockIndex);
         if (!existsNow(detail)) {
+            if (blockIndex > 0) {
+                return false;
+            }
             detail = addressDetailTextareaInScope(scope);
         }
         if (!existsNow(detail)) {
@@ -2031,8 +2581,44 @@ public class WebUI {
         return By.xpath("(" + scope + "//label[" + label + "]/following-sibling::div//button"
                 + " | " + scope + "//label[" + label + "]/following-sibling::button"
                 + " | " + scope + "//label[" + label + "]/parent::div//button"
-                + " | " + scope + "//label[" + label + "]/ancestor::div[1]//button)["
-                + oneBasedIndex + "]");
+                + " | " + scope + "//label[" + label + "]/ancestor::div[1]//button"
+                + " | " + scope + "//label[" + label + "]/following::button[1])[" + oneBasedIndex + "]");
+    }
+
+    /** Tìm nút dropdown tỉnh/phường — thử card scope rồi parent scope. */
+    private By resolveAdminDropdownButton(String parentScope, int blockIndex, boolean phuong) {
+        String parent = parentScope == null ? "" : parentScope;
+        String card = addressCardScope(parent, blockIndex);
+        if (card != null) {
+            By inCard = adminDropdownButtonAt(card, phuong, 1);
+            if (existsNow(inCard)) {
+                return inCard;
+            }
+        }
+        int idx = blockIndex + 1;
+        By inParent = adminDropdownButtonAt(parent, phuong, idx);
+        if (existsNow(inParent)) {
+            return inParent;
+        }
+        String label = phuong ? "contains(., 'Phường') and contains(., 'xã')"
+                : "contains(., 'Tỉnh') and contains(., 'thành phố')";
+        By fallback = By.xpath("(" + parent + ADDRESS_CARD + "//label[" + label + "]/following::button[1])[" + (blockIndex + 1) + "]");
+        if (existsNow(fallback)) {
+            return fallback;
+        }
+        return inParent;
+    }
+
+    private By resolveAdminDropdownSearch(String parentScope, int blockIndex, boolean phuong) {
+        String parent = parentScope == null ? "" : parentScope;
+        String card = addressCardScope(parent, blockIndex);
+        if (card != null) {
+            By inCard = adminDropdownSearchAt(card, phuong, 1);
+            if (existsNow(inCard)) {
+                return inCard;
+            }
+        }
+        return adminDropdownSearchAt(parent, phuong, blockIndex + 1);
     }
 
     private static By adminDropdownSearchAt(String scope, boolean phuong, int oneBasedIndex) {
@@ -2437,6 +3023,141 @@ public class WebUI {
         } catch (Exception e) {
             System.out.println(" ⚠ Không chụp được ảnh (giữ toast): " + e.getMessage());
             return null;
+        }
+    }
+
+    /**
+     * Chụp ảnh kèm thông báo mềm (vd. banner VNeID) — cuộn tới banner inline trước khi chụp;
+     * toast góc màn thì giữ viewport (fixed position).
+     */
+    private String takeScreenshotForFeedback(List<String> messages) {
+        if (!screenshotsEnabled()) {
+            return null;
+        }
+        try {
+            WebElement vneidBanner = hasVneidInfoMessage(messages) ? findVneidInfoBanner() : null;
+            if (vneidBanner != null) {
+                scrollToElement(vneidBanner);
+                sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            } else {
+                WebElement anchor = findVisibleFeedbackElement(messages);
+                if (anchor != null) {
+                    if (isFloatingToastElement(anchor)) {
+                        return takeScreenshotPreserveToast();
+                    }
+                    scrollToElement(anchor);
+                    sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                } else if (hasVneidInfoMessage(messages)) {
+                    scrollWindowTo(0);
+                    sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                }
+            }
+            String shot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64);
+            return (shot == null || shot.isBlank()) ? null : shot;
+        } catch (Exception e) {
+            System.out.println(" ⚠ Không chụp được ảnh thông báo: " + e.getMessage());
+            return takeScreenshotPreserveToast();
+        }
+    }
+
+    /** Banner info VNeID — text ngắn, thường ở đầu form bước 2. */
+    private WebElement findVneidInfoBanner() {
+        String xpath = "//*[contains(normalize-space(.), 'điền sẵn')"
+                + " and contains(normalize-space(.), 'VNeID')"
+                + " and string-length(normalize-space(.)) < 220]";
+        WebElement best = null;
+        int bestLen = Integer.MAX_VALUE;
+        for (WebElement el : driver.findElements(By.xpath(xpath))) {
+            try {
+                if (!el.isDisplayed()) {
+                    continue;
+                }
+                String text = readElementText(el);
+                if (text == null || text.isBlank() || text.length() >= bestLen) {
+                    continue;
+                }
+                best = el;
+                bestLen = text.length();
+            } catch (Exception ignored) {
+            }
+        }
+        return best;
+    }
+
+    private WebElement findVisibleFeedbackElement(List<String> messages) {
+        if (messages == null || messages.isEmpty()) {
+            return null;
+        }
+        WebElement best = null;
+        int bestLen = Integer.MAX_VALUE;
+        for (String msg : messages) {
+            if (msg == null || msg.isBlank()) {
+                continue;
+            }
+            String probe = feedbackSearchProbe(msg);
+            if (probe.isBlank()) {
+                continue;
+            }
+            String xpath = "//*[contains(normalize-space(.), '" + probe.replace("'", "") + "')]";
+            for (WebElement el : driver.findElements(By.xpath(xpath))) {
+                try {
+                    if (!el.isDisplayed()) {
+                        continue;
+                    }
+                    String text = readElementText(el);
+                    if (text == null || text.isBlank()) {
+                        continue;
+                    }
+                    if (text.length() >= bestLen) {
+                        continue;
+                    }
+                    best = el;
+                    bestLen = text.length();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return best;
+    }
+
+    private static String feedbackSearchProbe(String msg) {
+        String trimmed = msg.trim().replaceAll("\\s+", " ");
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        if (lower.contains("vneid") && lower.contains("điền sẵn")) {
+            return "điền sẵn";
+        }
+        if (trimmed.length() <= 48) {
+            return trimmed;
+        }
+        return trimmed.substring(0, 48);
+    }
+
+    private static boolean hasVneidInfoMessage(List<String> messages) {
+        if (messages == null) {
+            return false;
+        }
+        for (String msg : messages) {
+            if (msg == null || msg.isBlank()) {
+                continue;
+            }
+            String lower = msg.toLowerCase(Locale.ROOT);
+            if (lower.contains("vneid") || (lower.contains("định danh") && lower.contains("điền sẵn"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isFloatingToastElement(WebElement el) {
+        try {
+            WebElement toastHost = el.findElement(By.xpath(
+                    "./ancestor-or-self::*[contains(@class,'toast') or contains(@class,'Toastify')"
+                            + " or contains(@class,'notification') or contains(@class,'Notification')"
+                            + " or contains(@class,'ant-message') or contains(@class,'ant-notification')"
+                            + " or contains(@class,'sonner') or @data-sonner-toast][1]"));
+            return toastHost != null && toastHost.isDisplayed();
+        } catch (Exception e) {
+            return false;
         }
     }
 

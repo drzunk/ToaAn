@@ -35,7 +35,6 @@ public abstract class TaoDonBaseTest extends BaseTest {
                 "Setup trước khi chạy kịch bản tạo đơn (không phải test đăng nhập độc lập).");
         try {
             performLogin();
-            new DashboardPage(driver).waitForDashboard(WaitConfig.DASHBOARD);
             ExtentReportManager.logPass("Session sẵn sàng — các kịch bản tạo đơn sẽ dùng chung trình duyệt này.");
             System.out.println(" ✅ Session dùng chung — sẵn sàng chạy các testcase tạo đơn.");
         } catch (BrowserClosedException ex) {
@@ -75,13 +74,11 @@ public abstract class TaoDonBaseTest extends BaseTest {
     protected void performLogin() {
         webUI.failIfBrowserClosed();
         LoginPage loginPage = new LoginPage(driver);
-        loginPage.openPage();
-        webUI.failIfBrowserClosed();
-        loginPage.chonDangNhapBangTaiKhoan();
-        loginPage.thucHienDangNhap(
+        loginPage.loginUntilDashboard(
                 ConfigReader.getValue("username"),
                 ConfigReader.getValue("password"),
-                "");
+                3,
+                WaitConfig.DASHBOARD_LOGIN);
     }
 
     /**
@@ -94,40 +91,7 @@ public abstract class TaoDonBaseTest extends BaseTest {
                     "Trình duyệt chưa mở hoặc đã đóng — dừng kịch bản ngay.");
         }
         webUI.failIfBrowserClosed();
-
-        DashboardPage dashboardPage = new DashboardPage(driver);
-        if (dashboardPage.isDashboardVisible()) {
-            return;
-        }
-
         LoginPage loginPage = new LoginPage(driver);
-        try {
-            driver.get(loginPage.getPageUrl());
-        } catch (BrowserClosedException ex) {
-            throw ex;
-        } catch (Exception e) {
-            webUI.failIfBrowserClosed(e);
-            System.out.println(" ⚠ Không mở được trang chủ: " + e.getMessage());
-        }
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        webUI.failIfBrowserClosed();
-
-        if (dashboardPage.isDashboardVisible()) {
-            return;
-        }
-
-        try {
-            dashboardPage.waitForDashboard(WaitConfig.DASHBOARD_AFTER_NAV);
-            return;
-        } catch (BrowserClosedException ex) {
-            throw ex;
-        } catch (RuntimeException ignored) {
-        }
-
-        if (loginPage.isLoginFormVisible()) {
-            System.out.println(" ⚠ Session hết hạn — đăng nhập lại...");
-            performLogin();
-            dashboardPage.waitForDashboard(WaitConfig.DASHBOARD);
-        }
+        new DashboardPage(driver).ensureReady(loginPage, this::performLogin, WaitConfig.DASHBOARD);
     }
 }

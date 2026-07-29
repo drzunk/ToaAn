@@ -32,6 +32,9 @@ public final class WaitConfig {
     /** Dashboard sau đăng nhập / đăng nhập lại. */
     public static final int DASHBOARD = 12;
 
+    /** Chờ Dashboard sau bấm [Đăng nhập] — môi trường dev đôi khi >12s. */
+    public static final int DASHBOARD_LOGIN = 25;
+
     /**
      * Dashboard sau khi đã {@code driver.get(home)} — trang đang load,
      * không chờ trước khi navigate.
@@ -68,6 +71,9 @@ public final class WaitConfig {
 
     /** Nghỉ ngắn sau click / đóng nháp (ms). */
     public static final long SETTLE_MS = 280;
+
+    /** Chờ catalog/API dropdown sau khi chọn loại đơn (tránh crash danhSach). */
+    public static final int CATALOG_READY = 12;
 
     /** Nghỉ sau thao tác nặng hơn (thêm bị đơn, đổi tab). */
     public static final long SETTLE_LONG_MS = 700;

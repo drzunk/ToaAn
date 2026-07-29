@@ -17,9 +17,10 @@ import vn.tuphap.automation.ui.WebUI;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
-import org.testng.Assert;
+import vn.tuphap.automation.config.ConfigReader;
 import vn.tuphap.automation.pages.BiDonPage;
 import vn.tuphap.automation.pages.DashboardPage;
+import vn.tuphap.automation.pages.LoginPage;
 import vn.tuphap.automation.pages.NguyenDonPage;
 import vn.tuphap.automation.pages.NoiDungDonPage;
 import vn.tuphap.automation.pages.TaiLieuPage;
@@ -67,9 +68,18 @@ public final class TaoDonFlow {
     public void moFormNopDonMoi() {
         TestActionLog.buoc(0, "Mở biểu mẫu Nộp đơn mới", "Bảng điều khiển");
         DashboardPage dashboard = new DashboardPage(driver);
-        Assert.assertTrue(dashboard.isDashboardVisible(), "Bảng điều khiển phải sẵn sàng trước khi nộp đơn");
+        LoginPage loginPage = new LoginPage(driver);
+        dashboard.ensureReady(loginPage, () -> reloginIfNeeded(loginPage), WaitConfig.DASHBOARD);
         dashboard.clickNopDonMoi();
         TestActionLog.trangThaiBuoc("Đạt");
+    }
+
+    private void reloginIfNeeded(LoginPage loginPage) {
+        loginPage.loginUntilDashboard(
+                ConfigReader.getValue("username"),
+                ConfigReader.getValue("password"),
+                2,
+                WaitConfig.DASHBOARD_LOGIN);
     }
 
     public void dienBuoc1(TaoDonScenario s) {
@@ -115,6 +125,16 @@ public final class TaoDonFlow {
         page.chonDongYLuuThongTinDinhDanh();
         driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        if (DataDictionary.isToChuc(s.loaiChuThe())) {
+            page.dienDayDuToChucTruocTiepTheo(
+                    s.tenToChuc(), s.loaiHinhToChuc(), s.mst(), s.diaChiToChuc(),
+                    s.nguoiDaiDienToChuc(), s.chucVuToChuc(), s.sdt(), s.email(),
+                    s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap());
+        } else {
+            page.dienDayDuCaNhanTruocTiepTheo(
+                    s.hoTen(), s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap(),
+                    s.thuongTru(), s.lienLac(), s.sdt(), s.email());
+        }
         webUI.logValidationMessages("Trước Tiếp theo — bước 2");
         page.clickTiepTheo();
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
@@ -173,6 +193,8 @@ public final class TaoDonFlow {
         if (page.isUploadMode()) {
             page.uploadNoiDungFile();
             TestActionLog.ghiChu("Bước 4 dạng tải file — tải lại file thay vì sửa textarea yêu cầu cụ thể");
+        } else if (page.isIframeMode()) {
+            page.prepareIframeResubmitAfterEdit(yeuCauMoi);
         } else {
             page.dienForm(s.loaiDon(), s.thoiDiemPhatSinh(), s.giaTriTranhChap(),
                     s.tomTatQuaTrinh(), yeuCauMoi, s.canCuPhapLy());

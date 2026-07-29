@@ -16,15 +16,13 @@ public class LoginTest extends BaseTest {
             description = "Đăng nhập thành công và thấy Dashboard")
     public void testDangNhapThanhCong() {
         LoginPage loginPage = new LoginPage(driver);
-        loginPage.openPage();
-        loginPage.chonDangNhapBangTaiKhoan();
-        loginPage.thucHienDangNhap(
+        loginPage.loginUntilDashboard(
                 ConfigReader.getValue("username"),
                 ConfigReader.getValue("password"),
-                "");
+                3,
+                WaitConfig.DASHBOARD_LOGIN);
 
         DashboardPage dashboardPage = new DashboardPage(driver);
-        dashboardPage.waitForDashboard(WaitConfig.DASHBOARD);
         Assert.assertTrue(dashboardPage.isDashboardVisible(),
                 "Sau đăng nhập phải thấy Dashboard [Nộp đơn mới]");
         new WebUI(driver).captureOverview("Ảnh tổng quan — Dashboard sau đăng nhập thành công");

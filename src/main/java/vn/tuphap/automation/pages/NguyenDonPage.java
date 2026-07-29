@@ -294,6 +294,7 @@ public class NguyenDonPage {
     public void hoanThienDiaChiNguyenDon(String thuongTru, String lienLac) {
         boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
         webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru, "Thường trú");
+        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
         chonDiaChiLienLacGiongThuongTru(giongThuongTru);
         if (giongThuongTru) {
             return;
@@ -303,6 +304,7 @@ public class NguyenDonPage {
             webUI.dismissOpenDropdowns();
             webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
             webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac, "Liên lạc");
+            webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
         } else if (webUI.existsNow(txtDiaChiLienLac) && webUI.isElementEnabledNow(txtDiaChiLienLac)) {
             webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
         }
@@ -389,6 +391,8 @@ public class NguyenDonPage {
         webUI.scrollToElement(optDongYLuuDinhDanh);
         webUI.ensureCustomToggleSelected(optDongYLuuDinhDanh, true,
                 "Hộp kiểm [Đồng ý lưu Thông tin định danh]");
+        // Banner VNeID / toast thường hiện ngay sau tick — chụp trước khi cuộn form điền lại.
+        webUI.logFeedbackAfterIdentitySave();
     }
 
     private void waitLienLacAddressHidden() {
@@ -536,7 +540,8 @@ public class NguyenDonPage {
         }
         int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
         if (blocks >= 2) {
-            webUI.selectAdministrativeAddressBlockInScope(MAIN_SECTION, 1);
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, diaChiCuTru, "Nơi cư trú");
+            return;
         }
         By txtCuTru = fieldInMain("contains(., 'Địa chỉ nơi cư trú')");
         if (webUI.isElementVisible(txtCuTru)) {
@@ -951,10 +956,14 @@ public class NguyenDonPage {
         }
     }
 
-    /** Kiểm tra nhanh địa chỉ trụ sở tổ chức trước Tiếp theo. */
+    /** Kiểm tra nhanh địa chỉ trụ sở + nơi cư trú đại diện trước Tiếp theo. */
     public void chuanBiDiaChiToChucTruocTiepTheo(String diaChiTruSo) {
         if (!webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 0)) {
-            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, diaChiTruSo);
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, diaChiTruSo, "Trụ sở");
+        }
+        if (webUI.countVisibleAddressBlocks(MAIN_SECTION) >= 2
+                && !webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 1)) {
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, diaChiTruSo, "Nơi cư trú");
         }
     }
 
@@ -964,7 +973,64 @@ public class NguyenDonPage {
 
     /** Sửa tỉnh/phường + chi tiết khi VNeID prefill lệch hoặc thiếu. */
     public void damBaoDiaChiNguyenDon(String thuongTru, String lienLac) {
-        hoanThienDiaChiNguyenDon(thuongTru, lienLac);
+        damBaoDiaChiNguyenDonDayDu(thuongTru, lienLac);
+    }
+
+    /**
+     * Luôn nhập tay đủ địa chỉ (tỉnh → phường → chi tiết) — không tin prefill VNeID.
+     * Gọi lại trước Tiếp theo nếu checkbox định danh làm form thay đổi async.
+     */
+    public void damBaoDiaChiNguyenDonDayDu(String thuongTru, String lienLac) {
+        boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
+        chonDiaChiLienLacGiongThuongTru(giongThuongTru);
+        webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru, "Thường trú");
+        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+        if (!giongThuongTru) {
+            int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
+            if (blocks >= 2) {
+                webUI.dismissOpenDropdowns();
+                webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
+                webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac, "Liên lạc");
+                webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+            } else if (webUI.existsNow(txtDiaChiLienLac) && webUI.isElementEnabledNow(txtDiaChiLienLac)) {
+                webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
+            }
+        }
+    }
+
+    /**
+     * Điền lại toàn bộ nguyên đơn cá nhân — luôn ghi đè prefill, đảm bảo phường/xã trước Tiếp theo.
+     */
+    public void dienDayDuCaNhanTruocTiepTheo(String hoTen, String ngaySinh, String gioiTinh,
+                                            String cccd, String ngayCap, String noiCap,
+                                            String thuongTru, String lienLac, String sdt, String email) {
+        System.out.println(" ℹ Bước 2 — điền lại đủ trường (ghi đè prefill) trước Tiếp theo...");
+        dienThongTinCaNhan(hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
+        damBaoDiaChiNguyenDonDayDu(thuongTru, lienLac);
+        webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
+        webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
+    }
+
+    /** Điền lại toàn bộ nguyên đơn tổ chức trước Tiếp theo. */
+    public void dienDayDuToChucTruocTiepTheo(String tenToChuc, String loaiHinh, String mst, String diaChi,
+                                             String nguoiDaiDien, String chucVu, String sdt, String email,
+                                             String repNgaySinh, String repGioiTinh, String repCccd,
+                                             String repNgayCap, String noiCap) {
+        dienThongTinToChuc(tenToChuc, loaiHinh, mst, diaChi, nguoiDaiDien, chucVu, sdt, email,
+                repNgaySinh, repGioiTinh, repCccd, repNgayCap, noiCap);
+        damBaoDiaChiToChucDayDu(diaChi);
+    }
+
+    /** Trụ sở (#1) + nơi cư trú đại diện (#2) — tỉnh → phường → chi tiết. */
+    public void damBaoDiaChiToChucDayDu(String diaChiTruSo) {
+        webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, diaChiTruSo, "Trụ sở");
+        int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
+        if (blocks >= 2) {
+            webUI.dismissOpenDropdowns();
+            webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, diaChiTruSo, "Nơi cư trú");
+        }
+        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
     }
 
     /** @deprecated dùng {@link #damBaoDiaChiNguyenDon(String, String)} */

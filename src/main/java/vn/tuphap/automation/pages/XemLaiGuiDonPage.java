@@ -14,8 +14,10 @@ import vn.tuphap.automation.ui.WebUI;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 public class XemLaiGuiDonPage {
     private final WebDriver driver;
@@ -92,6 +94,102 @@ public class XemLaiGuiDonPage {
 
     public void waitStepReady() {
         webUI.waitUntilVisible(stepReadyMarker, WaitConfig.STEP, "Bước 6 [Xem lại & Gửi đơn]");
+        waitXemTruocDonContentReady();
+    }
+
+    /**
+     * Chờ card Xem trước đơn render nội dung eform/PDF (dữ liệu đã nhập ở bước 4).
+     * Chỉ sau khi preview sẵn sàng mới tick xác nhận / Gửi đơn.
+     */
+    public void waitXemTruocDonContentReady() {
+        if (!NoiDungDonPage.wasLastStep4Iframe()) {
+            System.out.println(" ⏩ Bước 4 không dùng eform iframe (upload/legacy) — bỏ qua chờ preview, gửi đơn luôn.");
+            return;
+        }
+        if (!webUI.existsNow(xemTruocDonCardTitle())) {
+            System.out.println(" ⏩ Không có card [Xem trước đơn] — bỏ qua chờ preview eform.");
+            return;
+        }
+        System.out.println(" ⏳ Chờ nội dung [Xem trước đơn] (eform bước 4) load...");
+        long deadline = System.currentTimeMillis() + WaitConfig.STEP * 1000L;
+        while (System.currentTimeMillis() < deadline) {
+            webUI.failIfBrowserClosed();
+            if (isXemTruocDonContentReady()) {
+                System.out.println(" ✅ Nội dung [Xem trước đơn] đã sẵn sàng.");
+                return;
+            }
+            webUI.sleepMillis(300);
+        }
+        System.out.println(" ⚠ Hết thời gian chờ [Xem trước đơn] — vẫn thử thao tác gửi đơn.");
+    }
+
+    private static By xemTruocDonCardTitle() {
+        return By.xpath("(" + REVIEW_CARD + ")//*[self::span or self::h3 or self::p]"
+                + "[contains(normalize-space(.), 'Xem trước đơn')]");
+    }
+
+    private static String xemTruocDonCardScope() {
+        return "(" + REVIEW_CARD + ")//*[self::span or self::h3 or self::p]"
+                + "[contains(normalize-space(.), 'Xem trước đơn')]"
+                + "/ancestor::div[contains(@class,'border')][1]";
+    }
+
+    private boolean isXemTruocDonContentReady() {
+        if (isXemTruocDonStillLoading()) {
+            return false;
+        }
+        if (hasXemTruocPreviewIframe()) {
+            return true;
+        }
+        if (hasXemTruocTextSummary()) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean isXemTruocDonStillLoading() {
+        return webUI.existsNow(By.xpath(xemTruocDonCardScope()
+                + "//*[contains(@class,'animate-spin') or contains(@class,'loading')"
+                + " or contains(normalize-space(.),'Đang tải') or contains(normalize-space(.),'đang tải')]"));
+    }
+
+    /** iframe preview (eform /f/ hoặc PDF) trong card Xem trước đơn. */
+    private boolean hasXemTruocPreviewIframe() {
+        By iframe = By.xpath(xemTruocDonCardScope()
+                + "//iframe[@src and string-length(normalize-space(@src)) > 4]");
+        if (!webUI.existsNow(iframe)) {
+            return false;
+        }
+        try {
+            for (WebElement el : driver.findElements(iframe)) {
+                if (!el.isDisplayed()) {
+                    continue;
+                }
+                String src = el.getAttribute("src");
+                if (isMeaningfulPreviewSrc(src)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    /** Fallback: tóm tắt text/HTML khi không có iframe preview. */
+    private boolean hasXemTruocTextSummary() {
+        return webUI.existsNow(By.xpath(xemTruocDonCardScope()
+                + "//*[self::textarea or self::p or contains(@class,'prose')]"
+                + "[string-length(normalize-space(.)) > 15]"));
+    }
+
+    private static boolean isMeaningfulPreviewSrc(String src) {
+        if (src == null) {
+            return false;
+        }
+        String trimmed = src.trim().toLowerCase(Locale.ROOT);
+        return trimmed.length() > 4
+                && !trimmed.equals("about:blank")
+                && !trimmed.startsWith("javascript:");
     }
 
     /**
@@ -722,7 +820,6 @@ public class XemLaiGuiDonPage {
     }
 
     public void xacNhanThongTin() {
-        waitStepReady();
         if (!webUI.isElementVisible(lblXacNhan)) {
             throw new RuntimeException("❌ Không thấy Checkbox xác nhận ở Bước 6.");
         }
@@ -788,7 +885,11 @@ public class XemLaiGuiDonPage {
     }
 
     public void choGuiDonThanhCong(int timeoutSeconds) {
-        GuiDonKetQua kq = choKetQuaSauGuiDon(timeoutSeconds);
+        choGuiDonThanhCong(timeoutSeconds, Set.of());
+    }
+
+    public void choGuiDonThanhCong(int timeoutSeconds, Set<String> baselineFeedback) {
+        GuiDonKetQua kq = choKetQuaSauGuiDon(timeoutSeconds, baselineFeedback);
         if (!kq.isSuccess()) {
             throw new RuntimeException("❌ " + kq.message());
         }
@@ -797,8 +898,9 @@ public class XemLaiGuiDonPage {
     public void xemLaiVaGuiDon() {
         waitStepReady();
         xacNhanThongTin();
+        Set<String> baseline = snapshotFeedbackBaseline();
         clickGuiDon();
-        choGuiDonThanhCong();
+        choGuiDonThanhCong(submitTimeoutSec(), baseline);
     }
 
     /**
@@ -809,8 +911,20 @@ public class XemLaiGuiDonPage {
     public GuiDonKetQua thuGuiDonVaChoKetQua() {
         waitStepReady();
         xacNhanThongTin();
+        Set<String> baseline = snapshotFeedbackBaseline();
         clickGuiDon();
-        return choKetQuaSauGuiDon(submitTimeoutSec());
+        return choKetQuaSauGuiDon(submitTimeoutSec(), baseline);
+    }
+
+    private Set<String> snapshotFeedbackBaseline() {
+        Set<String> baseline = new LinkedHashSet<>();
+        for (String msg : webUI.collectSystemFeedbackMessages()) {
+            String n = normalizeMessage(msg);
+            if (!n.isBlank()) {
+                baseline.add(n);
+            }
+        }
+        return baseline;
     }
 
     /**
@@ -818,6 +932,11 @@ public class XemLaiGuiDonPage {
      * Hết trần → TIMEOUT + chụp màn hình hiện tại.
      */
     public GuiDonKetQua choKetQuaSauGuiDon(int timeoutSeconds) {
+        return choKetQuaSauGuiDon(timeoutSeconds, Set.of());
+    }
+
+    public GuiDonKetQua choKetQuaSauGuiDon(int timeoutSeconds, Set<String> baselineFeedback) {
+        Set<String> baseline = baselineFeedback == null ? Set.of() : baselineFeedback;
         System.out.println(" ⏳ Chờ hệ thống xử lý gửi đơn (tối đa " + timeoutSeconds + "s)...");
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         int lastLogged = -1;
@@ -826,10 +945,19 @@ public class XemLaiGuiDonPage {
                     - (deadline - System.currentTimeMillis()) + 999) / 1000);
             elapsed = Math.min(Math.max(elapsed, 1), timeoutSeconds);
 
+            GuiDonKetQua fromNewFeedback = tryReadNewSubmitFeedback(baseline);
+            if (fromNewFeedback != null) {
+                System.out.println(" " + (fromNewFeedback.isSuccess() ? "✅" : "❌")
+                        + " Phản hồi sau Gửi đơn (" + elapsed + "s): " + fromNewFeedback.message());
+                TestActionLog.validation("Sau Gửi đơn — bước 6", fromNewFeedback.message());
+                return fromNewFeedback;
+            }
+
             GuiDonKetQua fromToast = tryReadToastKetQua();
             if (fromToast != null) {
                 System.out.println(" " + (fromToast.isSuccess() ? "✅" : "❌")
                         + " Toast sau Gửi đơn (" + elapsed + "s): " + fromToast.message());
+                TestActionLog.validation("Sau Gửi đơn — bước 6", fromToast.message());
                 return fromToast;
             }
 
@@ -882,33 +1010,59 @@ public class XemLaiGuiDonPage {
      *
      * @return null nếu chưa thấy toast
      */
-    private GuiDonKetQua tryReadToastKetQua() {
-        WebElement toast = findVisibleToast();
-        if (toast == null) {
+    /**
+     * Phản hồi mới sau Gửi đơn — so với baseline trước click, bỏ qua toast eform bước 4 cũ.
+     */
+    private GuiDonKetQua tryReadNewSubmitFeedback(Set<String> baseline) {
+        List<String> fresh = new ArrayList<>();
+        for (String msg : webUI.collectSystemFeedbackMessages()) {
+            String n = normalizeMessage(msg);
+            if (n.isBlank() || baseline.contains(n) || isEformBridgeToast(n)) {
+                continue;
+            }
+            fresh.add(n);
+        }
+        if (fresh.isEmpty()) {
             return null;
         }
-        String text = normalizeMessage(toast.getText());
-        if (text.isBlank()) {
-            return null;
-        }
-        GuiDonKetQua.TrangThai st = classifyToast(toast, text);
-        if (st == null) {
-            return null;
-        }
+        String joined = String.join(" | ", fresh);
+        String lower = joined.toLowerCase(Locale.ROOT);
         String shot = webUI.takeScreenshotPreserveToast();
-        return new GuiDonKetQua(st, text, shot);
+        System.out.println(" 📸 Phát hiện phản hồi mới sau Gửi đơn — chụp ảnh ngay.");
+        if (looksLikeSuccess(lower)) {
+            return new GuiDonKetQua(GuiDonKetQua.TrangThai.SUCCESS, joined, shot);
+        }
+        return new GuiDonKetQua(GuiDonKetQua.TrangThai.ERROR, joined, shot);
     }
 
-    private WebElement findVisibleToast() {
+    private GuiDonKetQua tryReadToastKetQua() {
+        for (WebElement toast : findAllVisibleToasts()) {
+            String text = normalizeMessage(toast.getText());
+            if (text.isBlank() || isEformBridgeToast(text)) {
+                continue;
+            }
+            GuiDonKetQua.TrangThai st = classifyToast(toast, text);
+            if (st == null) {
+                continue;
+            }
+            String shot = webUI.takeScreenshotPreserveToast();
+            return new GuiDonKetQua(st, text, shot);
+        }
+        return null;
+    }
+
+    private List<WebElement> findAllVisibleToasts() {
+        List<WebElement> found = new ArrayList<>();
         for (By by : TOAST_SELECTORS) {
             try {
                 for (WebElement el : driver.findElements(by)) {
                     try {
-                        if (el.isDisplayed()) {
-                            String t = normalizeMessage(el.getText());
-                            if (!t.isBlank() && t.length() <= 500) {
-                                return el;
-                            }
+                        if (!el.isDisplayed()) {
+                            continue;
+                        }
+                        String t = normalizeMessage(el.getText());
+                        if (!t.isBlank() && t.length() <= 500) {
+                            found.add(el);
                         }
                     } catch (Exception ignored) {
                     }
@@ -916,7 +1070,16 @@ public class XemLaiGuiDonPage {
             } catch (Exception ignored) {
             }
         }
-        return null;
+        found.sort((a, b) -> {
+            try {
+                int la = normalizeMessage(a.getText()).length();
+                int lb = normalizeMessage(b.getText()).length();
+                return Integer.compare(la, lb);
+            } catch (Exception e) {
+                return 0;
+            }
+        });
+        return found;
     }
 
     private static GuiDonKetQua.TrangThai classifyToast(WebElement toast, String text) {
@@ -969,6 +1132,17 @@ public class XemLaiGuiDonPage {
                 || lower.contains("error")
                 || lower.contains("exception")
                 || lower.contains("failed");
+    }
+
+    /** Toast bridge iframe bước 4 — không phải kết quả Gửi đơn bước 6. */
+    private static boolean isEformBridgeToast(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.contains("biểu mẫu chưa phản hồi")
+                || lower.contains("gửi ngay trong biểu mẫu")
+                || lower.contains("đã ghi nhận nội dung");
     }
 
     private String firstVisibleText(By by, String fallback) {

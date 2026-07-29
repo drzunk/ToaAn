@@ -86,9 +86,7 @@ public class TaoDonPage {
 
         // Phá sản không có danh sách thả xuống loại việc trên UI
         if (DataDictionary.hasLoaiViecDropdown(loaiDon)) {
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            webUI.selectDropdownWithCheck(btnDropdownLoaiViec, listOptionsLoaiViec, loaiViecCuThe,
-                    "Dropdown [Loại việc cụ thể]");
+            chonLoaiViecWithCrashRecovery(loaiDon, loaiViecCuThe, boQuaDonNhap);
         } else {
             System.out.println(" ⏩ Bỏ qua Dropdown loại việc — loại đơn [" + loaiDon
                     + "] không có trên biểu mẫu (nhãn danh mục: " + loaiViecCuThe + ").");
@@ -119,5 +117,39 @@ public class TaoDonPage {
 
     public void clickTiepTheo() {
         webUI.clickElement(btnTiepTheo, "Nút [Tiếp theo]");
+    }
+
+    /**
+     * Chọn loại việc sau loại đơn — retry F5 khi frontend crash danhSach (API chưa về).
+     */
+    private void chonLoaiViecWithCrashRecovery(String loaiDon, String loaiViecCuThe, boolean boQuaDonNhap) {
+        By theLoaiDon = getCardLoaiDon(loaiDon);
+        RuntimeException last = null;
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                if (attempt > 1) {
+                    webUI.clickElement(theLoaiDon, "Thẻ Loại đơn: [" + loaiDon + "] (thử lại sau F5)");
+                }
+                webUI.waitForStableFormAfterLoaiDon(btnDropdownLoaiViec, WaitConfig.CATALOG_READY);
+                webUI.selectDropdownWithCheck(btnDropdownLoaiViec, listOptionsLoaiViec, loaiViecCuThe,
+                        "Dropdown [Loại việc cụ thể]");
+                return;
+            } catch (RuntimeException e) {
+                last = e;
+                if (attempt < 2 && webUI.shouldRetryAfterFrontendCrash(e)) {
+                    webUI.recoverFromFrontendCrash();
+                    if (boQuaDonNhap) {
+                        boQuaNhapNeuCo();
+                    }
+                    System.out.println(" ⏳ Thử lại chọn loại đơn / loại việc sau khi tải lại trang...");
+                    webUI.sleepMillis(WaitConfig.SETTLE_MS);
+                    continue;
+                }
+                throw e;
+            }
+        }
+        if (last != null) {
+            throw last;
+        }
     }
 }
