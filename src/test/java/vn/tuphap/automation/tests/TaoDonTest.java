@@ -1,9 +1,11 @@
 package vn.tuphap.automation.tests;
 
 import vn.tuphap.automation.core.TaoDonBaseTest;
+import vn.tuphap.automation.core.ScenarioDispatch;
 import org.openqa.selenium.By;
 import org.testng.Assert;
 import org.testng.ITestContext;
+import org.testng.SkipException;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import vn.tuphap.automation.pages.GuiDonKetQua;
@@ -20,23 +22,67 @@ import java.util.List;
 
 public class TaoDonTest extends TaoDonBaseTest {
 
-    @DataProvider(name = "DuLieuTaoDon")
+    /**
+     * parallel=true: TestNG chia từng dòng cho 1 thread — mỗi case chạy đúng 1 lần,
+     * không nhân đôi trên 3 browser.
+     */
+    @DataProvider(name = "DuLieuTaoDon", parallel = true)
     public Object[][] getData(ITestContext context) {
+        ScenarioDispatch.reset();
         String mode = resolveSuiteMode(context);
+        Object[][] data;
         if ("smoke".equalsIgnoreCase(mode)) {
-            return DataGenerator.generateSmokeData();
+            data = DataGenerator.generateSmokeData();
+        } else if ("mid".equalsIgnoreCase(mode)) {
+            data = DataGenerator.generateMidCoverageData();
+        } else {
+            data = DataGenerator.generateFullCoverageData();
         }
-        if ("mid".equalsIgnoreCase(mode)) {
-            return DataGenerator.generateMidCoverageData();
+        data = filterByOnlyStt(data);
+        System.out.println("📋 DataProvider DuLieuTaoDon: " + data.length
+                + " case (mỗi case 1 browser/thread, không trùng).");
+        return data;
+    }
+
+    /**
+     * Chạy lại case lỗi: {@code -Dtaodon.onlyStt=12,13} (STT trong ma trận).
+     */
+    private static Object[][] filterByOnlyStt(Object[][] data) {
+        String raw = System.getProperty("taodon.onlyStt",
+                System.getenv().getOrDefault("TOAAN_ONLY_STT", "")).trim();
+        if (raw.isBlank()) {
+            return data;
         }
-        return DataGenerator.generateFullCoverageData();
+        java.util.Set<String> want = new java.util.LinkedHashSet<>();
+        for (String p : raw.split("[,;\\s]+")) {
+            if (!p.isBlank()) {
+                want.add(p.trim());
+            }
+        }
+        java.util.List<Object[]> kept = new java.util.ArrayList<>();
+        for (Object[] row : data) {
+            if (row == null || row.length == 0 || !(row[0] instanceof TaoDonScenario s)) {
+                continue;
+            }
+            if (want.contains(s.stt())) {
+                kept.add(row);
+                System.out.println("🔎 onlyStt giữ #" + s.stt() + " — " + s.loaiDon()
+                        + " / " + s.loaiViec() + " | ND=" + s.loaiChuThe());
+            }
+        }
+        if (kept.isEmpty()) {
+            throw new IllegalStateException("taodon.onlyStt=" + raw + " không khớp case nào.");
+        }
+        System.out.println("📋 Lọc onlyStt=" + raw + " → " + kept.size() + " case.");
+        return kept.toArray(new Object[0][]);
     }
 
     @Test(dataProvider = "DuLieuTaoDon", groups = {"smoke", "mid", "full"},
             description = "Luồng tạo đơn đầy đủ 6 bước: chọn loại đơn → nguyên đơn → bị đơn → nội dung → tài liệu → gửi đơn")
     public void testFlowTaoDon(TaoDonScenario s) {
         Assert.assertNotNull(s, "Kịch bản kiểm thử không được để trống");
-        TaoDonFlow flow = new TaoDonFlow(driver, webUI);
+        claimExclusive(s);
+        TaoDonFlow flow = new TaoDonFlow(getDriver(), getWebUI());
 
         XemLaiGuiDonPage review = flow.denManXemLai(s);
         ExtentReportManager.logPass("Đã điền biểu mẫu bước 1→5 và đến màn Xem lại.");
@@ -64,28 +110,22 @@ public class TaoDonTest extends TaoDonBaseTest {
             baoCaoMsg = systemMsg;
         }
 
+        // Lỗi hệ thống sau Gửi đơn → FAIL cứng + ảnh (không soft-fail warning).
+        TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_THAT_BAI);
+        TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_THAT_BAI);
+        TaoDonExcelTestLog.setKetQuaThucTe(systemMsg);
+        TaoDonExcelTestLog.setGhiChuKetQua(kq.isTimeout()
+                ? "Không có toast từ hệ thống trong thời gian chờ sau Gửi đơn."
+                : "Message lỗi hệ thống sau Gửi đơn: " + systemMsg);
         if (shotSauGui != null) {
-            ExtentReportManager.logWarningWithScreenshots(baoCaoMsg, List.of(shotSauGui));
+            ExtentReportManager.logFailWithScreenshot(baoCaoMsg, shotSauGui);
         } else {
-            ExtentReportManager.logWarning(baoCaoMsg);
+            ExtentReportManager.logFail(baoCaoMsg);
         }
-
-        if (requireSubmitSuccess()) {
-            TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_THAT_BAI);
-            Assert.fail(baoCaoMsg);
-        } else {
-            TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT_CANH_BAO);
-            TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_DAT_CANH_BAO);
-            TaoDonExcelTestLog.setKetQuaThucTe(systemMsg);
-            TaoDonExcelTestLog.setGhiChuKetQua(kq.isTimeout()
-                    ? "Không có toast từ hệ thống trong thời gian chờ. Phần gửi đơn chấp nhận thất bại mềm."
-                    : "Message lỗi hệ thống (soft-fail): " + systemMsg);
-            ExtentReportManager.logPass(
-                    "Điền biểu mẫu thành công; Gửi đơn soft-fail — " + systemMsg);
-        }
+        Assert.fail(baoCaoMsg);
     }
 
-    @Test(groups = {"smoke", "mid", "full", "chinhSua"},
+    @Test(groups = {"smoke", "full", "chinhSua"},
             description = "Từ màn Xem lại, bấm Chỉnh sửa (Xem trước đơn) → bước 1, đi lại nộp đơn với yêu cầu mới, đối chiếu Xem lại (không gửi đơn)")
     public void testChinhSuaNoiDungTuXemLai() {
         TaoDonScenario s = DataGenerator.generateScenarioForReviewEdit();
@@ -93,7 +133,7 @@ public class TaoDonTest extends TaoDonBaseTest {
         ExtentReportManager.logInfo(
                 "Kiểm tra Chỉnh sửa đơn từ Xem lại: Xem trước đơn → bước 1 → nộp lại (không gửi đơn).");
 
-        TaoDonFlow flow = new TaoDonFlow(driver, webUI);
+        TaoDonFlow flow = new TaoDonFlow(getDriver(), getWebUI());
         XemLaiGuiDonPage review = flow.denManXemLai(s);
 
         String yeuCauMoi = "Yêu cầu đã chỉnh sửa lúc " + System.currentTimeMillis()
@@ -108,7 +148,7 @@ public class TaoDonTest extends TaoDonBaseTest {
         review.waitStepReady();
         Assert.assertTrue(review.reviewContains(yeuCauMoi),
                 "Màn Xem lại phải hiển thị đúng nội dung yêu cầu vừa chỉnh sửa");
-        webUI.captureOverview("Ảnh tổng quan — màn Xem lại sau chỉnh sửa đơn");
+        getWebUI().captureOverview("Ảnh tổng quan — màn Xem lại sau chỉnh sửa đơn");
         ExtentReportManager.logPass("Đối chiếu Xem lại ổn — đã thấy yêu cầu đã chỉnh sửa.");
         TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT);
 
@@ -120,23 +160,27 @@ public class TaoDonTest extends TaoDonBaseTest {
         TaoDonExcelTestLog.setGhiChuKetQua("Yêu cầu cụ thể sau chỉnh sửa: " + yeuCauMoi);
     }
 
-    @DataProvider(name = "DuLieuBuoc23BayLoai")
+    @DataProvider(name = "DuLieuBuoc23BayLoai", parallel = true)
     public Object[][] getBuoc23Data() {
-        return DataGenerator.generateBuoc23AllLoaiDonData();
+        ScenarioDispatch.reset();
+        Object[][] data = DataGenerator.generateBuoc23AllLoaiDonData();
+        System.out.println("📋 DataProvider Buoc23: " + data.length + " case (không trùng trên 3 browser).");
+        return data;
     }
 
     @Test(dataProvider = "DuLieuBuoc23BayLoai", groups = {"buoc23", "regression"},
             description = "Điền bước 1→3 cho đủ 7 loại đơn — kiểm tra thứ tự nhập nguyên đơn / bị đơn")
     public void testBuoc2Va3BayLoaiDon(TaoDonScenario s) {
         Assert.assertNotNull(s, "Kịch bản kiểm thử không được để trống");
+        claimExclusive(s);
         TaoDonReportBuilder.logScenarioOverview(s);
         ExtentReportManager.logInfo("Kiểm tra bước 2–3: " + s.loaiDon() + " / " + s.loaiViec());
 
-        TaoDonFlow flow = new TaoDonFlow(driver, webUI);
+        TaoDonFlow flow = new TaoDonFlow(getDriver(), getWebUI());
         flow.denHetBuoc3(s);
 
-        Assert.assertTrue(webUI.existsNow(TaoDonFlow.MARKER_NOI_DUNG)
-                        || webUI.existsNow(By.xpath("//button[contains(., 'Tiếp theo')]")),
+        Assert.assertTrue(getWebUI().existsNow(TaoDonFlow.MARKER_NOI_DUNG)
+                        || getWebUI().existsNow(By.xpath("//button[contains(., 'Tiếp theo')]")),
                 "Sau bước 3 phải còn ở wizard (có Tiếp theo / marker nội dung)");
         ExtentReportManager.logPass("Đã điền ổn định bước 1→3 cho [" + s.loaiDon() + "].");
         TestActionLog.trangThaiBuoc(TaoDonExcelTestLog.ST_DAT);
@@ -144,15 +188,13 @@ public class TaoDonTest extends TaoDonBaseTest {
         TaoDonExcelTestLog.setKetQuaThucTe("Điền bước 1→3 thành công: " + s.loaiDon() + " / " + s.loaiViec());
     }
 
-    /**
-     * {@code true} = Gửi đơn thất bại sẽ làm kịch bản đỏ.
-     * Mặc định {@code false} (chấp nhận thất bại mềm) vì app demo thường hết thời gian chờ.
-     * Bật: {@code -Dtaodon.requireSubmit=true}
-     */
-    private static boolean requireSubmitSuccess() {
-        return "true".equalsIgnoreCase(
-                System.getProperty("taodon.requireSubmit",
-                        System.getenv().getOrDefault("TOAAN_REQUIRE_SUBMIT", "false")));
+    /** Mỗi case chỉ 1 thread/browser — trùng thì skip, không chạy lại. */
+    private static void claimExclusive(TaoDonScenario s) {
+        if (!ScenarioDispatch.claim(s)) {
+            throw new SkipException(
+                    "Case đã được nhận bởi browser/thread khác — không chạy trùng: "
+                            + s.loaiDon() + " / " + s.loaiViec());
+        }
     }
 
     private static String resolveSuiteMode(ITestContext context) {

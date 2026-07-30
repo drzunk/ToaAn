@@ -164,6 +164,119 @@ public class DataGenerator {
     }
 
     /**
+     * Sinh đúng các case đã chọn trên menu ({@code run.cases}).
+     * Số case có thể nhiều hơn số Chrome — TestNG xếp hàng, reuse session theo thread.
+     */
+    public static Object[][] generateConfiguredCases(
+            java.util.List<vn.tuphap.automation.config.RunFlowConfig.CaseProfile> profiles) {
+        if (profiles == null || profiles.isEmpty()) {
+            throw new IllegalArgumentException("run.cases rỗng — không sinh được kịch bản.");
+        }
+        Object[][] data = new Object[profiles.size()][1];
+        Faker faker = new Faker(new Locale("vi"));
+        for (int i = 0; i < profiles.size(); i++) {
+            var p = profiles.get(i);
+            RowSelections s = buildConfiguredSelections(p, i);
+            normalizePhaSanSelections(s, i);
+            normalizeThuanTinhSelections(s);
+            validateSelections(s);
+            TaoDonScenario scenario = buildScenario(i, s, faker);
+            System.out.println(" Case menu [" + (i + 1) + "/" + profiles.size() + "]: "
+                    + scenario.loaiDon() + " / " + scenario.loaiViec()
+                    + " — ND=" + scenario.loaiChuThe()
+                    + " | until=" + p.untilStep()
+                    + (p.submit() ? "+submit" : ""));
+            data[i][0] = scenario;
+        }
+        return data;
+    }
+
+    private static RowSelections buildConfiguredSelections(
+            vn.tuphap.automation.config.RunFlowConfig.CaseProfile p, int index) {
+        RowSelections s = new RowSelections();
+        s.loaiDon = resolveLoaiDon(p.loaiDon());
+        s.loaiViec = resolveLoaiViec(s.loaiDon, p.loaiViec());
+        s.toaAn = DataDictionary.pick(MasterDataCatalog.getToaAn(), index);
+        s.loaiChuTheNguyenDon = resolveChuTheNguyenDon(p.chuThe());
+        s.gioiTinh = DataDictionary.pick(MasterDataCatalog.getGioiTinh(), index);
+        s.noiCap = DataDictionary.pick(MasterDataCatalog.getNoiCapCccd(), index);
+        s.loaiHinhToChuc = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), index);
+        s.coNguoiDaiDien = "Không";
+        s.quanHeDaiDien = DataDictionary.pick(MasterDataCatalog.getQuanHeDaiDien(), index);
+        s.loaiChuTheBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiChuTheBiDon(), index);
+        s.loaiHinhBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), index + 1);
+        s.coNguoiLienQuan = "Không";
+        s.coTaiLieuBoSung = "Không";
+        s.soLuongBiDon = 1;
+        s.coDongNguyenDon = "Không";
+        if (DataDictionary.isPhaSan(s.loaiDon)) {
+            s.tuCachNopDon = resolveTuCach(p.tuCachNopDon(), index);
+        }
+        return s;
+    }
+
+    private static String resolveLoaiDon(String raw) {
+        if (raw == null || raw.isBlank()) {
+            throw new IllegalArgumentException("Thiếu loại đơn trong run.cases");
+        }
+        String want = raw.trim();
+        for (String opt : MasterDataCatalog.getLoaiDon()) {
+            if (opt.equalsIgnoreCase(want) || opt.toLowerCase(Locale.ROOT).contains(want.toLowerCase(Locale.ROOT))) {
+                return opt;
+            }
+        }
+        MasterDataCatalog.assertInCatalog(want, "loaiDon", MasterDataCatalog.getLoaiDon());
+        return want;
+    }
+
+    private static String resolveLoaiViec(String loaiDon, String raw) {
+        if (DataDictionary.isPhaSan(loaiDon)) {
+            return DataDictionary.PHA_SAN_LOAI_VIEC_MAC_DINH;
+        }
+        String[] viecs = MasterDataCatalog.getLoaiViecByLoaiDon(loaiDon);
+        if (raw == null || raw.isBlank() || "-".equals(raw.trim())) {
+            return viecs[0];
+        }
+        String want = raw.trim();
+        for (String v : viecs) {
+            if (v.equalsIgnoreCase(want) || v.toLowerCase(Locale.ROOT).contains(want.toLowerCase(Locale.ROOT))) {
+                return v;
+            }
+        }
+        MasterDataCatalog.assertInCatalog(want, "loaiViec", viecs);
+        return want;
+    }
+
+    private static String resolveChuTheNguyenDon(String raw) {
+        String[] opts = MasterDataCatalog.getLoaiChuTheNguyenDon();
+        boolean wantOrg = raw != null && (raw.toLowerCase(Locale.ROOT).contains("tổ chức")
+                || raw.toLowerCase(Locale.ROOT).contains("doanh nghiệp")
+                || "tc".equalsIgnoreCase(raw.trim()));
+        for (String opt : opts) {
+            boolean isOrg = DataDictionary.isToChuc(opt);
+            if (wantOrg == isOrg) {
+                return opt;
+            }
+        }
+        return opts[0];
+    }
+
+    private static String resolveTuCach(String raw, int index) {
+        String[] opts = MasterDataCatalog.getTuCachNopDonPhaSan();
+        if (raw == null || raw.isBlank() || "-".equals(raw.trim())) {
+            return DataDictionary.pick(opts, index);
+        }
+        String want = raw.trim();
+        for (String opt : opts) {
+            if (opt.equalsIgnoreCase(want) || opt.toLowerCase(Locale.ROOT).contains(want.toLowerCase(Locale.ROOT))) {
+                return opt;
+            }
+        }
+        MasterDataCatalog.assertInCatalog(want, "tuCachNopDonPhaSan", opts);
+        return want;
+    }
+
+    /**
      * Đúng 1 kịch bản / mỗi loại đơn trong catalog (7 loại) — gọn để kiểm tra bước 2–3:
      * Cá nhân, 1 bị đơn, không đồng ND / NLQ / đại diện.
      */
@@ -286,19 +399,6 @@ public class DataGenerator {
             MasterDataCatalog.assertInCatalog(s.loaiChuTheBiDon, "loaiChuTheBiDon", MasterDataCatalog.getLoaiChuTheBiDon());
         }
         MasterDataCatalog.assertInCatalog(s.coNguoiLienQuan, "coNguoiLienQuan", MasterDataCatalog.getCoKhong());
-    }
-
-    /**
-     * 1 kịch bản gọn tới bước 4 eform: Dân sự / Bồi thường thiệt hại ngoài hợp đồng.
-     * Cá nhân, 1 bị đơn, không đồng ND / NLQ / đại diện.
-     */
-    public static Object[][] generateDanSuBoiThuongEformProbeData() {
-        Faker faker = new Faker(new Locale("vi"));
-        RowSelections s = buildDanSuBoiThuongEformSelections();
-        validateSelections(s);
-        TaoDonScenario scenario = buildScenario(0, s, faker);
-        System.out.println(" 🎲 Probe eform bước 4: " + scenario.loaiDon() + " / " + scenario.loaiViec());
-        return new Object[][]{{scenario}};
     }
 
     /** Dân sự / Bồi thường — eform iframe bước 4 (UAT hiện chỉ có case này). */

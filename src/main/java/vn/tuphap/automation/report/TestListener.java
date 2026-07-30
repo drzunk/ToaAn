@@ -19,9 +19,18 @@ public class TestListener implements ITestListener {
     @Override
     public void onStart(ITestContext context) {
         String suiteName = context.getSuite().getName();
+        vn.tuphap.automation.config.RunFlowConfig.applyKnownSystemAliases();
+        vn.tuphap.automation.config.RunFlowConfig.printSummary(suiteName);
+        vn.tuphap.automation.core.ScenarioDispatch.reset();
         ExtentReportManager.initReport(suiteName);
         TaoDonExcelTestLog.SuiteKind kind = TaoDonExcelTestLog.SuiteKind.fromSuiteName(suiteName);
         System.setProperty("taodon.suite", kind.folder());
+        if (vn.tuphap.automation.config.RunFlowConfig.parallel()
+                || (suiteName != null && suiteName.toLowerCase().contains("parallel"))) {
+            System.setProperty("taodon.parallel", "true");
+            System.setProperty("taodon.threads",
+                    String.valueOf(vn.tuphap.automation.config.RunFlowConfig.browsers()));
+        }
         TaoDonExcelTestLog.initSuite(suiteName);
     }
 
@@ -75,15 +84,19 @@ public class TestListener implements ITestListener {
     @Override
     public void onTestFailure(ITestResult result) {
         String errorMsg = extractErrorMessage(result);
-        // StepBlockedException: đã logFail + chụp toast trong WebUI.failStepWithSystemFeedback —
-        // không ghi Extent lần 2 (tránh 2 lỗi giống nhau + ảnh muộn khi toast đã tắt).
-        if (!isAlreadyReportedStepBlock(result.getThrowable())) {
+        if (WebUI.isBrowserClosed(result.getThrowable())
+                || result.getThrowable() instanceof vn.tuphap.automation.flow.BrowserClosedException) {
+            // Chỉ dừng thread/browser này — không quitAll / không kéo sập suite.
+            vn.tuphap.automation.core.DriverContext.abortCurrentThread(errorMsg);
+        }
+        // StepBlockedException / đã logFail trước Assert.fail — không ghi Extent lần 2.
+        if (!isAlreadyReportedStepBlock(result.getThrowable())
+                && !ExtentReportManager.wasFailAlreadyLogged()) {
             attachScreenshotOnFailure(result, errorMsg);
         }
         String shortMsg = rutGonLoiChoTester(errorMsg);
         TaoDonExcelTestLog.setTrangThai(TaoDonExcelTestLog.ST_THAT_BAI);
         TaoDonExcelTestLog.setKetQuaThucTe(shortMsg);
-        // Không setGhiChuKetQua trùng nội dung — Validation action log + Kết quả thực tế đã có.
         TaoDonExcelTestLog.recordFinished(TaoDonExcelTestLog.ST_THAT_BAI, ExtentReportManager.getTestElapsedMs());
         ExtentReportManager.clearTestContext();
         ExtentReportManager.flushReport();

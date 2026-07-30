@@ -103,14 +103,63 @@ public class NguyenDonPage {
         String tuKhoa = gioiTinh == null || gioiTinh.isBlank() ? "nam" : gioiTinh.trim().toLowerCase();
         String value = tuKhoa.contains("nữ") || tuKhoa.contains("nu") ? "Nữ"
                 : (tuKhoa.contains("khác") || tuKhoa.contains("khac") ? "Khác" : "Nam");
+        // UAT Tổ chức: label Giới tính + sibling div chip Nam/Nữ (cursor-pointer).
         return By.xpath(scope
+                + "//label[contains(normalize-space(.), 'Giới tính')]/following-sibling::div"
+                + "//div[contains(@class,'cursor-pointer') and normalize-space()='" + value + "']"
+                + " | " + scope
+                + "//label[contains(., 'Giới tính')]/following-sibling::div"
+                + "//div[contains(@class,'cursor-pointer') and contains(normalize-space(.), '" + value + "')]"
+                + " | " + scope
                 + "//label[contains(., 'Giới tính')]/following-sibling::div//div[contains(text(), '" + value + "')]"
                 + " | " + scope
-                + "//label[contains(., 'Giới tính')]/following-sibling::div//div[contains(@class,'cursor-pointer') and contains(., '"
-                + value + "')]"
+                + "//label[contains(., 'Giới tính')]/parent::div//div[contains(@class,'cursor-pointer')"
+                + " and normalize-space()='" + value + "']"
                 + " | " + scope
-                + "//label[contains(., 'Giới tính')]/following-sibling::div//div[contains(normalize-space(.), '"
-                + value + "')]");
+                + "//*[contains(@class,'font-medium') or self::label][contains(., 'Giới tính')]"
+                + "/following::div[contains(@class,'cursor-pointer') and normalize-space()='" + value + "'][1]");
+    }
+
+    private void chonGioiTinhNguoiDaiDien(String gioiTinh) {
+        String gt = (gioiTinh == null || gioiTinh.isBlank()) ? "Nam" : gioiTinh.trim();
+        // Form tổ chức thường chỉ còn Nam/Nữ — không chọn Khác.
+        if (gt.toLowerCase().contains("khác") || gt.toLowerCase().contains("khac")) {
+            gt = "Nam";
+        }
+        By[] candidates = {
+                getGioiTinhNguoiDaiDien(gt),
+                getGioiTinh(gt),
+                By.xpath(MAIN_SECTION
+                        + "//label[contains(., 'Giới tính')]/following-sibling::div"
+                        + "//div[contains(@class,'cursor-pointer') and normalize-space()='"
+                        + (gt.toLowerCase().contains("nữ") || gt.toLowerCase().contains("nu") ? "Nữ" : "Nam")
+                        + "']")
+        };
+        for (By by : candidates) {
+            if (webUI.existsNow(by)) {
+                try {
+                    webUI.clickElement(by, "Giới tính người đại diện: [" + gt + "]");
+                    return;
+                } catch (RuntimeException ignored) {
+                    webUI.clickElementOnceJs(by, "Giới tính người đại diện (JS): [" + gt + "]", 3);
+                    return;
+                }
+            }
+        }
+        // Fallback: click chip Nam/Nữ đầu tiên trong khối người đại diện
+        String chip = gt.toLowerCase().contains("nữ") || gt.toLowerCase().contains("nu") ? "Nữ" : "Nam";
+        By fallback = By.xpath(
+                "(" + MAIN_SECTION + "//label[contains(., 'Họ và tên người đại diện')]"
+                        + "/ancestor::div[contains(@class,'border') or contains(@class,'rounded')"
+                        + " or contains(@class,'space-y') or contains(@class,'space')][1]"
+                        + " | " + MAIN_SECTION + ")"
+                        + "//div[contains(@class,'cursor-pointer') and normalize-space()='" + chip + "']");
+        if (webUI.existsNow(fallback)) {
+            webUI.clickElementOnceJs(fallback, "Giới tính người đại diện (fallback): [" + chip + "]", 3);
+            return;
+        }
+        throw new RuntimeException(
+                "❌ Không chọn được Giới tính người đại diện [" + gt + "] trên form Tổ chức.");
     }
 
     // --- LOCATOR CÁ NHÂN ---
@@ -276,7 +325,7 @@ public class NguyenDonPage {
         webUI.setTextForMaskedInput(txtNgaySinh, ngaySinh, "Ô nhập [Ngày sinh]");
 
         if (gioiTinh != null && !gioiTinh.isEmpty()) {
-            webUI.clickElement(getGioiTinh(gioiTinh), "Thẻ Giới tính: [" + gioiTinh + "]");
+            webUI.clickChoiceChipIfNeeded(getGioiTinh(gioiTinh), "Thẻ Giới tính: [" + gioiTinh + "]");
         }
 
         webUI.setTextWithCheck(txtCCCD, cccd, "Ô nhập [Số CCCD / CMND]");
@@ -376,8 +425,12 @@ public class NguyenDonPage {
         return webUI.isCustomToggleSelected(optGiongThuongTru);
     }
 
-    /** Đồng ý lưu thông tin vào 'Thông tin định danh' cho lần tạo hồ sơ sau — chỉ chọn 1 lần. */
-    public void chonDongYLuuThongTinDinhDanh() {
+    /**
+     * Đồng ý lưu thông tin vào 'Thông tin định danh'.
+     * @return {@code true} nếu đã tick checkbox (có thể gây VNeID prefill) — cần pass kiểm tra lại;
+     *         {@code false} nếu không có / bỏ qua.
+     */
+    public boolean chonDongYLuuThongTinDinhDanh() {
         if (!webUI.existsNow(optDongYLuuDinhDanh)) {
             webUI.scrollToElement(By.xpath(
                     "//*[contains(., 'Thông tin định danh') or contains(., 'lưu các thông tin đã nhập')]"));
@@ -386,13 +439,14 @@ public class NguyenDonPage {
         if (!webUI.existsNow(optDongYLuuDinhDanh)) {
             System.out.println(" ⏩ Bỏ qua [Đồng ý lưu Thông tin định danh] — không có trên biểu mẫu.");
             TestActionLog.boQua("Đồng ý lưu Thông tin định danh", "Không có trên biểu mẫu");
-            return;
+            return false;
         }
         webUI.scrollToElement(optDongYLuuDinhDanh);
         webUI.ensureCustomToggleSelected(optDongYLuuDinhDanh, true,
                 "Hộp kiểm [Đồng ý lưu Thông tin định danh]");
         // Banner VNeID / toast thường hiện ngay sau tick — chụp trước khi cuộn form điền lại.
         webUI.logFeedbackAfterIdentitySave();
+        return true;
     }
 
     private void waitLienLacAddressHidden() {
@@ -457,21 +511,6 @@ public class NguyenDonPage {
                 + "//label[contains(., 'Họ và tên người đại diện')]/ancestor::div[contains(@class,'border')"
                 + " or contains(@class,'rounded') or contains(@class,'space-y') or contains(@class,'space')][1]";
         return gioiTinhTrongScope("(" + repBlock + " | " + MAIN_SECTION + ")", gioiTinh);
-    }
-
-    private void chonGioiTinhNguoiDaiDien(String gioiTinh) {
-        String gt = (gioiTinh == null || gioiTinh.isBlank()) ? "Nam" : gioiTinh;
-        By[] candidates = {
-                getGioiTinhNguoiDaiDien(gt),
-                getGioiTinh(gt)
-        };
-        for (By by : candidates) {
-            if (webUI.existsNow(by)) {
-                webUI.clickElement(by, "Giới tính người đại diện: [" + gt + "]");
-                return;
-            }
-        }
-        System.out.println(" ⚠ Không thấy nút Giới tính người đại diện trên form Tổ chức.");
     }
 
     private By getGioiTinhTrongDong(String gioiTinh) {
@@ -999,26 +1038,36 @@ public class NguyenDonPage {
     }
 
     /**
-     * Điền lại toàn bộ nguyên đơn cá nhân — luôn ghi đè prefill, đảm bảo phường/xã trước Tiếp theo.
+     * Sau tick VNeID: chỉ điền lại ô lệch / thiếu — không xóa-gõ lại ô đã đúng.
+     * Địa chỉ chỉ bổ sung khối còn thiếu (không force chọn lại tỉnh/phường đã đủ).
      */
     public void dienDayDuCaNhanTruocTiepTheo(String hoTen, String ngaySinh, String gioiTinh,
                                             String cccd, String ngayCap, String noiCap,
                                             String thuongTru, String lienLac, String sdt, String email) {
-        System.out.println(" ℹ Bước 2 — điền lại đủ trường (ghi đè prefill) trước Tiếp theo...");
+        System.out.println(" ℹ Bước 2 — kiểm tra lại sau VNeID (chỉ sửa ô lệch/thiếu)...");
         dienThongTinCaNhan(hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
-        damBaoDiaChiNguyenDonDayDu(thuongTru, lienLac);
+        chuanBiDiaChiTruocTiepTheo(thuongTru, lienLac);
         webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
         webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
     }
 
-    /** Điền lại toàn bộ nguyên đơn tổ chức trước Tiếp theo. */
+    /** Kiểm tra lại nguyên đơn tổ chức — skip ô/dropdown đã đúng. */
     public void dienDayDuToChucTruocTiepTheo(String tenToChuc, String loaiHinh, String mst, String diaChi,
                                              String nguoiDaiDien, String chucVu, String sdt, String email,
                                              String repNgaySinh, String repGioiTinh, String repCccd,
                                              String repNgayCap, String noiCap) {
+        System.out.println(" ℹ Bước 2 — kiểm tra lại tổ chức (chỉ sửa ô lệch/thiếu)...");
         dienThongTinToChuc(tenToChuc, loaiHinh, mst, diaChi, nguoiDaiDien, chucVu, sdt, email,
                 repNgaySinh, repGioiTinh, repCccd, repNgayCap, noiCap);
-        damBaoDiaChiToChucDayDu(diaChi);
+        if (!webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 0)) {
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, diaChi, "Trụ sở");
+        }
+        int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
+        if (blocks >= 2 && !webUI.isAdministrativeAddressBlockComplete(MAIN_SECTION, 1)) {
+            webUI.dismissOpenDropdowns();
+            webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
+            webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, diaChi, "Nơi cư trú");
+        }
     }
 
     /** Trụ sở (#1) + nơi cư trú đại diện (#2) — tỉnh → phường → chi tiết. */

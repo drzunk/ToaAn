@@ -14,6 +14,11 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <suiteXmlFile>src/test/resources/suites/testng.xml</suiteXmlFile>
         <taodon.suite>full</taodon.suite>
+        <taodon.threads>1</taodon.threads>
+        <taodon.parallel>false</taodon.parallel>
+        <taodon.onlyStt></taodon.onlyStt>
+        <taodon.untilStep>6</taodon.untilStep>
+        <taodon.submit>false</taodon.submit>
     </properties>
 
     <dependencies>
@@ -85,8 +90,19 @@
                     <suiteXmlFiles>
                         <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
                     </suiteXmlFiles>
+                    <properties>
+                        <property>
+                            <name>listener</name>
+                            <value>vn.tuphap.automation.core.ParallelSuiteAdjuster</value>
+                        </property>
+                    </properties>
                     <systemPropertyVariables>
                         <taodon.suite>${taodon.suite}</taodon.suite>
+                        <taodon.threads>${taodon.threads}</taodon.threads>
+                        <taodon.parallel>${taodon.parallel}</taodon.parallel>
+                        <taodon.onlyStt>${taodon.onlyStt}</taodon.onlyStt>
+                        <taodon.untilStep>${taodon.untilStep}</taodon.untilStep>
+                        <taodon.submit>${taodon.submit}</taodon.submit>
                     </systemPropertyVariables>
                 </configuration>
                 <dependencies>
@@ -143,6 +159,50 @@
             <properties>
                 <suiteXmlFile>src/test/resources/suites/testng-unit.xml</suiteXmlFile>
                 <taodon.suite>full</taodon.suite>
+            </properties>
+        </profile>
+        <profile>
+            <id>master</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-master.xml</suiteXmlFile>
+                <taodon.suite>smoke</taodon.suite>
+            </properties>
+        </profile>
+        <!-- Plan run: 3 Chrome song song — mỗi case đúng 1 lần -->
+        <profile>
+            <id>parallel-smoke</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-parallel-smoke.xml</suiteXmlFile>
+                <taodon.suite>smoke</taodon.suite>
+                <taodon.threads>3</taodon.threads>
+                <taodon.parallel>true</taodon.parallel>
+            </properties>
+        </profile>
+        <profile>
+            <id>parallel-mid</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-parallel-mid.xml</suiteXmlFile>
+                <taodon.suite>mid</taodon.suite>
+                <taodon.threads>3</taodon.threads>
+                <taodon.parallel>true</taodon.parallel>
+            </properties>
+        </profile>
+        <profile>
+            <id>parallel-full</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-parallel-full.xml</suiteXmlFile>
+                <taodon.suite>full</taodon.suite>
+                <taodon.threads>3</taodon.threads>
+                <taodon.parallel>true</taodon.parallel>
+            </properties>
+        </profile>
+        <profile>
+            <id>parallel-buoc23</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-parallel-buoc23.xml</suiteXmlFile>
+                <taodon.suite>full</taodon.suite>
+                <taodon.threads>3</taodon.threads>
+                <taodon.parallel>true</taodon.parallel>
             </properties>
         </profile>
     </profiles>

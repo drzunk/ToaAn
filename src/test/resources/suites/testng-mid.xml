@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
 <suite name="ToaAn_Mid_Suite" verbose="1">
-    <!-- Mid: ~35 cặp thường + 4 tư cách Phá sản (+ chỉnh sửa). Không chạy LoginTest. -->
+    <!-- Mid: chỉ luồng tạo đơn mid — không kèm Chỉnh sửa. -->
     <test name="Mid">
-        <groups>
-            <run>
-                <include name="mid"/>
-            </run>
-        </groups>
         <classes>
-            <class name="vn.tuphap.automation.tests.TaoDonTest"/>
+            <class name="vn.tuphap.automation.tests.TaoDonTest">
+                <methods>
+                    <include name="testFlowTaoDon"/>
+                </methods>
+            </class>
         </classes>
     </test>
 </suite>

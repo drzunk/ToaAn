@@ -1,7 +1,5 @@
 package vn.tuphap.automation.tests;
 
-import vn.tuphap.automation.ui.WebUI;
-
 import vn.tuphap.automation.core.BaseTest;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
@@ -31,7 +29,7 @@ public class MasterDataSyncTest extends BaseTest {
 
     @Test
     public void syncMasterDataFromUi() throws Exception {
-        LoginPage loginPage = new LoginPage(driver);
+        LoginPage loginPage = new LoginPage(getDriver());
         loginPage.openPage();
         loginPage.chonDangNhapBangTaiKhoan();
         loginPage.thucHienDangNhap(
@@ -40,9 +38,9 @@ public class MasterDataSyncTest extends BaseTest {
                 ""
         );
 
-        new DashboardPage(driver).clickNopDonMoi();
+        new DashboardPage(getDriver()).clickNopDonMoi();
 
-        UiMasterDataReader reader = new UiMasterDataReader(driver);
+        UiMasterDataReader reader = new UiMasterDataReader(getDriver());
 
         Map<String, List<String>> merged = new LinkedHashMap<>(defaultStaticValues());
         merged.putAll(reader.scrapeTaoDonStep1());
@@ -139,22 +137,22 @@ public class MasterDataSyncTest extends BaseTest {
 
     private void returnToDashboard() {
         try {
-            driver.get(ConfigReader.getValue("baseUrl"));
+            getDriver().get(ConfigReader.getValue("baseUrl"));
         } catch (Exception ignored) {
         }
-        webUI.sleepMillis(WaitConfig.SETTLE_LONG_MS);
-        new DashboardPage(driver).waitForDashboard(WaitConfig.DASHBOARD_AFTER_NAV);
+        getWebUI().sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        new DashboardPage(getDriver()).waitForDashboard(WaitConfig.DASHBOARD_AFTER_NAV);
     }
 
     private void advanceFromScrapedStep1ToNguyenDon(Map<String, List<String>> step1) {
         String toaAn = step1.get("toaAn").get(0);
-        TaoDonPage taoDonPage = new TaoDonPage(driver);
+        TaoDonPage taoDonPage = new TaoDonPage(getDriver());
         taoDonPage.waitForBuoc1Ready();
         taoDonPage.dienToaAnVaTomTat(toaAn, "Đồng bộ catalog tự động");
         taoDonPage.clickTiepTheo();
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        webUI.waitUntilInvisible(TaoDonPage.MARKER_BUOC1, WaitConfig.STEP, "Đã rời bước 1 (sync)");
-        webUI.waitUntilVisible(TaoDonFlow.MARKER_NGUYEN_DON, WaitConfig.STEP, "Nguyên đơn (sync)");
+        getWebUI().sleepMillis(WaitConfig.SETTLE_MS);
+        getWebUI().waitUntilInvisible(TaoDonPage.MARKER_BUOC1, WaitConfig.STEP, "Đã rời bước 1 (sync)");
+        getWebUI().waitUntilVisible(TaoDonFlow.MARKER_NGUYEN_DON, WaitConfig.STEP, "Nguyên đơn (sync)");
     }
 
     private void navigateToNguyenDonStep(Map<String, List<String>> step1, String loaiDon) {
@@ -166,17 +164,17 @@ public class MasterDataSyncTest extends BaseTest {
         String toaAn = step1.get("toaAn").get(0);
 
         returnToDashboard();
-        new DashboardPage(driver).clickNopDonMoi();
-        TaoDonPage taoDonPage = new TaoDonPage(driver);
+        new DashboardPage(getDriver()).clickNopDonMoi();
+        TaoDonPage taoDonPage = new TaoDonPage(getDriver());
         taoDonPage.dienFormBuoc1(loaiDon, loaiViec, toaAn, "Đồng bộ catalog tự động");
         taoDonPage.clickTiepTheo();
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        webUI.waitUntilInvisible(TaoDonPage.MARKER_BUOC1, WaitConfig.STEP, "Đã rời bước 1 (sync)");
-        webUI.waitUntilVisible(TaoDonFlow.MARKER_NGUYEN_DON, WaitConfig.STEP, "Nguyên đơn (sync)");
+        getWebUI().sleepMillis(WaitConfig.SETTLE_MS);
+        getWebUI().waitUntilInvisible(TaoDonPage.MARKER_BUOC1, WaitConfig.STEP, "Đã rời bước 1 (sync)");
+        getWebUI().waitUntilVisible(TaoDonFlow.MARKER_NGUYEN_DON, WaitConfig.STEP, "Nguyên đơn (sync)");
     }
 
     private void fillMinimalNguyenDon(String loaiDon) {
-        NguyenDonPage page = new NguyenDonPage(driver);
+        NguyenDonPage page = new NguyenDonPage(getDriver());
         page.chonLoaiChuThe("Cá nhân");
         page.dienThongTinCaNhan(
                 "Nguyễn Văn Sync",
@@ -196,15 +194,15 @@ public class MasterDataSyncTest extends BaseTest {
 
     private boolean advanceToBiDonStep(String loaiDon) {
         fillMinimalNguyenDon(loaiDon);
-        driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        webUI.scrollToElement(By.xpath("//button[contains(., 'Tiếp theo')]"));
-        new NguyenDonPage(driver).clickTiepTheo();
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        getDriver().findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
+        getWebUI().sleepMillis(WaitConfig.SETTLE_MS);
+        getWebUI().scrollToElement(By.xpath("//button[contains(., 'Tiếp theo')]"));
+        new NguyenDonPage(getDriver()).clickTiepTheo();
+        getWebUI().sleepMillis(WaitConfig.SETTLE_MS);
         if (waitForBiDonStepVisible()) {
             return true;
         }
-        webUI.logValidationMessages("Sync — không chuyển bước 3 sau điền tối thiểu");
+        getWebUI().logValidationMessages("Sync — không chuyển bước 3 sau điền tối thiểu");
         return false;
     }
 
@@ -216,7 +214,7 @@ public class MasterDataSyncTest extends BaseTest {
         };
         for (By marker : markers) {
             try {
-                webUI.waitUntilVisible(marker, WaitConfig.STEP, "Bước 3 sau điền tối thiểu");
+                getWebUI().waitUntilVisible(marker, WaitConfig.STEP, "Bước 3 sau điền tối thiểu");
                 return true;
             } catch (RuntimeException ignored) {
             }

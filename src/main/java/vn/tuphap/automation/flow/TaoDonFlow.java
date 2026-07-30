@@ -108,12 +108,15 @@ public final class TaoDonFlow {
         TestActionLog.buoc(2, TaoDonReportBuilder.tenBuocDayDu(2), "Trang nguyên đơn");
         NguyenDonPage page = new NguyenDonPage(driver);
         page.chonLoaiChuThe(s.loaiChuThe());
+        // Framework thực tế: loaiChuThe() ≡ "loại" Nguyên đơn (Cá nhân | Tổ chức).
         if (DataDictionary.isToChuc(s.loaiChuThe())) {
+            TestActionLog.ghiChu("Đang xử lý luồng Nguyên đơn: Tổ chức");
             page.dienThongTinToChuc(
                     s.tenToChuc(), s.loaiHinhToChuc(), s.mst(), s.diaChiToChuc(),
                     s.nguoiDaiDienToChuc(), s.chucVuToChuc(), s.sdt(), s.email(),
                     s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap());
         } else {
+            TestActionLog.ghiChu("Đang xử lý luồng Nguyên đơn: Cá nhân");
             page.dienThongTinCaNhan(s.hoTen(), s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap());
             page.dienThongTinLienHe(s.thuongTru(), s.lienLac(), s.sdt(), s.email());
         }
@@ -122,18 +125,26 @@ public final class TaoDonFlow {
             page.chonTuCachNguoiNopDon(s.tuCachNopDon());
         }
         page.xuLyDongNguyenDon(s.coDongNguyenDon(), s.dongNguyenDon());
-        page.chonDongYLuuThongTinDinhDanh();
+        boolean coTickDinhDanh = page.chonDongYLuuThongTinDinhDanh();
         driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
-        if (DataDictionary.isToChuc(s.loaiChuThe())) {
-            page.dienDayDuToChucTruocTiepTheo(
-                    s.tenToChuc(), s.loaiHinhToChuc(), s.mst(), s.diaChiToChuc(),
-                    s.nguoiDaiDienToChuc(), s.chucVuToChuc(), s.sdt(), s.email(),
-                    s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap());
+        if (coTickDinhDanh) {
+            // Chỉ khi tick TTĐD (VNeID có thể đè form) — kiểm tra lại ô lệch/thiếu.
+            if (DataDictionary.isToChuc(s.loaiChuThe())) {
+                page.dienDayDuToChucTruocTiepTheo(
+                        s.tenToChuc(), s.loaiHinhToChuc(), s.mst(), s.diaChiToChuc(),
+                        s.nguoiDaiDienToChuc(), s.chucVuToChuc(), s.sdt(), s.email(),
+                        s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap());
+            } else {
+                page.dienDayDuCaNhanTruocTiepTheo(
+                        s.hoTen(), s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap(),
+                        s.thuongTru(), s.lienLac(), s.sdt(), s.email());
+            }
         } else {
-            page.dienDayDuCaNhanTruocTiepTheo(
-                    s.hoTen(), s.ngaySinh(), s.gioiTinh(), s.cccd(), s.ngayCap(), s.noiCap(),
-                    s.thuongTru(), s.lienLac(), s.sdt(), s.email());
+            System.out.println(" ⏩ Bước 2 — không tick TTĐD → bỏ pass điền lại (tránh chọn/điền 2 lần trên UI).");
+            if (!DataDictionary.isToChuc(s.loaiChuThe())) {
+                page.chuanBiDiaChiTruocTiepTheo(s.thuongTru(), s.lienLac());
+            }
         }
         webUI.logValidationMessages("Trước Tiếp theo — bước 2");
         page.clickTiepTheo();
@@ -235,6 +246,78 @@ public final class TaoDonFlow {
         review.waitStepReady();
         webUI.captureOverview("Ảnh tổng quan — màn Xem lại (đã điền đủ bước 1→5)");
         return review;
+    }
+
+    /**
+     * Fall-through theo {@code run-flow.properties}:
+     * {@code run.untilStep} = login|0…6 ; {@code run.submit} chỉ khi đến bước 6.
+     * Không tương tác WebDriver trực tiếp — chỉ gọi Page Object / helper đã bọc.
+     *
+     * @return màn Xem lại nếu {@code untilStep >= 6}, ngược lại {@code null}
+     */
+    public XemLaiGuiDonPage chayTheoMasterConfig(TaoDonScenario s) {
+        int until = vn.tuphap.automation.config.RunFlowConfig.untilStep();
+        TestActionLog.ghiChu("Master run: untilStep=" + until
+                + " (" + vn.tuphap.automation.config.RunFlowConfig.untilStepRaw() + ")"
+                + ", submit=" + vn.tuphap.automation.config.RunFlowConfig.submit());
+
+        try {
+            if (until <= 0) {
+                TestActionLog.ghiChu("untilStep=login — chỉ giữ session đăng nhập, không mở form nộp đơn.");
+                return null;
+            }
+
+            moFormNopDonMoi();
+
+            if (until >= 1) {
+                dienBuoc1(s);
+            }
+            if (until < 2) {
+                TestActionLog.ghiChu("Dừng sau bước 1 theo run-flow.properties.");
+                return null;
+            }
+
+            if (until >= 2) {
+                dienBuoc2(s);
+            }
+            if (until < 3) {
+                TestActionLog.ghiChu("Dừng sau bước 2 (Nguyên đơn) theo run-flow.properties.");
+                return null;
+            }
+
+            if (until >= 3) {
+                dienBuoc3(s);
+            }
+            if (until < 4) {
+                TestActionLog.ghiChu("Dừng sau bước 3 (Bị đơn) theo run-flow.properties.");
+                return null;
+            }
+
+            if (until >= 4) {
+                dienBuoc4(s);
+            }
+            if (until < 5) {
+                TestActionLog.ghiChu("Dừng sau bước 4 (Nội dung) theo run-flow.properties.");
+                return null;
+            }
+
+            if (until >= 5) {
+                dienBuoc5(s);
+            }
+            if (until < 6) {
+                TestActionLog.ghiChu("Dừng sau bước 5 (Tài liệu) theo run-flow.properties.");
+                return null;
+            }
+
+            TestActionLog.buoc(6, TaoDonReportBuilder.tenBuocDayDu(6), "Trang xem lại");
+            XemLaiGuiDonPage review = new XemLaiGuiDonPage(driver);
+            review.waitStepReady();
+            webUI.captureOverview("Ảnh tổng quan — màn Xem lại (master untilStep=6)");
+            return review;
+        } catch (RuntimeException ex) {
+            TestActionLog.ghiChu("Master run bị chặn: " + ex.getMessage());
+            throw ex;
+        }
     }
 
     /** Điền bước 1→3 rồi dừng (kiểm tra luồng nguyên đơn / bị đơn). */

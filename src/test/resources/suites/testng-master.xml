@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Master: độ sâu bước theo run-flow.properties (untilStep / submit / slots).
+     thread-count được ParallelSuiteAdjuster chỉnh theo run.browsers. -->
+<suite name="ToaAn_Master_Suite"
+       verbose="1"
+       parallel="methods"
+       thread-count="3"
+       data-provider-thread-count="3">
+    <!-- ParallelSuiteAdjuster đăng ký 1 lần qua surefire (pom) — không khai báo lại ở đây. -->
+    <test name="Master">
+        <groups>
+            <run>
+                <include name="master"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.tests.MasterExecutionTest"/>
+        </classes>
+    </test>
+</suite>

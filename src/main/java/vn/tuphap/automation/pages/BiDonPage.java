@@ -1051,10 +1051,12 @@ public class BiDonPage {
         String loai = data.loai() == null || data.loai().isBlank() ? "Cá nhân" : data.loai();
         chonLoaiBiDon(index, loai, loaiDon);
         if (DataDictionary.isToChuc(loai)) {
+            TestActionLog.ghiChu("Đang xử lý luồng Bị đơn #" + index + ": Tổ chức");
             dienThongTinToChuc(
                     index, loaiDon, data.tenToChuc(), data.loaiHinh(), data.mst(),
                     data.diaChiTruSo(), data.nguoiDaiDien(), data.chucVu(), data.sdt(), data.email());
         } else {
+            TestActionLog.ghiChu("Đang xử lý luồng Bị đơn #" + index + ": Cá nhân");
             dienThongTinCaNhan(
                     index, loaiDon, data.hoTen(), data.cccd(), data.namSinh(), data.gioiTinh(),
                     data.diaChiCaNhan(), data.noiOHienTai(), data.ngheNghiep(),

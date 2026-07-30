@@ -20,6 +20,8 @@ public class ExtentReportManager {
     private static final ThreadLocal<ExtentTest> CURRENT_TEST = new ThreadLocal<>();
     private static final ThreadLocal<Long> TEST_START_MS = new ThreadLocal<>();
     private static final ThreadLocal<String> LAST_STEP = new ThreadLocal<>();
+    /** Đã ghi fail lên Extent/console — tránh TestListener log lần 2 (nhân đôi ❌). */
+    private static final ThreadLocal<Boolean> FAIL_ALREADY_LOGGED = ThreadLocal.withInitial(() -> false);
     private static long suiteStartMs;
 
     private static final String PASS_BG = "#198754";
@@ -35,7 +37,7 @@ public class ExtentReportManager {
      *
      * @param suiteName tên suite TestNG (để gắn loại SMOKE/MID/FULL/LOGIN trên tiêu đề)
      */
-    public static void initReport(String suiteName) {
+    public static synchronized void initReport(String suiteName) {
         if (extentReports != null) {
             return;
         }
@@ -65,11 +67,21 @@ public class ExtentReportManager {
         extentReports.setSystemInfo("Địa chỉ hệ thống (URL)", ConfigReader.getValue("baseUrl", "https://demo-dichvutuphap.gsfpt.com/"));
         extentReports.setSystemInfo("Thời điểm bắt đầu chạy", now);
         extentReports.setSystemInfo("Công cụ", "Selenium + TestNG (tự động hóa trình duyệt)");
+        if (vn.tuphap.automation.core.ParallelConfig.isParallel()) {
+            extentReports.setSystemInfo("Parallel browsers",
+                    String.valueOf(vn.tuphap.automation.config.RunFlowConfig.browsers()));
+            extentReports.setSystemInfo("Window size",
+                    vn.tuphap.automation.config.RunFlowConfig.windowWidth() + "x"
+                            + vn.tuphap.automation.config.RunFlowConfig.windowHeight());
+        }
     }
 
     public static void createTest(String testName, String description, String... categories) {
         initReport();
-        ExtentTest test = extentReports.createTest(testName, description);
+        ExtentTest test;
+        synchronized (ExtentReportManager.class) {
+            test = extentReports.createTest(testName, description);
+        }
         if (categories != null) {
             for (String category : categories) {
                 if (category != null && !category.isBlank()) {
@@ -82,6 +94,7 @@ public class ExtentReportManager {
         CURRENT_TEST.set(test);
         TEST_START_MS.set(System.currentTimeMillis());
         LAST_STEP.set("Bắt đầu kịch bản");
+        FAIL_ALREADY_LOGGED.set(false);
     }
 
     /** Giữ khoảng trắng hiển thị trong Tags (Name / badge) của Extent Spark. */
@@ -363,9 +376,15 @@ public class ExtentReportManager {
         CURRENT_TEST.remove();
         TEST_START_MS.remove();
         LAST_STEP.remove();
+        FAIL_ALREADY_LOGGED.remove();
     }
 
-    public static void flushReport() {
+    /** True nếu test đã gọi {@link #logFail} / {@link #logFailWithScreenshot} trước Assert.fail. */
+    public static boolean wasFailAlreadyLogged() {
+        return Boolean.TRUE.equals(FAIL_ALREADY_LOGGED.get());
+    }
+
+    public static synchronized void flushReport() {
         if (extentReports != null) {
             extentReports.flush();
         }
@@ -385,6 +404,7 @@ public class ExtentReportManager {
     }
 
     private static void logFailInternal(ExtentTest t, String message, String base64Screenshot) {
+        FAIL_ALREADY_LOGGED.set(true);
         String box = coloredBox(message, FAIL_BG, "#ffffff");
         try {
             if (base64Screenshot != null && !base64Screenshot.isBlank()) {

@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
 <suite name="ToaAn_Smoke_Suite" verbose="1">
-    <!-- Chỉ TaoDonTest: đăng nhập 1 lần trong @BeforeClass — không chạy LoginTest trùng. -->
+    <!-- Chỉ luồng tạo đơn smoke — không kèm Chỉnh sửa / Master. -->
     <test name="Smoke">
-        <groups>
-            <run>
-                <include name="smoke"/>
-            </run>
-        </groups>
         <classes>
-            <class name="vn.tuphap.automation.tests.TaoDonTest"/>
+            <class name="vn.tuphap.automation.tests.TaoDonTest">
+                <methods>
+                    <include name="testFlowTaoDon"/>
+                </methods>
+            </class>
         </classes>
     </test>
 </suite>

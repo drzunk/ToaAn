@@ -87,13 +87,13 @@ public class TaiLieuPage {
 
         System.out.println(" ⏳ Tải " + titles.size() + " tài liệu bắt buộc (mỗi mục một file)...");
         for (String title : titles) {
-            uploadRequiredByTitle(title, 2);
+            uploadRequiredByTitle(title, 3);
         }
 
         List<String> missing = findStillMissingTitles();
         for (String title : missing) {
             System.out.println(" ⚠ Còn thiếu [" + title + "] — tải lại PDF...");
-            uploadRequiredByTitle(title, 2);
+            uploadRequiredByTitle(title, 3);
         }
 
         missing = findStillMissingTitles();
@@ -134,15 +134,24 @@ public class TaiLieuPage {
                     throw new RuntimeException("Không tìm thấy dòng upload: " + title);
                 }
                 if (isRowAttached(row)) {
-                    System.out.println(" ⏩ [" + title + "] đã đính kèm — bỏ qua.");
-                    return;
+                    // Không tin skip nếu tiêu đề này vẫn còn trong danh sách thiếu
+                    // (tránh khớp nhầm sang dòng "Hợp đồng lao động" khi tìm "Quyết định… / …").
+                    if (!isTitleStillMissing(title)) {
+                        System.out.println(" ⏩ [" + title + "] đã đính kèm — bỏ qua.");
+                        return;
+                    }
+                    System.out.println(" ⚠ [" + title + "] hàng đang mở có vẻ đã có file nhưng tiêu đề vẫn thiếu — tải lại...");
                 }
 
-                WebElement input = row.findElement(By.xpath(".//input[@type='file']"));
+                WebElement input = findFileInputInRow(row);
+                if (input == null) {
+                    throw new RuntimeException("Không thấy input file trong dòng: " + title);
+                }
                 String filePath = pickFileForInput(input, title);
                 String tenTep = TestFileHelper.displayName(filePath);
 
                 scrollRowIntoView(row);
+                ensureFileInputReady(input);
                 input.sendKeys(filePath);
                 System.out.println(" ➔ Tải lên: '" + tenTep + "' tại [Tài liệu bắt buộc: " + title + "]"
                         + (attempt > 1 ? " (lần " + attempt + ")" : ""));
@@ -160,6 +169,31 @@ public class TaiLieuPage {
             webUI.sleepMillis(WaitConfig.SETTLE_MS);
         }
         throw new RuntimeException("❌ Không đính kèm được [" + title + "].", last);
+    }
+
+    private WebElement findFileInputInRow(WebElement row) {
+        try {
+            List<WebElement> inputs = row.findElements(By.xpath(".//input[@type='file']"));
+            for (WebElement input : inputs) {
+                if (input != null) {
+                    return input;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void ensureFileInputReady(WebElement input) {
+        try {
+            ((JavascriptExecutor) driver).executeScript(
+                    "arguments[0].style.display='block';"
+                            + "arguments[0].style.visibility='visible';"
+                            + "arguments[0].style.opacity='1';"
+                            + "arguments[0].removeAttribute('disabled');",
+                    input);
+        } catch (Exception ignored) {
+        }
     }
 
     /** PDF mặc định; nếu accept chỉ ảnh thì dùng PNG. */
@@ -238,22 +272,27 @@ public class TaiLieuPage {
     private boolean isRowAttached(WebElement row) {
         try {
             String text = safeText(row).toLowerCase(Locale.ROOT);
+            // UAT vẫn hiện "Chưa đính kèm" → chắc chắn chưa xong (không tin hint ".pdf" trên dòng).
             if (text.contains("chưa đính kèm")) {
                 return false;
             }
-            if (!row.findElements(By.xpath(
-                    ".//svg[contains(@class,'lucide-check') or contains(@class,'check')]")).isEmpty()) {
+            if (text.contains("đã đính kèm") || text.contains("đã tải lên") || text.contains("đã tải")) {
                 return true;
             }
-            if (text.contains("tệp mẫu") || text.contains(".pdf") || text.contains(".docx")
-                    || text.contains(".xlsx") || text.contains(".png") || text.contains(".jpg")) {
+            // Icon check sau upload thành công
+            if (!row.findElements(By.xpath(
+                    ".//svg[contains(@class,'lucide-check')]"
+                            + " | .//*[contains(@class,'text-success') or contains(@class,'text-green')]")).isEmpty()) {
                 return true;
             }
-            // Tên file / chip sau upload
+            // Chip tên file thật (không dùng hint accept ".pdf/.docx" trên UI)
             if (!row.findElements(By.xpath(
-                    ".//*[contains(@class,'truncate') or contains(@class,'file') or contains(@class,'uploaded')]")).isEmpty()
-                    && !text.contains("tải lên")) {
-                // có thể vẫn chỉ là label — không tin nếu còn nút Tải lên và chưa có tên file
+                    ".//*[contains(@class,'truncate')]"
+                            + "[contains(., '.pdf') or contains(., '.png') or contains(., '.jpg')"
+                            + " or contains(., '.jpeg') or contains(., '.docx') or contains(., '.xlsx')]"
+                            + " | .//button[contains(@aria-label,'Xóa') or contains(@aria-label,'xóa')"
+                            + " or contains(., 'Xóa') or contains(., 'Gỡ')]")).isEmpty()) {
+                return true;
             }
             return false;
         } catch (Exception e) {
@@ -262,13 +301,22 @@ public class TaiLieuPage {
     }
 
     private WebElement findRequiredRowByTitle(String title) {
+        WebElement fuzzy = null;
+        String want = normalizeTitle(title);
         for (WebElement row : findRequiredUploadRows()) {
             try {
-                if (titlesMatch(extractDocumentTitle(row), title)) {
+                String got = normalizeTitle(extractDocumentTitle(row));
+                if (got.equals(want)) {
                     return row;
+                }
+                if (titlesMatch(got, want) && fuzzy == null) {
+                    fuzzy = row;
                 }
             } catch (Exception ignored) {
             }
+        }
+        if (fuzzy != null) {
+            return fuzzy;
         }
         // Fallback rộng hơn: mọi dòng có file input chứa tiêu đề
         List<WebElement> allRows = driver.findElements(By.xpath(
@@ -278,8 +326,8 @@ public class TaiLieuPage {
                 if (!row.isDisplayed()) {
                     continue;
                 }
-                if (titlesMatch(extractDocumentTitle(row), title)
-                        || safeText(row).contains(title)) {
+                String got = normalizeTitle(extractDocumentTitle(row));
+                if (got.equals(want) || titlesMatch(got, want)) {
                     return row;
                 }
             } catch (Exception ignored) {
@@ -294,11 +342,39 @@ public class TaiLieuPage {
         }
         String x = normalizeTitle(a);
         String y = normalizeTitle(b);
-        return x.equals(y) || x.contains(y) || y.contains(x);
+        if (x.equals(y)) {
+            return true;
+        }
+        // Tiêu đề có "/": chỉ khớp khi MỘT nhánh == toàn bộ tiêu đề kia (không dùng contains —
+        // tránh "…/ chấm dứt HĐLĐ" khớp nhầm "Hợp đồng lao động").
+        if (x.contains("/")) {
+            for (String part : x.split("/")) {
+                if (normalizeTitle(part).equals(y)) {
+                    return true;
+                }
+            }
+        }
+        if (y.contains("/")) {
+            for (String part : y.split("/")) {
+                if (normalizeTitle(part).equals(x)) {
+                    return true;
+                }
+            }
+        }
+        String shorter = x.length() <= y.length() ? x : y;
+        String longer = x.length() <= y.length() ? y : x;
+        return shorter.length() >= 16
+                && longer.contains(shorter)
+                && shorter.length() * 10 >= longer.length() * 7;
     }
 
     private static String normalizeTitle(String t) {
-        return t.replace("*", "").replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+        return t.replace("*", "")
+                .replace('\u00a0', ' ')
+                .replaceAll("\\s*/\\s*", " / ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 
     private void scrollRowIntoView(WebElement row) {

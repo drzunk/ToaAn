@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Plan run: Mid — 3 Chrome, mỗi case 1 lần, không trùng. -->
+<suite name="ToaAn_Mid_Parallel_Suite"
+       verbose="1"
+       parallel="methods"
+       thread-count="3"
+       data-provider-thread-count="3">
+    <test name="TaoDon_Mid_Parallel_3Browsers">
+        <groups>
+            <run>
+                <include name="mid"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.tests.TaoDonTest">
+                <methods>
+                    <include name="testFlowTaoDon"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+</suite>

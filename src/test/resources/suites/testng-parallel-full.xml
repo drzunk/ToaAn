@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Plan run: Full E2E — 3 Chrome song song.
+  - Mỗi dòng DataProvider chỉ chạy 1 lần trên 1 browser (không trùng case).
+  - Đóng 1 Chrome chỉ dừng thread đó; 2 browser còn lại tiếp tục.
+-->
+<suite name="ToaAn_Full_Parallel_Suite"
+       verbose="1"
+       parallel="methods"
+       thread-count="3"
+       data-provider-thread-count="3">
+    <parameter name="taodon.parallel" value="true"/>
+    <test name="TaoDon_Full_Parallel_3Browsers">
+        <groups>
+            <run>
+                <include name="full"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.tests.TaoDonTest">
+                <methods>
+                    <!-- Chỉ data-driven flow — tránh chồng chéo với chỉnh sửa trên cùng pool -->
+                    <include name="testFlowTaoDon"/>
+                </methods>
+            </class>
+        </classes>
+    </test>
+</suite>
