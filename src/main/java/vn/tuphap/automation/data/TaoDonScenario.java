@@ -145,6 +145,31 @@ public final class TaoDonScenario {
         return new Builder();
     }
 
+    /** Bản sao có thể sửa từng field (dùng cho ca âm — tiêm 1 giá trị sai vào scenario hợp lệ). */
+    public Builder toBuilder() {
+        return new Builder()
+                .stt(stt).loaiDon(loaiDon).loaiViec(loaiViec).toaAn(toaAn).tomTat(tomTat)
+                .loaiChuThe(loaiChuThe).hoTen(hoTen).ngaySinh(ngaySinh).gioiTinh(gioiTinh)
+                .cccd(cccd).ngayCap(ngayCap).noiCap(noiCap).thuongTru(thuongTru).lienLac(lienLac)
+                .tenToChuc(tenToChuc).loaiHinhToChuc(loaiHinhToChuc).mst(mst)
+                .diaChiToChuc(diaChiToChuc).nguoiDaiDienToChuc(nguoiDaiDienToChuc)
+                .chucVuToChuc(chucVuToChuc).sdt(sdt).email(email).coNguoiDaiDien(coNguoiDaiDien)
+                .tenNguoiDaiDien(tenNguoiDaiDien).quanHeDaiDien(quanHeDaiDien)
+                .loaiBiDon(loaiBiDon).hoTenBD(hoTenBD).cccdBD(cccdBD).namSinhBD(namSinhBD)
+                .gioiTinhBD(gioiTinhBD).diaChiCaNhanBD(diaChiCaNhanBD).noiOHienTaiBD(noiOHienTaiBD)
+                .ngheNghiepBD(ngheNghiepBD).tenToChucBD(tenToChucBD).loaiHinhBD(loaiHinhBD)
+                .mstBD(mstBD).diaChiTruSoBD(diaChiTruSoBD).nguoiDaiDienBD(nguoiDaiDienBD)
+                .chucVuBD(chucVuBD).sdtBD(sdtBD).emailBD(emailBD)
+                .coNguoiLienQuan(coNguoiLienQuan).hoTenNLQ(hoTenNLQ).lyDoNLQ(lyDoNLQ)
+                .thongTinLienLacNLQ(thongTinLienLacNLQ)
+                .tenCoQuanHC(tenCoQuanHC).chucDanhHC(chucDanhHC).nguoiThamQuyenHC(nguoiThamQuyenHC)
+                .thoiDiemPhatSinh(thoiDiemPhatSinh).giaTriTranhChap(giaTriTranhChap)
+                .tomTatQuaTrinh(tomTatQuaTrinh).yeuCauCuThe(yeuCauCuThe).canCuPhapLy(canCuPhapLy)
+                .coTaiLieuBoSung(coTaiLieuBoSung).tuCachNopDon(tuCachNopDon)
+                .soLuongBiDon(soLuongBiDon).biDonThem(biDonThem)
+                .coDongNguyenDon(coDongNguyenDon).dongNguyenDon(dongNguyenDon);
+    }
+
     public String stt() { return stt; }
     public String loaiDon() { return loaiDon; }
     public String loaiViec() { return loaiViec; }

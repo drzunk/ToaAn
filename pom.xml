@@ -34,10 +34,14 @@
             <version>7.9.0</version>
         </dependency>
 
+        <!-- Toàn bộ phần báo cáo do dự án tự dựng (BaoCaoHtml → test-output/index.html); Gson chỉ
+             để lưu dữ liệu từng lượt chạy ra runs/<mốc>/bao-cao.json. Trước đây Gson về theo
+             ExtentReports — thư viện đó đã gỡ (mỗi lượt sinh thêm ~2.5 MB không ai đọc), nên phải
+             khai báo tường minh. -->
         <dependency>
-            <groupId>com.aventstack</groupId>
-            <artifactId>extentreports</artifactId>
-            <version>5.1.1</version>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
         </dependency>
 
         <dependency>
@@ -73,6 +77,9 @@
             <artifactId>datafaker</artifactId>
             <version>2.1.0</version>
         </dependency>
+        <!-- KHÔNG phải để xuất báo cáo — phần đó đã bỏ. POI ở lại vì TestFileHelper sinh file
+             .xlsx/.docx mẫu để kiểm thử chức năng tải tài liệu ở bước 5, và trong
+             src/test/resources/testdata/ chỉ có sample.pdf + sample.png. -->
         <dependency>
             <groupId>org.apache.poi</groupId>
             <artifactId>poi-ooxml</artifactId>
@@ -159,6 +166,14 @@
             <properties>
                 <suiteXmlFile>src/test/resources/suites/testng-unit.xml</suiteXmlFile>
                 <taodon.suite>full</taodon.suite>
+            </properties>
+        </profile>
+        <!-- Bộ quét dò field (Giai đoạn 1) — không assert, chỉ ghi báo cáo CSV. Chạy riêng, không nằm trong smoke/mid/full/master. -->
+        <profile>
+            <id>discovery</id>
+            <properties>
+                <suiteXmlFile>src/test/resources/suites/testng-discovery.xml</suiteXmlFile>
+                <taodon.suite>discovery</taodon.suite>
             </properties>
         </profile>
         <profile>

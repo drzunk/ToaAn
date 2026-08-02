@@ -1,6 +1,7 @@
 package vn.tuphap.automation.pages;
 
 import org.openqa.selenium.By;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.Keys;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
@@ -11,6 +12,7 @@ import vn.tuphap.automation.ui.TestFileHelper;
 import vn.tuphap.automation.ui.WaitConfig;
 import vn.tuphap.automation.ui.WebUI;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -77,14 +79,6 @@ public class NoiDungDonPage {
         this.webUI = new WebUI(driver);
     }
 
-    public Step4Mode getStep4Mode() {
-        return step4Mode;
-    }
-
-    public static Step4Mode getLastResolvedStep4Mode() {
-        return lastResolvedStep4Mode;
-    }
-
     public static boolean wasLastStep4Iframe() {
         return lastResolvedStep4Mode == Step4Mode.IFRAME;
     }
@@ -140,15 +134,16 @@ public class NoiDungDonPage {
         return Step4Mode.LEGACY;
     }
 
+    /**
+     * Chờ form trong iframe sẵn sàng.
+     * <p>
+     * Không kiểm tra lại {@code PF_UNPUBLISHED}: {@link #resolveStep4Mode()} vừa chạy ngay trước đó
+     * đã kiểm tra và dừng case nếu biểu mẫu chưa xuất bản — lặp lại chỉ tốn thêm 1 lần
+     * {@code switchToIframe} (mỗi lần là một {@code waitForDisplayedEnabled} trên XPath dài).
+     */
     private void waitIframeFormReady() {
         webUI.switchToIframe(IFRAME_NOI_DUNG);
         try {
-            if (webUI.existsNow(PF_UNPUBLISHED)) {
-                String msg = readUnpublishedMessage();
-                webUI.switchToDefaultContent();
-                webUI.failStepWithSystemFeedback(4, TaoDonReportBuilder.tenBuocDayDu(4),
-                        "Iframe biểu mẫu nhúng báo lỗi", List.of(msg));
-            }
             webUI.waitUntilVisible(MARKER_IFRAME_READY, WaitConfig.STEP,
                     "Bước 4 [Nội dung đơn — iframe biểu mẫu]");
         } finally {
@@ -256,8 +251,19 @@ public class NoiDungDonPage {
         }
     }
 
-    /** In danh sách control trong iframe — để debug khi eform đổi cấu trúc. */
+    /**
+     * In danh sách control trong iframe — chỉ để debug khi eform đổi cấu trúc, bật bằng
+     * {@code -Dtaodon.debug.eform=true}.
+     * <p>
+     * Mặc định TẮT vì rất đắt mà không ảnh hưởng kết quả test: mỗi ô tốn ~8 lượt gọi WebDriver
+     * (tag/type/name/id/placeholder/class/value/label/isDisplayed), rồi còn quét <b>mọi nút</b>
+     * trên trang kèm 1 lệnh JS đọc outerHTML cho từng nút. Đo thực tế: 16 ô + 29 nút cho một
+     * eform — vài trăm lượt gọi chỉ để sinh log.
+     */
     public void logIframeFieldInventory() {
+        if (!"true".equalsIgnoreCase(System.getProperty("taodon.debug.eform", "false"))) {
+            return;
+        }
         List<WebElement> fields = findIframeEditableFields();
         System.out.println(" 📋 Iframe eform — " + fields.size() + " ô có thể nhập:");
         int i = 0;
@@ -320,32 +326,100 @@ public class NoiDungDonPage {
                                         String tomTatQuaTrinh,
                                         String yeuCauCuThe,
                                         String canCuPhapLy) {
-        fillFirstMatchingField(List.of("thời điểm", "phát sinh", "ngày xảy", "ngày tháng"),
+        // Đọc nhãn/placeholder/name/aria-label/value/trạng thái của MỌI ô trong 1 lệnh JS, dùng lại
+        // cho cả 5 nhóm gợi ý bên dưới. Trước đây mỗi nhóm lại duyệt hết các ô và hỏi WebDriver
+        // từng thuộc tính một (~9 lượt/ô × 16 ô × 5 nhóm ≈ 700 lượt gọi cho một bước 4).
+        List<WebElement> fields = findIframeEditableFields();
+        List<FieldMeta> meta = readFieldMetaBulk(fields);
+
+        fillFirstMatchingField(fields, meta, List.of("thời điểm", "phát sinh", "ngày xảy", "ngày tháng"),
                 thoiDiemPhatSinh, true, "Thời điểm / ngày vụ việc (iframe)");
         if (DataDictionary.hasGiaTriTranhChap(loaiDon)) {
-            fillFirstMatchingField(List.of("giá trị tranh chấp", "giá trị", "số tiền", "thiệt hại"),
+            fillFirstMatchingField(fields, meta, List.of("giá trị tranh chấp", "giá trị", "số tiền", "thiệt hại"),
                     giaTriTranhChap, false, "Giá trị / số tiền (iframe)");
         }
-        fillFirstMatchingField(List.of("tóm tắt", "quá trình", "sự việc", "diễn biến", "nội dung vụ"),
+        fillFirstMatchingField(fields, meta, List.of("tóm tắt", "quá trình", "sự việc", "diễn biến", "nội dung vụ"),
                 tomTatQuaTrinh, false, "Tóm tắt sự việc (iframe)");
-        fillFirstMatchingField(List.of("yêu cầu cụ thể", "yêu cầu", "đề nghị"),
+        fillFirstMatchingField(fields, meta, List.of("yêu cầu cụ thể", "yêu cầu", "đề nghị"),
                 yeuCauCuThe, false, "Yêu cầu (iframe)");
-        fillFirstMatchingField(List.of("căn cứ pháp lý", "căn cứ", "điều luật", "pháp lý"),
+        fillFirstMatchingField(fields, meta, List.of("căn cứ pháp lý", "căn cứ", "điều luật", "pháp lý"),
                 canCuPhapLy, false, "Căn cứ pháp lý (iframe)");
     }
 
-    private void fillFirstMatchingField(List<String> labelHints, String value, boolean maskedDate, String logName) {
+    /** Thông tin nhận dạng của một ô, đọc sẵn bằng JS để khỏi hỏi WebDriver từng thuộc tính. */
+    private record FieldMeta(String blob, String value, boolean shown, boolean enabled) {
+    }
+
+    private static final String FIELD_META_JS =
+            "function lab(el){"
+                    + "  if(el.id){var q;try{q=document.querySelector('label[for=\"'+el.id.replace(/\"/g,'\\\\\"')+'\"]');}catch(e){q=null;}"
+                    + "    if(q) return q.innerText||'';}"
+                    + "  var p=el.parentElement;"
+                    + "  while(p && p!==document.body){var l=p.querySelector('label');"
+                    + "    if(l) return l.innerText||''; p=p.parentElement;}"
+                    + "  return '';}"
+                    + "return arguments[0].map(function(el){"
+                    + "  return [lab(el),"
+                    + "          el.getAttribute('placeholder')||'',"
+                    + "          el.getAttribute('name')||'',"
+                    + "          el.getAttribute('aria-label')||'',"
+                    + "          (el.value==null?'':String(el.value)),"
+                    + "          (el.offsetParent!==null||el.getClientRects().length>0)?'1':'0',"
+                    + "          el.disabled?'0':'1'];});";
+
+    @SuppressWarnings("unchecked")
+    private List<FieldMeta> readFieldMetaBulk(List<WebElement> fields) {
+        List<FieldMeta> out = new ArrayList<>();
+        if (fields.isEmpty()) {
+            return out;
+        }
+        try {
+            Object raw = ((JavascriptExecutor) driver).executeScript(FIELD_META_JS, fields);
+            for (Object row : (List<Object>) raw) {
+                List<Object> c = (List<Object>) row;
+                String blob = (safe((String) c.get(0)) + " " + safe((String) c.get(1))
+                        + " " + safe((String) c.get(2)) + " " + safe((String) c.get(3)))
+                        .toLowerCase(Locale.ROOT);
+                out.add(new FieldMeta(blob, safe((String) c.get(4)),
+                        "1".equals(c.get(5)), "1".equals(c.get(6))));
+            }
+        } catch (Exception e) {
+            System.out.println(" ⚠ Không đọc gộp được thuộc tính ô iframe (" + e.getMessage()
+                    + ") — quay lại đọc từng ô.");
+            out.clear();
+        }
+        return out;
+    }
+
+    private void fillFirstMatchingField(List<WebElement> fields, List<FieldMeta> meta,
+                                        List<String> labelHints, String value,
+                                        boolean maskedDate, String logName) {
         if (value == null || value.isBlank()) {
             return;
         }
-        for (WebElement field : findIframeEditableFields()) {
+        boolean coMeta = meta.size() == fields.size();
+        for (int i = 0; i < fields.size(); i++) {
+            WebElement field = fields.get(i);
             try {
-                if (!field.isDisplayed() || !field.isEnabled()) {
-                    continue;
+                String blob;
+                String hienTai;
+                if (coMeta) {
+                    FieldMeta m = meta.get(i);
+                    if (!m.shown() || !m.enabled()) {
+                        continue;
+                    }
+                    blob = m.blob();
+                    hienTai = m.value();
+                } else {
+                    // Đường lùi khi lệnh JS gộp lỗi — giữ nguyên cách cũ để không mất khả năng điền.
+                    if (!field.isDisplayed() || !field.isEnabled()) {
+                        continue;
+                    }
+                    blob = (nearestLabelText(field) + " " + safe(field.getAttribute("placeholder"))
+                            + " " + safe(field.getAttribute("name")) + " " + safe(field.getAttribute("aria-label")))
+                            .toLowerCase(Locale.ROOT);
+                    hienTai = readFieldValue(field);
                 }
-                String blob = (nearestLabelText(field) + " " + safe(field.getAttribute("placeholder"))
-                        + " " + safe(field.getAttribute("name")) + " " + safe(field.getAttribute("aria-label")))
-                        .toLowerCase(Locale.ROOT);
                 boolean match = false;
                 for (String hint : labelHints) {
                     if (blob.contains(hint.toLowerCase(Locale.ROOT))) {
@@ -356,7 +430,7 @@ public class NoiDungDonPage {
                 if (!match) {
                     continue;
                 }
-                if (!readFieldValue(field).isBlank()) {
+                if (!hienTai.isBlank()) {
                     return;
                 }
                 typeIntoField(field, value, maskedDate, logName);
@@ -528,7 +602,7 @@ public class NoiDungDonPage {
                             + "}catch(e){}});"
                             + "if(document.activeElement&&document.activeElement.blur){"
                             + "  document.activeElement.blur();}");
-            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
             System.out.println(" ℹ Iframe — đã commit state các ô trước khi bấm Tiếp theo.");
         } catch (Exception e) {
             System.out.println(" ⚠ Không commit được state iframe: " + e.getMessage());
@@ -545,7 +619,7 @@ public class NoiDungDonPage {
                         + " | //*[@role='button' and contains(., 'Gửi ngay')]");
         if (webUI.existsNow(btnGuiNgay)) {
             webUI.clickElementOnceJs(btnGuiNgay, "Nút [Gửi ngay] trong iframe eform", WaitConfig.FIELD);
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
             System.out.println(" ℹ Iframe — đã bấm [Gửi ngay] đồng bộ nội dung với host.");
             return true;
         }
@@ -561,7 +635,7 @@ public class NoiDungDonPage {
                             + "}"
                             + "return null;");
             if (clicked != null && !String.valueOf(clicked).isBlank()) {
-                webUI.sleepMillis(WaitConfig.SETTLE_MS);
+                webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
                 System.out.println(" ℹ Iframe — đã bấm [" + clicked + "] (JS) đồng bộ host.");
                 return true;
             }
@@ -613,16 +687,22 @@ public class NoiDungDonPage {
 
     /** Commit + Gửi ngay (nếu có) + chờ ack trước khi bấm Tiếp theo wizard. */
     private void syncIframeEformWithHost() {
+        // PHẢI giữ commit này: commit bên trong nudgeIframeDirtyState() nằm trong khối try, nếu
+        // vòng tìm ô ném lỗi thì nó không chạy → host không nhận nội dung → bước 4 kẹt 15+10s rồi
+        // fail. Đã dính đúng lỗi đó khi thử bỏ. (Lần commit thứ 3 ở clickTiepTheo mới là lần thừa.)
         commitIframeFieldState();
         nudgeIframeDirtyState();
         for (int attempt = 1; attempt <= 3; attempt++) {
             if (clickGuiNgayInIframe()) {
                 break;
             }
-            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            // Không nghỉ sau lần thử cuối — sau nó là thoát vòng lặp, không thử lại nữa.
+            if (attempt < 3) {
+                webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
+            }
         }
         webUI.switchToDefaultContent();
-        waitForEformHostAck(8000);
+        waitForEformHostAck(WaitConfig.EFORM_ACK_MS);
     }
 
     /**
@@ -688,7 +768,7 @@ public class NoiDungDonPage {
                 return;
             }
             webUI.clickElement(themDong, "Nút [Thêm dòng] trong eform", WaitConfig.FIELD);
-            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
             System.out.println(" ➔ Thêm dòng bảng dữ liệu eform");
         } catch (Exception e) {
             System.out.println(" ⚠ Không thêm dòng bảng eform: " + e.getMessage());
@@ -708,7 +788,7 @@ public class NoiDungDonPage {
                 file.sendKeys(path);
                 System.out.println(" ➔ Upload file eform: " + abbreviate(path, 80));
                 TestActionLog.dien("File eform (iframe)", path);
-                webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
             } catch (Exception e) {
                 System.out.println(" ⚠ Không upload file trong eform: " + e.getMessage());
             }
@@ -758,22 +838,6 @@ public class NoiDungDonPage {
             }
         }
         return filled;
-    }
-
-    private void logIframeValidationHints() {
-        try {
-            Object msgs = ((org.openqa.selenium.JavascriptExecutor) driver).executeScript(
-                    "var out=[];"
-                            + "document.querySelectorAll('.error,.invalid,.field-error,[class*=error],"
-                            + "[class*=invalid],.text-danger,.pf-wrap [role=alert]').forEach(function(el){"
-                            + "  var t=(el.innerText||'').trim(); if(t&&t.length<200) out.push(t);"
-                            + "});"
-                            + "return out.slice(0,8);");
-            if (msgs instanceof java.util.List<?> list && !list.isEmpty()) {
-                System.out.println(" ⚠ Validation trong iframe: " + list);
-            }
-        } catch (Exception ignored) {
-        }
     }
 
     private void logEmptyRequiredFields() {
@@ -992,13 +1056,16 @@ public class NoiDungDonPage {
     private void advanceIframeInternalSteps(String tomTat, String yeuCau, String canCu,
                                             String thoiDiem, String giaTri) {
         for (int step = 0; step < 6; step++) {
-            if (!webUI.isElementVisible(btnTiepTheoIframe) || !webUI.isElementEnabled(btnTiepTheoIframe)) {
+            // existsNow thay isElementVisible: eform 1 trang không có nút [Tiếp theo] nội bộ —
+            // trường hợp phổ biến — nên đây gần như luôn là "không thấy", mà isElementVisible
+            // phải chờ hết PROBE_MS mới trả lời được là không thấy.
+            if (!webUI.existsNow(btnTiepTheoIframe) || !webUI.isElementEnabled(btnTiepTheoIframe)) {
                 break;
             }
             fillGenericIframeInputs(tomTat, yeuCau, canCu, thoiDiem, giaTri);
             fillIframeCustomDropdowns();
             webUI.clickElement(btnTiepTheoIframe, "Nút [Tiếp theo] trong iframe bước 4", WaitConfig.FIELD);
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
         }
     }
 
@@ -1014,7 +1081,7 @@ public class NoiDungDonPage {
         webUI.waitUntilVisible(MARKER_UPLOAD_READY, WaitConfig.FIELD, "Input [Tải nội dung đơn]");
         String filePath = TestFileHelper.pickRandomUploadFile();
         webUI.uploadFile(FILE_INPUT_NOI_DUNG, filePath, "Tải lên [Nội dung đơn]");
-        webUI.sleepMillis(WaitConfig.SETTLE_MS);
+        webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
     }
 
     private void dienFormLegacyOrIframe(String loaiDon,
@@ -1057,12 +1124,13 @@ public class NoiDungDonPage {
                                 + " | //div[contains(@class,'pf-wrap')]//button[contains(., 'Tiếp theo')]");
                 if (webUI.existsNow(iframeNextOnly)) {
                     webUI.clickElementOnceJs(iframeNextOnly, "Nút [Tiếp theo] nội bộ iframe", WaitConfig.FIELD);
-                    webUI.sleepMillis(WaitConfig.SETTLE_MS);
+                    webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
                     fillGenericIframeInputs("Nội dung kiểm thử tự động.", "Nội dung kiểm thử tự động.",
                             "Nội dung kiểm thử tự động.", "15/01/2024", "1000000");
                     fillIframeCustomDropdowns();
                 }
-                commitIframeFieldState();
+                // syncIframeEformWithHost() tự commit ở cuối (qua nudgeIframeDirtyState) — commit
+                // thêm ở đây là lần thứ 3 liên tiếp, mỗi lần đều bắn input/change/blur lên MỌI ô.
                 syncIframeEformWithHost();
             } finally {
                 webUI.switchToDefaultContent();
@@ -1109,11 +1177,6 @@ public class NoiDungDonPage {
         } finally {
             webUI.switchToDefaultContent();
         }
-    }
-
-    /** true nếu không còn ô trống / dropdown placeholder trong iframe. */
-    public boolean isIframeFullyFilled() {
-        return describeIframeFillGaps().isBlank();
     }
 
     private String scope() {

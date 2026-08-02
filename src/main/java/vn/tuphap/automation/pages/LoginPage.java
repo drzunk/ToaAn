@@ -55,7 +55,6 @@ public class LoginPage {
     }
 
     public void thucHienDangNhap(String user, String pass, String manualCaptcha) {
-        TestActionLog.buoc(0, "Đăng nhập hệ thống", "Màn đăng nhập");
         // ÉP DÙNG setText (KHÔNG KIỂM TRA ĐIỀU KIỆN) ĐỂ LỖI PHÁT LÀ FAILED LUÔN
         webUI.setText(txtUsername, user, "Ô nhập [CCCD/Tên đăng nhập]");
         webUI.setText(txtPassword, pass, "Ô nhập [Mật khẩu]");
@@ -86,8 +85,10 @@ public class LoginPage {
                 System.out.println(" ⏳ Thử đăng nhập lại (lần " + attempt + "/" + attempts + ")...");
             }
             openPage();
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
-            if (dashboard.isDashboardVisible()) {
+            // Poll ngắn thay cho "ngủ một nhịp rồi hỏi đúng một lần": trả lời ngay khi Dashboard
+            // hiện, mà lỡ nhịp cũng không đẩy cả case đi đăng nhập captcha lại từ đầu — nên khoảng
+            // này không được nằm trong taodon.wait.scale.
+            if (pollDashboardVisible(dashboard, 2)) {
                 System.out.println(" ✅ Đã có session — Dashboard sẵn sàng.");
                 return;
             }

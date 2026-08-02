@@ -41,8 +41,22 @@ public class BaseTest {
         DriverContext.quitCurrent();
 
         ChromeOptions options = new ChromeOptions();
+        // App là SPA React: mọi driver.get() với chiến lược mặc định 'normal' bị chặn tới khi
+        // ảnh/font/analytics tải xong, dù DOM đã dùng được. 'eager' trả về ngay sau DOMContentLoaded —
+        // các chỗ điều hướng (LoginPage.openPage, DashboardPage.ensureReady) đều có wait thật ngay sau.
+        // Đây là thay đổi hành vi duy nhất còn lại; revert không cần build: -Dtaodon.pageLoad=normal
+        String pageLoad = System.getProperty("taodon.pageLoad", "eager");
+        if (!"normal".equalsIgnoreCase(pageLoad)) {
+            options.setPageLoadStrategy(org.openqa.selenium.PageLoadStrategy.EAGER);
+        }
         options.addArguments("--disable-notifications");
         options.addArguments("--remote-allow-origins=*");
+        // BrowserLayout xếp 3 cửa sổ cạnh nhau nên tối đa 1 cửa sổ được focus; mặc định Chrome
+        // bóp setTimeout/setInterval của các cửa sổ nền, làm chậm đúng những React render và
+        // API polling mà test đang ngồi chờ.
+        options.addArguments("--disable-background-timer-throttling");
+        options.addArguments("--disable-renderer-backgrounding");
+        options.addArguments("--disable-backgrounding-occluded-windows");
         // Parallel: không maximize — BrowserLayout chia 3 cột để xem cùng lúc.
         if (!ParallelConfig.isParallel()) {
             options.addArguments("--start-maximized");
@@ -53,12 +67,16 @@ public class BaseTest {
         prefs.put("credentials_enable_service", false);
         prefs.put("profile.password_manager_enabled", false);
         options.setExperimentalOption("prefs", prefs);
+        // KHÔNG bỏ: WebUI.readRecentBrowserCrashLogs() đọc log này để phát hiện crash danhSach
+        // (một trong ba tín hiệu dẫn tới nhánh F5 retry).
         options.setCapability("goog:loggingPrefs", java.util.Map.of("browser", "ALL"));
 
         WebDriver driver = null;
         try {
             driver = new ChromeDriver(options);
             driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(0));
+            // Trả về nguyên driver khi tắt (mặc định) — chỉ bọc khi -Dtaodon.countCalls=true.
+            driver = vn.tuphap.automation.ui.DriverCallCounter.wrap(driver);
             BrowserLayout.apply(driver);
             WebUI webUI = new WebUI(driver);
             DriverContext.bind(driver, webUI);
@@ -111,13 +129,15 @@ public class BaseTest {
         if (!vn.tuphap.automation.config.RunFlowConfig.openReport()) {
             return;
         }
+        // Mở trang báo cáo (index.html) — lịch sử mọi lượt chạy, xu hướng và chi tiết ba tầng.
         try {
-            java.io.File reportFile = new java.io.File("test-output/ExtentReport.html");
-            if (reportFile.exists()) {
-                java.awt.Desktop.getDesktop().browse(reportFile.toURI());
+            java.io.File bao = new java.io.File("test-output/index.html");
+            if (bao.exists()) {
+                java.awt.Desktop.getDesktop().browse(bao.toURI());
             }
         } catch (Exception e) {
-            System.out.println("Lỗi khi mở báo cáo: " + e.getMessage());
+            System.out.println("Không mở được báo cáo tự động: " + e.getMessage()
+                    + " — mở thủ công: test-output/index.html");
         }
     }
 }

@@ -705,9 +705,11 @@ public class BiDonPage {
         if (scope.isBlank()) {
             return;
         }
+        long t0 = System.currentTimeMillis();
         webUI.scrollToElement(By.xpath(scope));
         webUI.dismissOpenDropdowns();
         webUI.ensureAdministrativeAddressBlockInScope(scope, 0, diaChi, who);
+        System.out.println(" ⏱ Khối địa chỉ [" + who + "]: " + (System.currentTimeMillis() - t0) + "ms");
     }
 
     /**

@@ -49,14 +49,14 @@ public final class TaoDonReportBuilder {
         return s != null ? s.loaiViec() : "Khác";
     }
 
-    /** Bảng tóm tắt ngắn trên Extent — chi tiết đầy đủ nằm ở báo cáo Excel. */
+    /** Dòng giới thiệu ngắn ở đầu kịch bản — dữ liệu từng trường nằm ngay trong các bước. */
     public static void logScenarioOverview(TaoDonScenario s) {
         if (s == null) {
             return;
         }
-        TaoDonExcelTestLog.bindScenario(s);
-        ExtentReportManager.logInfo(
-                "Kịch bản: " + buildTestTitle(s) + " — chi tiết dữ liệu xem file báo cáo Excel.");
+        BaoCao.logInfo("Kịch bản: " + buildTestTitle(s));
+        BaoCao.ketQuaMongDoi("Nộp trọn đơn " + s.loaiDon() + " / " + s.loaiViec()
+                + " qua 6 bước và được hệ thống tiếp nhận.");
     }
 
     public static String tenBuocDayDu(int step) {
@@ -71,16 +71,32 @@ public final class TaoDonReportBuilder {
         };
     }
 
+    /**
+     * Định dạng thời lượng cho người đọc.
+     * <p>
+     * Làm tròn <b>trước</b> rồi mới tách phút/giây. Bản cũ tách trước rồi mới làm tròn phần giây,
+     * nên 179.5 giây in ra "2 phút 60 giây" — hiện ngay trên số dẫn của báo cáo. Cùng lỗi đó khiến
+     * 59.95 giây thành "60.0 giây" thay vì "1 phút".
+     */
     public static String formatDuration(long millis) {
+        if (millis < 0) {
+            millis = 0;
+        }
         if (millis < 1000) {
             return millis + " mili giây";
         }
+        // Dưới 1 phút giữ một chữ số thập phân, nhưng phải kiểm tra sau khi làm tròn: 59.96 giây
+        // làm tròn thành 60.0 thì phải chuyển sang cách đọc theo phút.
         if (millis < 60_000) {
-            return String.format("%.1f giây", millis / 1000.0);
+            double giay = Math.round(millis / 100.0) / 10.0;
+            if (giay < 60.0) {
+                return String.format(java.util.Locale.ROOT, "%.1f giây", giay);
+            }
         }
-        long minutes = millis / 60_000;
-        double seconds = (millis % 60_000) / 1000.0;
-        return String.format("%d phút %.0f giây", minutes, seconds);
+        long tongGiay = Math.round(millis / 1000.0);
+        long phut = tongGiay / 60;
+        long giay = tongGiay % 60;
+        return giay == 0 ? phut + " phút" : phut + " phút " + giay + " giây";
     }
 
     private static String moTaChuThe(String loai) {

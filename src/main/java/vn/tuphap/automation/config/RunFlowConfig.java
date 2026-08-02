@@ -99,7 +99,7 @@ public final class RunFlowConfig {
         return bool("run.openReport", true);
     }
 
-    /** Case tùy chọn từ menu ({@code run.cases}). */
+    /** Case tùy chọn — từ Google Sheet ({@code run.casesSheet}) hoặc từ menu ({@code run.cases}). */
     public static boolean hasCases() {
         return !cases().isEmpty();
     }
@@ -108,8 +108,48 @@ public final class RunFlowConfig {
         return cases().size();
     }
 
+    /**
+     * Danh sách case sẽ chạy.
+     * <p>
+     * Nguồn theo {@code run.caseSource}: {@code sheet} (mặc định khi có {@code run.casesSheet})
+     * đọc Google Sheet — mất mạng thì dùng cache, không có cache thì quay về {@code run.cases};
+     * {@code file} đọc thẳng {@code run.cases} trong {@code run-flow.properties}.
+     */
     public static List<CaseProfile> cases() {
+        if (useSheet()) {
+            List<CaseProfile> fromSheet = CaseSheetSource
+                    .load(casesSheetUrl(), text("run.casesSheetGid", "")).cases();
+            if (!fromSheet.isEmpty()) {
+                return fromSheet;
+            }
+        }
         return parseCases(raw("run.cases"));
+    }
+
+    /** URL Google Sheet chứa danh sách case ({@code run.casesSheet}); rỗng = không dùng sheet. */
+    public static String casesSheetUrl() {
+        return text("run.casesSheet", "");
+    }
+
+    /** Có lấy case từ Google Sheet hay không ({@code run.caseSource=sheet} + có URL). */
+    public static boolean useSheet() {
+        if (!hasText(casesSheetUrl())) {
+            return false;
+        }
+        String src = text("run.caseSource", "sheet").trim().toLowerCase(Locale.ROOT);
+        return !("file".equals(src) || "properties".equals(src) || "run.cases".equals(src));
+    }
+
+    /** Nhãn nguồn case để in ra log / báo cáo. */
+    public static String caseSourceLabel() {
+        String fromFile = hasText(raw("run.cases"))
+                ? "run.cases (" + parseCases(raw("run.cases")).size() + " case)"
+                : "(không có case)";
+        if (!useSheet()) {
+            return fromFile;
+        }
+        CaseSheetSource.Result r = CaseSheetSource.load(casesSheetUrl(), text("run.casesSheetGid", ""));
+        return r.cases().isEmpty() ? r.sourceLabel() + " → " + fromFile : r.sourceLabel();
     }
 
     /** Có cấu hình từng Chrome ({@code run.slots} thuần — không suy từ run.cases). */
@@ -181,6 +221,16 @@ public final class RunFlowConfig {
         return parseUntilStep(untilStepRaw());
     }
 
+    /**
+     * Số thư mục lượt chạy giữ lại trong {@code test-output/runs/}; {@code 0} = không bao giờ xoá.
+     * <p>
+     * Một lượt FULL chiếm ~36 MB trên đĩa và toàn bộ JSON của mọi lượt được phân tích lại sau mỗi
+     * lần chạy, nên để tích luỹ vô hạn là có ngày báo cáo ngừng dựng được.
+     */
+    public static String keepRuns() {
+        return text("run.keepRuns", "30");
+    }
+
     /** Max untilStep trên mọi case/slot (hoặc cấu hình chung) — dùng cho DataProvider. */
     public static int maxUntilStep() {
         if (hasCases()) {
@@ -242,6 +292,10 @@ public final class RunFlowConfig {
         if (hasText(casesRaw)) {
             putIfAbsentSys("taodon.cases", casesRaw);
         }
+        String sheetUrl = text("run.casesSheet", "");
+        if (hasText(sheetUrl)) {
+            putIfAbsentSys("taodon.casesSheet", sheetUrl);
+        }
     }
 
     /** In bảng tóm tắt dễ đọc lúc bắt đầu suite. */
@@ -264,7 +318,7 @@ public final class RunFlowConfig {
             System.out.println("║  Số case           : " + pad(String.valueOf(list.size())
                     + (list.size() > browsers()
                     ? " (xếp hàng trên " + browsers() + " Chrome)" : "")));
-            System.out.println("║  run.cases         : " + pad(list.size() + " case"));
+            System.out.println("║  Nguồn case        : " + pad(caseSourceLabel()));
             if (list.size() > 2) {
                 System.out.println("║  Chi tiết case     : " + pad("xem STT bên dưới khung"));
                 caseListForDetail = list;
@@ -282,6 +336,9 @@ public final class RunFlowConfig {
                         + pad(list.get(i).label()));
             }
         } else {
+            if (useSheet()) {
+                System.out.println("║  Nguồn case        : " + pad(caseSourceLabel()));
+            }
             System.out.println("║  untilStep         : " + pad(untilStepLabel(parseUntilStep(text("run.untilStep", "6")),
                     bool("run.submit", false))));
             System.out.println("║  submit (bước 6)   : " + pad(bool("run.submit", false)
@@ -300,7 +357,8 @@ public final class RunFlowConfig {
                         + " > " + c.chuThe()
                         + (hasText(c.tuCachNopDon()) ? " > " + c.tuCachNopDon() : "")
                         + " > " + c.untilStep() + (c.submit() ? ":submit" : "")
-                        + "  —  " + c.shortLabel());
+                        + "  —  " + c.shortLabel()
+                        + (hasText(c.ghiChu()) ? "  [" + c.ghiChu() + "]" : ""));
             }
             System.out.println();
         } else {
@@ -347,7 +405,7 @@ public final class RunFlowConfig {
         return list.get(idx % list.size());
     }
 
-    private static int parseUntilStep(String rawIn) {
+    static int parseUntilStep(String rawIn) {
         String raw = rawIn == null ? "" : rawIn.trim().toLowerCase(Locale.ROOT);
         if (raw.isBlank() || "login".equals(raw) || "0".equals(raw)) {
             return 0;
@@ -461,7 +519,7 @@ public final class RunFlowConfig {
         return new CaseProfile(loaiDon, loaiViec, chuThe, tuCach, until, submit);
     }
 
-    private static String resolveChuThe(String raw) {
+    static String resolveChuThe(String raw) {
         if (!hasText(raw)) {
             return "Cá nhân";
         }
@@ -548,6 +606,9 @@ public final class RunFlowConfig {
             case "run.submit" -> System.getProperty("taodon.submit");
             case "run.slots" -> System.getProperty("taodon.slots");
             case "run.cases" -> System.getProperty("taodon.cases");
+            case "run.casesSheet" -> System.getProperty("taodon.casesSheet");
+            case "run.casesSheetGid" -> System.getProperty("taodon.casesSheetGid");
+            case "run.caseSource" -> System.getProperty("taodon.caseSource");
             case "run.window.width" -> System.getProperty("taodon.window.width");
             case "run.window.height" -> System.getProperty("taodon.window.height");
             case "run.window.scale" -> System.getProperty("taodon.window.scale");
@@ -605,19 +666,49 @@ public final class RunFlowConfig {
     }
 
     /**
-     * Case tùy chọn từ menu: loại đơn / việc / chủ thể / tư cách / bước.
+     * Một case cụ thể — từ menu ({@code run.cases}) hoặc từ Google Sheet ({@code run.casesSheet}).
+     * <p>
+     * Các trường nhánh chỉ có trong sheet dùng quy ước <b>"trống = automation tự chọn"</b>:
+     * {@code toaAn} rỗng, {@code soLuongBiDon} = 0 và các {@code Boolean} = {@code null}
+     * đều để {@code DataGenerator} giữ nguyên cách sinh theo seed như trước.
      */
     public record CaseProfile(
             String loaiDon,
             String loaiViec,
             String chuThe,
             String tuCachNopDon,
+            String toaAn,
+            int soLuongBiDon,
+            Boolean coDongNguyenDon,
+            Boolean coNguoiDaiDien,
+            Boolean coNguoiLienQuan,
+            Boolean coTaiLieuBoSung,
+            String ghiChu,
+            /** Tên trường muốn ép giá trị sai (rỗng = case bình thường, không phải ca âm). */
+            String truongLoi,
+            /** Giá trị sai sẽ điền vào {@code truongLoi} (rỗng = cố tình để trống trường đó). */
+            String giaTriLoi,
+            /** Chuỗi con bắt buộc có trong thông báo hệ thống trả về (rỗng = chấp nhận mọi thông báo chặn). */
+            String thongBaoMongDoi,
             int untilStep,
             boolean submit
     ) {
+        /** Dạng gọn của {@code run.cases} — 5 trường, mọi nhánh khác để automation tự chọn. */
+        public CaseProfile(String loaiDon, String loaiViec, String chuThe, String tuCachNopDon,
+                           int untilStep, boolean submit) {
+            this(loaiDon, loaiViec, chuThe, tuCachNopDon, "", 0,
+                    null, null, null, null, "", "", "", "", untilStep, submit);
+        }
+
+        /** Case này có phải ca âm (cố tình nhập sai để kiểm tra hệ thống chặn đúng) không. */
+        public boolean hasNegativeExpectation() {
+            return truongLoi != null && !truongLoi.isBlank();
+        }
+
         public String shortLabel() {
             String depth = untilStepLabel(untilStep, submit);
-            return loaiDon + " / " + (chuThe == null ? "?" : chuThe) + " @ " + depth;
+            String label = loaiDon + " / " + (chuThe == null ? "?" : chuThe) + " @ " + depth;
+            return hasNegativeExpectation() ? label + " [ca âm: " + truongLoi + "]" : label;
         }
 
         public String toConfigToken() {

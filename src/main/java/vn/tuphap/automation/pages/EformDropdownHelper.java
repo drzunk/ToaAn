@@ -34,8 +34,12 @@ final class EformDropdownHelper {
             webUI.sleepMillis(550);
 
             // Nếu có ô tìm trong menu — gõ ký tự để hiện option (tránh "Không tìm thấy").
-            js.executeScript(TYPE_IN_OPEN_SEARCH_JS, "a");
-            webUI.sleepMillis(350);
+            // JS trả 'NO_SEARCH' khi dropdown không có ô tìm: khi đó không có gì để lọc nên
+            // khỏi nghỉ chờ kết quả lọc.
+            Object typed = js.executeScript(TYPE_IN_OPEN_SEARCH_JS, "a");
+            if (!"NO_SEARCH".equals(String.valueOf(typed))) {
+                webUI.sleepMillis(350);
+            }
 
             String chosen = tryPick(js, before);
             if (chosen == null) {
@@ -57,14 +61,14 @@ final class EformDropdownHelper {
                 logChosen(chosen, false);
             }
 
-            webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
             Object confirmed = js.executeScript(CONFIRM_OR_SKIP_JS);
             if ("OK".equals(String.valueOf(confirmed))) {
                 filled++;
             } else {
                 // Keyboard fallback nếu click option không dính vào button.
                 Object kb = js.executeScript(KEYBOARD_SELECT_OPEN_DROPDOWN_JS);
-                webUI.sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                webUI.sleepMillis(WaitConfig.SETTLE_EFORM_MS);
                 Object confirmed2 = js.executeScript(CONFIRM_OR_SKIP_JS);
                 if ("OK".equals(String.valueOf(confirmed2))) {
                     System.out.println(" ➔ Chọn dropdown eform (keyboard): '" + kb + "'");

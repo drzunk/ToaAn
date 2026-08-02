@@ -12,18 +12,28 @@ public class DataGenerator {
     private static final long FAKER_SEED = 20240724L;
     private static final int SMOKE_ROW_COUNT = 3;
 
-    /** Địa chỉ VN đầy đủ: số nhà/đường + phường (chỉ để đọc) + tỉnh (hint dropdown).
-     * Textarea "Chi tiết" chỉ nhận phần số nhà/đường ({@code WebUI.toAddressStreetDetail}). */
+    /**
+     * Địa chỉ VN: số nhà/đường + tỉnh (hint chọn dropdown tỉnh).
+     * Textarea "Chi tiết" chỉ nhận phần số nhà/đường ({@code WebUI.toAddressStreetDetail}).
+     * <p>
+     * <b>Cố ý KHÔNG sinh tên phường.</b> Bản cũ bốc phường từ một danh sách 5 phường Hà Nội và
+     * tỉnh từ một danh sách 10 tỉnh <i>độc lập nhau</i>, nên ra những địa chỉ không tồn tại kiểu
+     * "Phường Bồ Đề, Cần Thơ". {@code WebUI.extractWardHint} lấy tên phường đó đi tìm trong danh
+     * sách phường của tỉnh đã chọn — đo trên 39 case: <b>98/122 lần trượt (80%)</b>, mỗi lần tốn
+     * thêm một lượt mở dropdown + gõ + quét rồi mới chịu chọn ngẫu nhiên.
+     * <p>
+     * Không có hint thì luồng chọn thẳng một phường <i>có thật</i> của tỉnh đó, và
+     * {@code TestActionLog.chon} ghi lại đúng phường đã chọn — báo cáo trung thực hơn hẳn so với
+     * việc mang theo một tên phường không thuộc tỉnh nào trong đơn.
+     */
     private static String vietnameseAddress(Faker faker) {
         int soNha = faker.number().numberBetween(1, 999);
         String[] streets = {"Nguyễn Huệ", "Lê Lợi", "Trần Phú", "Hoàng Diệu", "Phan Đình Phùng", "Bà Triệu"};
-        String[] wards = {"Phường Bồ Đề", "Phường Minh Khai", "Phường Cầu Giấy", "Phường 1", "Phường 5"};
         // Tên tỉnh/TP gần option dropdown UAT (hint chọn tỉnh từ đoạn cuối địa chỉ).
         String[] cities = {"Hà Nội", "Thành phố Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ",
                 "Bắc Ninh", "Ninh Bình", "Sơn La", "Lâm Đồng", "Khánh Hòa"};
         String city = cities[faker.number().numberBetween(0, cities.length)];
         return soNha + " " + streets[faker.number().numberBetween(0, streets.length)]
-                + ", " + wards[faker.number().numberBetween(0, wards.length)]
                 + ", " + city;
     }
 
@@ -164,31 +174,242 @@ public class DataGenerator {
     }
 
     /**
-     * Sinh đúng các case đã chọn trên menu ({@code run.cases}).
+     * Sinh đúng các case đã chọn trên menu ({@code run.cases}) / Google Sheet.
      * Số case có thể nhiều hơn số Chrome — TestNG xếp hàng, reuse session theo thread.
+     * <p>
+     * Mỗi dòng trả về gồm 2 cột: {@code [0]} = {@link TaoDonScenario},
+     * {@code [1]} = {@code CaseProfile} đã sinh ra scenario đó. Dòng có giá trị không khớp danh mục
+     * bị bỏ kèm cảnh báo (không làm hỏng cả lượt chạy), nên số dòng trả về có thể ít hơn
+     * {@code profiles.size()} — vì vậy cặp scenario↔profile phải ghép tại đây, không ghép lại
+     * theo chỉ số ở nơi gọi.
      */
     public static Object[][] generateConfiguredCases(
             java.util.List<vn.tuphap.automation.config.RunFlowConfig.CaseProfile> profiles) {
         if (profiles == null || profiles.isEmpty()) {
             throw new IllegalArgumentException("run.cases rỗng — không sinh được kịch bản.");
         }
-        Object[][] data = new Object[profiles.size()][1];
+        java.util.List<Object[]> rows = new java.util.ArrayList<>();
+        int skippedBad = 0;
         Faker faker = new Faker(new Locale("vi"));
         for (int i = 0; i < profiles.size(); i++) {
             var p = profiles.get(i);
-            RowSelections s = buildConfiguredSelections(p, i);
-            normalizePhaSanSelections(s, i);
-            normalizeThuanTinhSelections(s);
-            validateSelections(s);
-            TaoDonScenario scenario = buildScenario(i, s, faker);
-            System.out.println(" Case menu [" + (i + 1) + "/" + profiles.size() + "]: "
+            TaoDonScenario scenario;
+            try {
+                RowSelections s = buildConfiguredSelections(p, i);
+                normalizePhaSanSelections(s, i);
+                normalizeThuanTinhSelections(s);
+                validateSelections(s);
+                scenario = buildScenario(i, s, faker);
+                if (p.hasNegativeExpectation()) {
+                    scenario = applyNegativeFieldOverride(scenario, p);
+                }
+            } catch (RuntimeException ex) {
+                // Giá trị lạ ở 1 dòng (gõ sai Loại đơn / Loại việc / Tòa án…) chỉ được bỏ dòng đó,
+                // không được làm hỏng cả lượt chạy của những dòng còn lại.
+                skippedBad++;
+                System.out.println(" ⚠ Bỏ qua case dòng " + (i + 1) + " (" + p.loaiDon()
+                        + (p.loaiViec() == null || p.loaiViec().isBlank() ? "" : " / " + p.loaiViec())
+                        + "): " + ex.getMessage());
+                continue;
+            }
+            System.out.println(" Case [" + (i + 1) + "/" + profiles.size() + "]: "
                     + scenario.loaiDon() + " / " + scenario.loaiViec()
                     + " — ND=" + scenario.loaiChuThe()
+                    + ", tòa=" + scenario.toaAn()
+                    + ", BD×" + scenario.soLuongBiDon()
+                    + ", đồngND=" + scenario.coDongNguyenDon()
+                    + ", đại diện=" + scenario.coNguoiDaiDien()
+                    + ", NLQ=" + scenario.coNguoiLienQuan()
+                    + ", TLBS=" + scenario.coTaiLieuBoSung()
+                    + (DataDictionary.isPhaSan(scenario.loaiDon())
+                    ? ", tư cách=" + scenario.tuCachNopDon() : "")
                     + " | until=" + p.untilStep()
-                    + (p.submit() ? "+submit" : ""));
-            data[i][0] = scenario;
+                    + (p.submit() ? "+submit" : "")
+                    + (p.hasNegativeExpectation() ? "  [CA ÂM: " + p.truongLoi() + "=\"" + p.giaTriLoi() + "\"]" : "")
+                    + (p.ghiChu() == null || p.ghiChu().isBlank() ? "" : "  [" + p.ghiChu() + "]"));
+            // Cột 1 = CaseProfile sinh ra chính scenario này — ghép tại nguồn để dòng bị bỏ ở trên
+            // không làm lệch cặp scenario↔profile (trước đây ghép lại theo chỉ số ở tầng test).
+            rows.add(new Object[]{scenario, p});
         }
-        return data;
+        if (skippedBad > 0) {
+            System.out.println(" ⚠ Tổng cộng " + skippedBad + "/" + profiles.size()
+                    + " case bị bỏ vì dữ liệu không khớp danh mục — sửa lại các dòng nêu trên.");
+        }
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("Không dựng được case nào từ " + profiles.size()
+                    + " dòng cấu hình — mọi dòng đều có giá trị không khớp danh mục (xem cảnh báo bên trên).");
+        }
+        return rows.toArray(new Object[0][]);
+    }
+
+    /**
+     * Ca âm: tiêm {@code p.giaTriLoi()} vào đúng 1 field của scenario hợp lệ, để kiểm tra hệ thống
+     * có chặn đúng validation hay không (thay vì automation luôn điền dữ liệu hợp lệ như trước).
+     * Field không khớp ngữ cảnh (vd. "Mã số thuế" cho nguyên đơn Cá nhân) thì bỏ qua kèm cảnh báo —
+     * không throw, vì 1 dòng cấu hình sai không nên làm sập cả run.
+     */
+    private static TaoDonScenario applyNegativeFieldOverride(
+            TaoDonScenario scenario, vn.tuphap.automation.config.RunFlowConfig.CaseProfile p) {
+        FieldOverrideAttempt attempt = tryFieldOverride(scenario, p.truongLoi(), p.giaTriLoi());
+        if (!attempt.applicable()) {
+            System.out.println("⚠ Trường lỗi '" + p.truongLoi() + "' không áp dụng cho case này ("
+                    + attempt.skipReason() + ") — bỏ qua override, nhưng case vẫn được coi là ca âm"
+                    + " nên sẽ FAIL nếu không bị chặn. Hãy chọn Trường lỗi khác hoặc sửa Chủ thể.");
+            return scenario;
+        }
+        String value = p.giaTriLoi() == null ? "" : p.giaTriLoi();
+        System.out.println("   ↳ Ca âm: ép " + p.truongLoi() + " = \"" + value + "\""
+                + (value.isBlank() ? " (để trống)" : "")
+                + " — kỳ vọng bị chặn"
+                + (p.thongBaoMongDoi() == null || p.thongBaoMongDoi().isBlank()
+                ? "" : ": \"" + p.thongBaoMongDoi() + "\""));
+        return attempt.result();
+    }
+
+    /**
+     * Kết quả thử ép 1 field sang giá trị sai — {@code applicable=false} nghĩa là field này không
+     * tồn tại/không áp dụng cho ngữ cảnh của {@code scenario} (vd. MST cho nguyên đơn Cá nhân);
+     * khi đó {@code result()} chính là scenario gốc, chưa đổi gì. Dùng chung cho ca âm khai báo
+     * trên sheet ({@link #applyNegativeFieldOverride}) và bộ quét dò field
+     * ({@code FieldDiscoverySweepTest}).
+     */
+    public record FieldOverrideAttempt(boolean applicable, String skipReason, TaoDonScenario result) {
+    }
+
+    /**
+     * Thử ép field {@code truongLoiRaw} (nhãn tiếng Việt, xem 13 giá trị nhận diện được ở
+     * {@link #normalizeNegativeFieldKey}) sang {@code value} trên một bản sao của {@code scenario}.
+     * Không throw — field không nhận diện được hoặc không áp dụng cho ngữ cảnh hiện tại
+     * (loại chủ thể nguyên đơn/bị đơn, loại đơn) đều trả {@code applicable=false} kèm lý do.
+     */
+    public static FieldOverrideAttempt tryFieldOverride(TaoDonScenario scenario, String truongLoiRaw, String value) {
+        String key = normalizeNegativeFieldKey(truongLoiRaw);
+        String v = value == null ? "" : value;
+        boolean nguyenDonToChuc = DataDictionary.isToChuc(scenario.loaiChuThe());
+        // BiDonPage.dienMotBiDon có 3 nhánh: Hành chính (cơ quan) / Phá sản (luôn Tổ chức) /
+        // còn lại theo loaiBiDon — không phải chỉ CN/TC như nguyên đơn.
+        boolean hanhChinh = DataDictionary.isHanhChinh(scenario.loaiDon());
+        boolean phaSan = DataDictionary.isPhaSan(scenario.loaiDon());
+        boolean biDonNhanhToChuc = phaSan || (!hanhChinh && DataDictionary.isToChuc(scenario.loaiBiDon()));
+        boolean biDonNhanhCaNhan = !hanhChinh && !phaSan && !DataDictionary.isToChuc(scenario.loaiBiDon());
+
+        TaoDonScenario.Builder b = scenario.toBuilder();
+        switch (key) {
+            case "sdt" -> b.sdt(v);
+            case "email" -> b.email(v);
+            case "cccd" -> {
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario, "nguyên đơn đang là Tổ chức");
+                }
+                b.cccd(v);
+            }
+            case "hoten" -> {
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario, "nguyên đơn đang là Tổ chức");
+                }
+                b.hoTen(v);
+            }
+            case "ngaysinh" -> {
+                // Người đại diện Tổ chức cũng có ô ngày sinh, nhưng chỉ hiện tuỳ trạng thái UI
+                // (NguyenDonPage.dienNguoiDaiDienToChuc kiểm tra isElementVisible lúc chạy) — không
+                // suy được từ dữ liệu tĩnh nên tạm giới hạn ở nhánh Cá nhân cho chắc chắn áp dụng được.
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario,
+                            "nguyên đơn đang là Tổ chức (ô ngày sinh người đại diện chỉ hiện có điều kiện)");
+                }
+                b.ngaySinh(v);
+            }
+            case "ngaycap" -> {
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario,
+                            "nguyên đơn đang là Tổ chức (ô ngày cấp người đại diện chỉ hiện có điều kiện)");
+                }
+                b.ngayCap(v);
+            }
+            case "mst" -> {
+                if (!nguyenDonToChuc) {
+                    return notApplicable(scenario, "nguyên đơn đang là Cá nhân");
+                }
+                b.mst(v);
+            }
+            // sdtBD được đọc ở cả 3 nhánh bị đơn (kể cả Hành chính) — luôn áp dụng được.
+            case "sdtbd" -> b.sdtBD(v);
+            case "emailbd" -> {
+                if (hanhChinh) {
+                    return notApplicable(scenario, "bị đơn Hành chính (cơ quan) không có ô Email");
+                }
+                b.emailBD(v);
+            }
+            case "cccdbd" -> {
+                if (!biDonNhanhCaNhan) {
+                    return notApplicable(scenario,
+                            "bị đơn không thuộc nhánh Cá nhân chuẩn (Hành chính/Phá sản/Tổ chức)");
+                }
+                b.cccdBD(v);
+            }
+            case "hotenbd" -> {
+                if (!biDonNhanhCaNhan) {
+                    return notApplicable(scenario,
+                            "bị đơn không thuộc nhánh Cá nhân chuẩn (Hành chính/Phá sản/Tổ chức)");
+                }
+                b.hoTenBD(v);
+            }
+            case "mstbd" -> {
+                if (!biDonNhanhToChuc) {
+                    return notApplicable(scenario, "bị đơn không thuộc nhánh Tổ chức");
+                }
+                b.mstBD(v);
+            }
+            case "giatritranhchap" -> {
+                if (!DataDictionary.hasGiaTriTranhChap(scenario.loaiDon())) {
+                    return notApplicable(scenario,
+                            "loại đơn '" + scenario.loaiDon() + "' không có ô Giá trị tranh chấp");
+                }
+                b.giaTriTranhChap(v);
+            }
+            default -> {
+                return notApplicable(scenario, "Trường lỗi '" + truongLoiRaw + "' không nhận diện được"
+                        + " — xem 13 giá trị hợp lệ ở README mục 6.4");
+            }
+        }
+        return new FieldOverrideAttempt(true, "", b.build());
+    }
+
+    private static FieldOverrideAttempt notApplicable(TaoDonScenario original, String reason) {
+        return new FieldOverrideAttempt(false, reason, original);
+    }
+
+    /** 13 tên trường hợp lệ cho "Trường lỗi" — khớp đúng nhãn trên sheet, không phân biệt dấu/hoa thường. */
+    private static String normalizeNegativeFieldKey(String raw) {
+        String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT).replace('đ', 'd');
+        norm = java.text.Normalizer.normalize(norm, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "").replaceAll("[^a-z]+", "");
+        boolean biDon = norm.contains("bidon");
+        if (norm.contains("dienthoai")) {
+            return biDon ? "sdtbd" : "sdt";
+        }
+        if (norm.contains("email") || norm.contains("thudientu")) {
+            return biDon ? "emailbd" : "email";
+        }
+        if (norm.contains("cccd") || norm.contains("hochieu") || norm.contains("cmnd")) {
+            return biDon ? "cccdbd" : "cccd";
+        }
+        if (norm.contains("ngaysinh")) {
+            return "ngaysinh";
+        }
+        if (norm.contains("ngaycap")) {
+            return "ngaycap";
+        }
+        if (norm.contains("hoten")) {
+            return biDon ? "hotenbd" : "hoten";
+        }
+        if (norm.contains("masothue") || norm.contains("mst")) {
+            return biDon ? "mstbd" : "mst";
+        }
+        if (norm.contains("giatritranhchap")) {
+            return "giatritranhchap";
+        }
+        return "";
     }
 
     private static RowSelections buildConfiguredSelections(
@@ -196,23 +417,74 @@ public class DataGenerator {
         RowSelections s = new RowSelections();
         s.loaiDon = resolveLoaiDon(p.loaiDon());
         s.loaiViec = resolveLoaiViec(s.loaiDon, p.loaiViec());
-        s.toaAn = DataDictionary.pick(MasterDataCatalog.getToaAn(), index);
+        s.toaAn = resolveToaAn(p.toaAn(), index);
         s.loaiChuTheNguyenDon = resolveChuTheNguyenDon(p.chuThe());
         s.gioiTinh = DataDictionary.pick(MasterDataCatalog.getGioiTinh(), index);
         s.noiCap = DataDictionary.pick(MasterDataCatalog.getNoiCapCccd(), index);
         s.loaiHinhToChuc = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), index);
-        s.coNguoiDaiDien = "Không";
+        s.coNguoiDaiDien = coKhong(p.coNguoiDaiDien(), false);
         s.quanHeDaiDien = DataDictionary.pick(MasterDataCatalog.getQuanHeDaiDien(), index);
         s.loaiChuTheBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiChuTheBiDon(), index);
         s.loaiHinhBiDon = DataDictionary.pick(MasterDataCatalog.getLoaiHinhToChuc(), index + 1);
-        s.coNguoiLienQuan = "Không";
-        s.coTaiLieuBoSung = "Không";
-        s.soLuongBiDon = 1;
-        s.coDongNguyenDon = "Không";
+        s.coNguoiLienQuan = coKhong(p.coNguoiLienQuan(), false);
+        s.coTaiLieuBoSung = coKhong(p.coTaiLieuBoSung(), false);
+        s.soLuongBiDon = resolveSoLuongBiDon(p.soLuongBiDon(), s.loaiDon, s.loaiViec);
+        s.coDongNguyenDon = resolveCoDongNguyenDon(p.coDongNguyenDon(), s.loaiDon);
         if (DataDictionary.isPhaSan(s.loaiDon)) {
             s.tuCachNopDon = resolveTuCach(p.tuCachNopDon(), index);
         }
         return s;
+    }
+
+    /** Tòa án theo cấu hình (khớp mờ với catalog); rỗng → xoay vòng theo index như trước. */
+    private static String resolveToaAn(String raw, int index) {
+        String[] opts = MasterDataCatalog.getToaAn();
+        if (raw == null || raw.isBlank() || "-".equals(raw.trim())) {
+            return DataDictionary.pick(opts, index);
+        }
+        String want = raw.trim();
+        for (String opt : opts) {
+            if (opt.equalsIgnoreCase(want)) {
+                return opt;
+            }
+        }
+        String wantLower = want.toLowerCase(Locale.ROOT);
+        for (String opt : opts) {
+            String optLower = opt.toLowerCase(Locale.ROOT);
+            if (optLower.contains(wantLower) || wantLower.contains(optLower)) {
+                return opt;
+            }
+        }
+        MasterDataCatalog.assertInCatalog(want, "toaAn", opts);
+        return want;
+    }
+
+    /** Số bị đơn theo cấu hình (1–2); 0/không hợp lệ → 1. Ép 1 khi UI không cho thêm bị đơn. */
+    private static int resolveSoLuongBiDon(int configured, String loaiDon, String loaiViec) {
+        int n = configured <= 0 ? 1 : Math.min(2, configured);
+        if (n > 1 && !DataDictionary.allowsThemBiDon(loaiDon, loaiViec)) {
+            System.out.println("   ↳ " + loaiDon + " / " + loaiViec
+                    + " không cho thêm bị đơn — ép về 1 bị đơn.");
+            return 1;
+        }
+        return n;
+    }
+
+    /** Đồng nguyên đơn theo cấu hình; loại đơn không hỗ trợ thì luôn "Không". */
+    private static String resolveCoDongNguyenDon(Boolean configured, String loaiDon) {
+        if (!DataDictionary.allowsDongNguyenDon(loaiDon)) {
+            if (Boolean.TRUE.equals(configured)) {
+                System.out.println("   ↳ " + loaiDon + " không có đồng nguyên đơn — bỏ qua cấu hình \"Có\".");
+            }
+            return "Không";
+        }
+        return coKhong(configured, false);
+    }
+
+    /** {@code null} = automation tự chọn (dùng {@code fallback}). */
+    private static String coKhong(Boolean value, boolean fallback) {
+        boolean on = value == null ? fallback : value;
+        return on ? "Có" : "Không";
     }
 
     private static String resolveLoaiDon(String raw) {

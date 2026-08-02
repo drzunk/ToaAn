@@ -5,7 +5,7 @@ import org.openqa.selenium.logging.LogEntry;
 import org.openqa.selenium.logging.LogType;
 import vn.tuphap.automation.report.TestActionLog;
 
-import vn.tuphap.automation.report.ExtentReportManager;
+import vn.tuphap.automation.report.BaoCao;
 
 import vn.tuphap.automation.flow.StepBlockedException;
 
@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -78,6 +79,15 @@ public class WebUI {
     }
 
     public void clickElement(By by, String elementName, int timeoutSeconds) {
+        UiProfiler.enter(UiProfiler.CLICK);
+        try {
+            clickElementInternal(by, elementName, timeoutSeconds);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void clickElementInternal(By by, String elementName, int timeoutSeconds) {
         try {
             failIfBrowserClosed();
             WebElement element = waitForDisplayedEnabled(by, timeoutSeconds);
@@ -124,7 +134,20 @@ public class WebUI {
 
     private WebElement findDisplayedEnabled(By by) {
         try {
-            for (WebElement element : driver.findElements(by)) {
+            List<WebElement> found = driver.findElements(by);
+            if (found.isEmpty()) {
+                return null;
+            }
+            // Lọc nới tay 1 lượt, rồi hỏi Selenium đúng như cũ trên số ít ứng viên còn lại.
+            // KHÔNG tự suy ra "enabled" bằng JS: isEnabled() của Selenium chỉ xét thuộc tính
+            // disabled của control, KHÔNG xét aria-disabled — tự thêm điều kiện đó là làm chặt
+            // hơn bản gốc, khiến nút vốn bấm được bỗng thành không tìm thấy.
+            boolean[] maybe = maybeDisplayed(found);
+            for (int i = 0; i < found.size(); i++) {
+                if (!maybe[i]) {
+                    continue;
+                }
+                WebElement element = found.get(i);
                 try {
                     if (element.isDisplayed() && element.isEnabled()) {
                         return element;
@@ -133,18 +156,32 @@ public class WebUI {
                 }
             }
             return null;
+        } catch (BrowserClosedException e) {
+            throw e;
         } catch (WebDriverException e) {
             failIfBrowserClosed(e);
             throw e;
         }
     }
 
+    /**
+     * Cuộn element vào giữa khung nhìn, chỉ nghỉ khi trang <b>thật sự</b> có dịch chuyển.
+     * <p>
+     * Hàm này nằm trên đường đi của mọi {@code clickElement} / {@code setText} (~70-95 lần mỗi case),
+     * nên khoản nghỉ vô điều kiện cũ tốn ~10s/case. Các field liên tiếp trong cùng một thẻ đã nằm
+     * giữa màn hình thì cuộn 0px — không có gì để chờ ổn định.
+     */
     private void scrollToElement(WebElement element) {
         try {
             JavascriptExecutor js = (JavascriptExecutor) driver;
-            js.executeScript(
-                    "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", element);
-            sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            Object moved = js.executeScript(
+                    "var x0 = window.scrollX, y0 = window.scrollY;"
+                            + "arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});"
+                            + "return Math.abs(window.scrollX - x0) + Math.abs(window.scrollY - y0);",
+                    element);
+            if (moved instanceof Number n && n.doubleValue() > 0) {
+                sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            }
         } catch (Exception ignored) {
         }
     }
@@ -160,6 +197,17 @@ public class WebUI {
                     || msg.contains("not attached");
             if (likelyAlreadyClicked) {
                 return;
+            }
+            // Bị chắn = layout chưa yên. Nghỉ + thử lại native đúng ở đây, thay cho khoản nghỉ vô
+            // điều kiện đã bỏ trong scrollToElement. JS click bỏ qua overlay nên "thành công" của
+            // nó có thể là giả — chỉ dùng khi native đã thua lần hai.
+            if (msg.contains("intercepted")) {
+                sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+                try {
+                    element.click();
+                    return;
+                } catch (Exception ignored) {
+                }
             }
             JavascriptExecutor js = (JavascriptExecutor) driver;
             js.executeScript("arguments[0].click();", element);
@@ -424,31 +472,63 @@ public class WebUI {
     }
 
     public void setText(By by, String value, String elementName) {
+        UiProfiler.enter(UiProfiler.DIEN_FIELD);
+        try {
+            setTextInternal(by, value, elementName);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void setTextInternal(By by, String value, String elementName) {
         try {
             failIfBrowserClosed();
-            scrollToElement(by);
+            // Phân giải locator ĐÚNG MỘT LẦN. Trước đây scrollToElement(by) phân giải lần 1 rồi
+            // wait.until phân giải lần 2 trên cùng locator — với các XPath union dài trong dự án
+            // này thì lần thứ hai không rẻ. Cuộn bằng chính element vừa lấy được.
             WebElement element = wait.until(d -> {
                 failIfBrowserClosed();
                 return ExpectedConditions.visibilityOfElementLocated(by).apply(d);
             });
+            scrollToElement(element);
             // Prefer an editable input/textarea if the locator matched a wrapper.
-            String tag = element.getTagName() == null ? "" : element.getTagName().toLowerCase();
-            if (!tag.equals("input") && !tag.equals("textarea")) {
-                List<WebElement> nested = element.findElements(By.xpath(".//input|.//textarea"));
-                if (!nested.isEmpty()) {
-                    element = nested.get(0);
-                }
+            // getTagName + findElements lồng nhau gộp thành 1 lượt JS.
+            WebElement editable = resolveEditableTarget(element);
+            if (editable != null) {
+                element = editable;
             }
             element.click();
             clearEditable(element);
             typePreservingSpaces(element, value);
             logUi(" ➔ Điền: '" + value + "' vào [" + elementName + "]");
             TestActionLog.dien(elementName, value);
+            verifyFilledValue(by, value, elementName);
         } catch (BrowserClosedException e) {
             throw e;
         } catch (Exception e) {
             failIfBrowserClosed(e);
             throw new RuntimeException("❌ Lỗi: Không tìm thấy ô [" + elementName + "] để điền '" + value + "'");
+        }
+    }
+
+    /**
+     * Nếu locator trúng phần bọc thay vì ô nhập, trả về input/textarea bên trong — <b>một</b> lượt
+     * gọi thay cho {@code getTagName()} + {@code findElements(".//input|.//textarea")}.
+     * Trả {@code null} nghĩa là dùng chính element ban đầu (nó đã là ô nhập, hoặc không có ô lồng).
+     */
+    private WebElement resolveEditableTarget(WebElement element) {
+        try {
+            Object nested = ((JavascriptExecutor) driver).executeScript(
+                    "var e = arguments[0];"
+                            + "var t = (e.tagName || '').toLowerCase();"
+                            + "if (t === 'input' || t === 'textarea') { return null; }"
+                            + "return e.querySelector('input, textarea');",
+                    element);
+            return nested instanceof WebElement w ? w : null;
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
@@ -469,6 +549,41 @@ public class WebUI {
      * Điền text giữ khoảng trắng. Một số textarea UAT (địa chỉ chi tiết) nuốt space từ sendKeys
      * → hiện "127LêLợi" dù log vẫn có dấu cách. Fallback: JS native setter, rồi NBSP.
      */
+    /**
+     * Từ độ dài này trở lên thì đặt thẳng value bằng JS thay vì gõ từng phím.
+     * <p>
+     * Gõ phím làm React render lại sau <b>mỗi ký tự</b> — đo được 3.8 giây cho một ô ~50 ký tự
+     * ("Tóm tắt sơ bộ yêu cầu" ở bước 1). Ngưỡng 40 giữ các ô ngắn (họ tên, SĐT, CCCD, MST…)
+     * ở đường gõ phím thật, vì đó là nơi cần mask/validate phía client phản ứng đúng như người
+     * dùng gõ — cũng là nơi bộ ca âm dựa vào để phát hiện UI lọc ký tự.
+     */
+    private static final int LONG_TEXT_CHARS = resolveLongTextChars();
+
+    /**
+     * 40 → 15, đã kiểm chứng bằng bộ ca âm.
+     * <p>
+     * Lo ngại ban đầu: đặt value bằng JS thay vì gõ phím sẽ bỏ qua bộ lọc ký tự phía client, khiến
+     * ca âm không còn bắt được lỗi. Chạy đối chứng 6 ca âm ở hai ngưỡng (40 và 15) — <b>kết quả
+     * giống hệt nhau từng ca</b>, kể cả hai ca duy nhất mà hệ thống thật sự chặn
+     * ({@code CCCD = "abcdefghijklmnop"} 16 ký tự và {@code Giá trị tranh chấp} 25 ký tự) — đúng
+     * hai ca nằm trong vùng chuyển sang JS. Số ô báo "lệch giá trị" giữ nguyên 2 ở cả hai lượt,
+     * tức bộ lọc phía client <b>vẫn chạy</b> khi set value bằng JS + dispatch input/change.
+     * <p>
+     * Đổi lại: {@code Điền ô nhập} giảm từ 14.9s xuống 10.7s mỗi case.
+     * Quay lại mức cũ: {@code -Dtaodon.longTextChars=40}.
+     */
+    private static int resolveLongTextChars() {
+        String raw = System.getProperty("taodon.longTextChars");
+        if (raw == null || raw.isBlank()) {
+            return 15;
+        }
+        try {
+            return Math.max(1, Integer.parseInt(raw.trim()));
+        } catch (NumberFormatException e) {
+            return 15;
+        }
+    }
+
     private void typePreservingSpaces(WebElement element, String value) {
         if (value == null) {
             return;
@@ -476,6 +591,15 @@ public class WebUI {
         if (!value.contains(" ")) {
             element.sendKeys(value);
             return;
+        }
+
+        if (value.length() >= LONG_TEXT_CHARS) {
+            setNativeInputValue(element, value);
+            String actual = readInputValue(element).replace('\u00A0', ' ').trim();
+            if (actual.equals(value.replace('\u00A0', ' ').trim())) {
+                return;
+            }
+            clearEditable(element);
         }
 
         element.sendKeys(value);
@@ -540,11 +664,17 @@ public class WebUI {
                 element, value);
     }
 
+    /**
+     * Có thấy element không — chờ tối đa {@link WaitConfig#PROBE_MS} rồi trả lời.
+     * Đây là <b>phép kiểm tra</b>, không phải chỗ để chờ: cần chờ thật thì dùng
+     * {@link #waitUntilVisible(By, int, String)} với timeout khai báo rõ.
+     */
     public boolean isElementVisible(By by) {
+        UiProfiler.enter(UiProfiler.DO_FIELD);
         try {
             failIfBrowserClosed();
-            WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofSeconds(5));
-            shortWait.pollingEvery(Duration.ofMillis(250));
+            WebDriverWait shortWait = new WebDriverWait(driver, Duration.ofMillis(WaitConfig.PROBE_MS));
+            shortWait.pollingEvery(Duration.ofMillis(100));
             WebElement element = shortWait.until(d -> {
                 failIfBrowserClosed();
                 return ExpectedConditions.presenceOfElementLocated(by).apply(d);
@@ -555,6 +685,8 @@ public class WebUI {
         } catch (Exception e) {
             failIfBrowserClosed(e);
             return false;
+        } finally {
+            UiProfiler.exit();
         }
     }
 
@@ -564,28 +696,203 @@ public class WebUI {
     }
 
     /**
-     * Tìm element ngay lập tức (implicit wait = 0).
-     * Tránh treo khi BaseTest đặt implicitlyWait 10s.
+     * Tìm element ngay lập tức (không chờ).
+     * <p>
+     * Không tự đặt lại {@code implicitlyWait}: {@code BaseTest.createDriver()} đã đặt 0 ngay khi
+     * tạo driver và không nơi nào đặt khác — mỗi lệnh set là 1 lượt gọi chromedriver, mà hàm này
+     * bị gọi hàng trăm lần cho mỗi khối địa chỉ nên 2 lệnh set thừa/lần cộng dồn rất tốn.
      */
     public boolean existsNow(By by) {
         failIfBrowserClosed();
-        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
         try {
-            for (WebElement element : driver.findElements(by)) {
-                try {
-                    if (element.isDisplayed()) {
-                        return true;
-                    }
-                } catch (StaleElementReferenceException ignored) {
+            List<WebElement> found = driver.findElements(by);
+            if (found.isEmpty()) {
+                return false;
+            }
+            boolean[] maybe = maybeDisplayed(found);
+            for (int i = 0; i < found.size(); i++) {
+                // Lọc nới tay bằng 1 lượt JS, rồi để isDisplayed() quyết trên số ít còn lại —
+                // kết quả y hệt vòng lặp cũ, chỉ bớt lượt gọi.
+                if (maybe[i] && reallyDisplayed(found.get(i))) {
+                    return true;
                 }
             }
             return false;
         } catch (WebDriverException e) {
             failIfBrowserClosed(e);
             throw e;
-        } finally {
-            driver.manage().timeouts().implicitlyWait(Duration.ZERO);
         }
+    }
+
+    /**
+     * Hỏi "element nào đang hiển thị" cho <b>cả danh sách</b> trong một lượt gọi chromedriver.
+     * <p>
+     * {@code element.isDisplayed()} là một lượt HTTP riêng cho <i>từng</i> element. Với danh sách
+     * option của dropdown tỉnh (63 mục) thì riêng khâu này đã là 63 lượt. Gộp lại còn 1 — đây chính
+     * là cách Playwright nhanh hơn: nó chạy phép kiểm tra ngay trong trang thay vì hỏi qua mạng
+     * từng cái một.
+     * <p>
+     * Trả về mảng cùng độ dài với {@code elements}; nếu JS lỗi thì lùi về cách hỏi từng cái để
+     * không đổi hành vi.
+     */
+    /**
+     * Phép kiểm tra "đang hiển thị" chạy trong trang — bám sát {@code isDisplayed()} của Selenium.
+     * <p>
+     * Riêng {@code opacity} là bắt buộc: React hay fade-in dropdown, và một option đang ở
+     * {@code opacity:0} thì Selenium coi là <b>chưa</b> hiển thị. Bỏ sót điều kiện này sẽ click
+     * trúng option chưa hiện xong — đúng kiểu flaky mà việc gộp lượt gọi không được phép đánh đổi.
+     * Opacity phải soát cả tổ tiên vì nó kế thừa hiệu ứng thị giác; {@code getClientRects()} đã lo
+     * {@code display:none} ở mọi cấp.
+     */
+    private static final String JS_MAYBE_VISIBLE_FN =
+            "function maybeVisible(e) {"
+                    + "  if (!e || !e.getClientRects || e.getClientRects().length === 0) { return false; }"
+                    + "  for (var n = e; n && n.nodeType === 1; n = n.parentElement) {"
+                    + "    var s = window.getComputedStyle(n);"
+                    + "    if (!s) { break; }"
+                    + "    if (s.visibility === 'hidden' || s.visibility === 'collapse') { return false; }"
+                    + "    if (s.display === 'none') { return false; }"
+                    + "  }"
+                    + "  return true;"
+                    + "}";
+
+    /**
+     * Bộ lọc <b>nới tay</b> chạy trong trang: chỉ loại những element <i>chắc chắn</i> không hiển thị
+     * ({@code display:none}, {@code visibility:hidden}, không có hộp bao).
+     * <p>
+     * Cố ý <b>không</b> tự kết luận "đang hiển thị" — quy tắc của {@code isDisplayed()} còn xét
+     * opacity, cắt theo overflow, transform… Chép lại bằng JS là mời flaky. Vai trò của hàm này chỉ
+     * là cắt danh sách ứng viên trong <b>1</b> lượt gọi, rồi để chính Selenium phán quyết trên số ít
+     * ứng viên còn lại. Nhờ vậy kết quả <b>giống hệt</b> code cũ, chỉ tốn ít lượt gọi hơn.
+     * <p>
+     * JS lỗi → trả về "tất cả đều có thể", tức lùi hẳn về hành vi cũ.
+     */
+    private boolean[] maybeDisplayed(List<WebElement> elements) {
+        boolean[] out = new boolean[elements.size()];
+        Arrays.fill(out, true);
+        if (elements.isEmpty()) {
+            return out;
+        }
+        try {
+            Object raw = ((JavascriptExecutor) driver).executeScript(
+                    JS_MAYBE_VISIBLE_FN + "return arguments[0].map(maybeVisible);", elements);
+            if (raw instanceof List<?> list && list.size() == out.length) {
+                for (int i = 0; i < out.length; i++) {
+                    out[i] = Boolean.TRUE.equals(list.get(i));
+                }
+            }
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception ignored) {
+            // Giữ nguyên "tất cả đều có thể" — Selenium sẽ soát từng cái như trước.
+        }
+        return out;
+    }
+
+    /** Lấy biểu thức XPath thô từ {@code By.xpath(...)}; {@code null} nếu không phải loại đó. */
+    private static String rawXPath(By by) {
+        if (by == null) {
+            return null;
+        }
+        String s = by.toString();
+        String prefix = "By.xpath: ";
+        return s.startsWith(prefix) ? s.substring(prefix.length()) : null;
+    }
+
+    /**
+     * Ứng viên đầu tiên có element hiển thị — <b>một</b> lượt gọi cho cả danh sách.
+     * <p>
+     * Các hàm tìm nút tỉnh/phường thử 3-4 locator <i>tuần tự</i>, mỗi cái một lượt
+     * {@code findElements} kèm đánh giá XPath nhiều nhánh union trên DOM React nặng. Gộp lại thành
+     * một lần {@code document.evaluate} chạy trong trang. Dùng bộ lọc nới tay giống
+     * {@link #maybeDisplayed} rồi để {@link #existsNow} xác nhận lại ở phía người gọi, nên kết quả
+     * không lỏng hơn cách cũ.
+     *
+     * @return chỉ số ứng viên khớp, hoặc {@code -1}; {@code -2} nghĩa là không gộp được (người gọi
+     *         tự thử tuần tự như cũ).
+     */
+    private int firstMaybeExisting(List<By> candidates) {
+        List<String> xps = new ArrayList<>(candidates.size());
+        for (By b : candidates) {
+            String x = rawXPath(b);
+            if (x == null) {
+                return -2;
+            }
+            xps.add(x);
+        }
+        if (xps.isEmpty()) {
+            return -1;
+        }
+        try {
+            Object idx = ((JavascriptExecutor) driver).executeScript(
+                    JS_MAYBE_VISIBLE_FN
+                            + "var xs = arguments[0];"
+                            + "for (var i = 0; i < xs.length; i++) {"
+                            + "  try {"
+                            + "    var r = document.evaluate(xs[i], document, null, 7, null);"
+                            + "    for (var j = 0; j < r.snapshotLength; j++) {"
+                            + "      if (maybeVisible(r.snapshotItem(j))) { return i; }"
+                            + "    }"
+                            + "  } catch (e) { return -2; }"
+                            + "}"
+                            + "return -1;",
+                    xps);
+            if (idx instanceof Number n) {
+                return n.intValue();
+            }
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception ignored) {
+        }
+        return -2;
+    }
+
+    /** Selenium phán quyết (đúng ngữ nghĩa cũ), có bọc stale. */
+    private boolean reallyDisplayed(WebElement el) {
+        try {
+            return el.isDisplayed();
+        } catch (StaleElementReferenceException ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Đọc text của <b>cả danh sách</b> element trong một lượt gọi (thay cho N lượt {@code getText()}
+     * + N lượt {@code getAttribute("textContent")}). Xem giải thích ở {@link #displayedFlags}.
+     */
+    private List<String> textsOf(List<WebElement> elements) {
+        if (elements.isEmpty()) {
+            return List.of();
+        }
+        try {
+            Object raw = ((JavascriptExecutor) driver).executeScript(
+                    "return arguments[0].map(function (e) {"
+                            + "  if (!e) { return ''; }"
+                            + "  var t = e.innerText;"
+                            + "  if (!t || !t.trim()) { t = e.textContent; }"
+                            + "  return t == null ? '' : t;"
+                            + "});",
+                    elements);
+            if (raw instanceof List<?> list && list.size() == elements.size()) {
+                List<String> out = new ArrayList<>(list.size());
+                for (Object o : list) {
+                    out.add(o == null ? "" : o.toString().replace('\u00A0', ' ').trim().replaceAll("\\s+", " "));
+                }
+                return out;
+            }
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception ignored) {
+        }
+        List<String> out = new ArrayList<>(elements.size());
+        for (WebElement el : elements) {
+            try {
+                out.add(readElementText(el));
+            } catch (StaleElementReferenceException ignored) {
+                out.add("");
+            }
+        }
+        return out;
     }
 
     /** Chrome/tab đã đóng hoặc session WebDriver không còn hợp lệ. */
@@ -637,7 +944,7 @@ public class WebUI {
         }
     }
 
-    /** Message ngắn gọn cho báo cáo Excel/Extent. */
+    /** Message ngắn gọn cho báo cáo Excel/HTML. */
     public static String friendlyBrowserMessage(Throwable t) {
         if (t instanceof BrowserClosedException) {
             return t.getMessage();
@@ -660,15 +967,19 @@ public class WebUI {
     }
 
     public int countNow(By by) {
-        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
-        try {
-            return driver.findElements(by).size();
-        } finally {
-            driver.manage().timeouts().implicitlyWait(Duration.ZERO);
-        }
+        return driver.findElements(by).size();
     }
 
     public void waitUntilVisible(By by, int timeoutSeconds, String description) {
+        UiProfiler.enter(UiProfiler.CHO_DOI);
+        try {
+            waitUntilVisibleInternal(by, timeoutSeconds, description);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void waitUntilVisibleInternal(By by, int timeoutSeconds, String description) {
         logUi(" ⏳ Chờ hiển thị: " + description);
         try {
             new WebDriverWait(driver, Duration.ofSeconds(timeoutSeconds))
@@ -764,6 +1075,15 @@ public class WebUI {
 
     /** Gộp thông báo validate trên biểu mẫu và toast hệ thống. */
     public List<String> collectSystemFeedbackMessages() {
+        UiProfiler.enter(UiProfiler.TOAST);
+        try {
+            return collectSystemFeedbackMessagesInternal();
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private List<String> collectSystemFeedbackMessagesInternal() {
         LinkedHashSet<String> merged = new LinkedHashSet<>();
         merged.addAll(collectValidationMessages());
         merged.addAll(collectToastMessages());
@@ -811,9 +1131,14 @@ public class WebUI {
             return false;
         }
         logUi(" ⚠ Crash frontend (danhSach/API) — tải lại trang (F5)...");
-        takeScreenshotPreserveToast();
+        // Chụp ảnh crash để có bằng chứng — trước đây có chụp nhưng vứt kết quả đi, tốn thời gian
+        // mà báo cáo không nhận được gì.
+        BaoCao.logNoteWithScreenshot(
+                "Trang bị lỗi hiển thị (danhSach/API) — tự tải lại trang để đi tiếp.",
+                takeScreenshotPreserveToast());
         driver.navigate().refresh();
-        sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        // Chịu lực: không có wait nào giữa refresh và dismissOpenDropdownsQuiet bên dưới.
+        sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
         dismissOpenDropdownsQuiet();
         return true;
     }
@@ -829,7 +1154,9 @@ public class WebUI {
                 throw new RuntimeException("FRONTEND_CRASH: danhSach/API khi load catalog loại việc");
             }
             if (existsNow(loaiViecDropdown) && isElementEnabledNow(loaiViecDropdown)) {
-                sleepMillis(WaitConfig.SETTLE_MS);
+                // Chịu lực: khoảng cách có chủ đích giữa "dropdown đã enabled" và lần soát crash
+                // danhSach thứ hai. Cố định 280ms, không theo taodon.wait.scale.
+                sleepMillis(280);
                 if (!hasFrontendCrashVisible()) {
                     logUi(" ✅ Catalog loại việc sẵn sàng.");
                     return;
@@ -890,6 +1217,16 @@ public class WebUI {
      */
     public void waitForStepTransition(int stepNumber, String stepName, By marker,
                                       int timeoutSeconds, String description) {
+        UiProfiler.enter(UiProfiler.CHO_DOI);
+        try {
+            waitForStepTransitionInternal(stepNumber, stepName, marker, timeoutSeconds, description);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void waitForStepTransitionInternal(int stepNumber, String stepName, By marker,
+                                               int timeoutSeconds, String description) {
         logUi(" ⏳ Chờ chuyển bước: " + description);
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         java.util.Set<String> softNoted = new java.util.LinkedHashSet<>();
@@ -949,13 +1286,6 @@ public class WebUI {
             logUi(" 📸 Đã chụp ảnh lỗi (giữ toast) ngay khi phát hiện chặn luồng.");
         }
 
-        if (isImmediateEformFailure(feedback)) {
-            logUi(" ⚠ Lỗi eform — fail ngay (không chờ grace): "
-                    + String.join(" | ", feedback));
-            failStepWithSystemFeedback(stepNumber, stepName, description, feedback, earlyShot);
-            return;
-        }
-
         logUi(" ⚠ Lỗi chặn luồng — chờ thêm " + WaitConfig.BLOCKING_GRACE_SEC
                 + "s: " + String.join(" | ", feedback));
         long graceDeadline = System.currentTimeMillis() + WaitConfig.BLOCKING_GRACE_SEC * 1000L;
@@ -970,16 +1300,6 @@ public class WebUI {
             sleepMillis(250);
         }
         failStepWithSystemFeedback(stepNumber, stepName, description, feedback, earlyShot);
-    }
-
-    /** Eform/host báo chưa phản hồi — chờ grace (host có thể ack async sau Gửi ngay / commit). */
-    private static boolean isImmediateEformFailure(List<String> feedback) {
-        return false;
-    }
-
-    /** Toast host đã ghi nhận nội dung iframe. */
-    public static boolean isEformAckMessage(String msg) {
-        return isEformBridgeAcknowledged(msg);
     }
 
     public static boolean hasEformAckInFeedback(List<String> feedback) {
@@ -1112,7 +1432,7 @@ public class WebUI {
     }
 
     /**
-     * Dừng testcase: log message hệ thống, chụp ảnh (giữ toast), báo cáo Extent/Excel.
+     * Dừng testcase: log message hệ thống, chụp ảnh (giữ toast), báo cáo HTML/Excel.
      */
     public void failStepWithSystemFeedback(int stepNumber, String stepName, String context,
                                            List<String> messages) {
@@ -1151,7 +1471,6 @@ public class WebUI {
             String logCtx = ctx.isEmpty() ? stepLabel : stepLabel + " · " + ctx;
             TestActionLog.validation(logCtx, msg);
         }
-        TestActionLog.trangThaiBuoc("Thất bại");
 
         String shot = (preCapturedShot != null && !preCapturedShot.isBlank())
                 ? preCapturedShot
@@ -1164,9 +1483,9 @@ public class WebUI {
                 + (ctx.isEmpty() ? "" : " Ngữ cảnh: " + ctx)
                 + " Hệ thống trả về: " + joined;
         if (shot != null) {
-            ExtentReportManager.logFailWithScreenshot(reportBody, shot);
+            BaoCao.logFailWithScreenshot(reportBody, shot);
         } else {
-            ExtentReportManager.logFail(reportBody);
+            BaoCao.logFail(reportBody);
         }
         throw new StepBlockedException(stepNumber, stepName, joined, shot);
     }
@@ -1409,11 +1728,13 @@ public class WebUI {
      * Chờ banner/toast sau thao tác (vd. tick Đồng ý lưu định danh) rồi chụp ảnh ngay.
      */
     public void logFeedbackAfterIdentitySave() {
-        logFeedbackAfterAction("Sau tick Đồng ý lưu Thông tin định danh", WaitConfig.FIELD * 1000L);
+        logFeedbackAfterAction("Sau tick Đồng ý lưu Thông tin định danh",
+                WaitConfig.IDENTITY_SAVE_FEEDBACK_SEC * 1000L);
     }
 
     public void logFeedbackAfterAction(String context, long maxWaitMs) {
-        long deadline = System.currentTimeMillis() + Math.max(500, maxWaitMs);
+        long start = System.currentTimeMillis();
+        long deadline = start + Math.max(500, maxWaitMs);
         while (System.currentTimeMillis() < deadline) {
             List<String> messages = filterFeedbackNoise(collectSystemFeedbackMessages());
             if (!messages.isEmpty()) {
@@ -1425,10 +1746,14 @@ public class WebUI {
                     }
                 }
                 emitValidationWarnings(context, messages);
+                logUi(" ⏱ logFeedbackAfterAction[" + context + "]: "
+                        + (System.currentTimeMillis() - start) + "ms (thấy feedback, thoát sớm)");
                 return;
             }
             sleepMillis(250);
         }
+        logUi(" ⏱ logFeedbackAfterAction[" + context + "]: "
+                + (System.currentTimeMillis() - start) + "ms (hết trần, không thấy feedback)");
     }
 
     private static boolean hasIdentitySaveFailure(List<String> messages) {
@@ -1504,9 +1829,9 @@ public class WebUI {
         String body = prefix + " — " + joined;
         if (shot != null) {
             logUi(" 📸 Đã chụp ảnh xác nhận eform");
-            ExtentReportManager.logPassWithScreenshot(body, shot);
+            BaoCao.logPassWithScreenshot(body, shot);
         } else {
-            ExtentReportManager.logPass(body);
+            BaoCao.logPass(body);
         }
     }
 
@@ -1524,9 +1849,9 @@ public class WebUI {
         String body = formatSoftWarningReport(prefix, soft);
         if (shot != null) {
             logUi(" 📸 Đã chụp ảnh thông báo — đi tiếp");
-            ExtentReportManager.logWarningWithScreenshot(body, shot);
+            BaoCao.logWarningWithScreenshot(body, shot);
         } else {
-            ExtentReportManager.logWarning(body);
+            BaoCao.logWarning(body);
         }
     }
 
@@ -1554,10 +1879,9 @@ public class WebUI {
         return isElementEnabledNow(by);
     }
 
-    /** Kiểm tra enabled ngay — không chờ 5s khi element không có. */
+    /** Kiểm tra enabled ngay — không chờ khi element không có (implicit wait đã là 0, xem existsNow). */
     public boolean isElementEnabledNow(By by) {
         failIfBrowserClosed();
-        driver.manage().timeouts().implicitlyWait(Duration.ZERO);
         try {
             for (WebElement element : driver.findElements(by)) {
                 try {
@@ -1626,27 +1950,86 @@ public class WebUI {
             element.sendKeys(value);
             logUi(" ➔ Điền (định dạng đặc biệt): '" + value + "' vào [" + elementName + "]");
             TestActionLog.dienMask(elementName, value);
+            verifyFilledValue(by, value, elementName);
         } catch (Exception e) {
             throw new RuntimeException("❌ Lỗi: Không thể nhập dữ liệu vào ô [" + elementName + "]");
         }
     }
 
+    /** Tìm lại element theo locator, chui vào input/textarea lồng nếu cần, đọc giá trị hiện tại. */
+    private String resolveInputValue(By by) {
+        WebElement element = driver.findElement(by);
+        // Gộp getTagName + tìm ô lồng + đọc value thành 1 lượt gọi. Hàm này chạy sau MỖI lần điền
+        // (verifyFilledValue), 854 lần mỗi lượt chạy — 3-4 lượt gọi mỗi lần là quá đắt cho một
+        // phép đối chiếu thuần chẩn đoán.
+        try {
+            Object v = ((JavascriptExecutor) driver).executeScript(
+                    "var e = arguments[0];"
+                            + "var t = (e.tagName || '').toLowerCase();"
+                            + "if (t !== 'input' && t !== 'textarea') { e = e.querySelector('input, textarea') || e; }"
+                            + "return e.value != null ? e.value : '';",
+                    element);
+            if (v != null) {
+                return v.toString();
+            }
+        } catch (BrowserClosedException e) {
+            throw e;
+        } catch (Exception ignored) {
+            // JS lỗi → lùi về đường cũ bên dưới, giữ nguyên hành vi.
+        }
+        String tag = element.getTagName() == null ? "" : element.getTagName().toLowerCase();
+        if (!tag.equals("input") && !tag.equals("textarea")) {
+            List<WebElement> nested = element.findElements(By.xpath(".//input|.//textarea"));
+            if (!nested.isEmpty()) {
+                element = nested.get(0);
+            }
+        }
+        return readInputValue(element);
+    }
+
     /** So sánh giá trị ô với expected (bỏ qua khoảng trắng thừa / NBSP). */
     private boolean inputValueMatches(By by, String expected) {
         try {
-            WebElement element = driver.findElement(by);
-            String tag = element.getTagName() == null ? "" : element.getTagName().toLowerCase();
-            if (!tag.equals("input") && !tag.equals("textarea")) {
-                List<WebElement> nested = element.findElements(By.xpath(".//input|.//textarea"));
-                if (!nested.isEmpty()) {
-                    element = nested.get(0);
-                }
-            }
-            String actual = readInputValue(element).replace('\u00A0', ' ').trim();
+            String actual = resolveInputValue(by).replace('\u00A0', ' ').trim();
             String want = expected.replace('\u00A0', ' ').trim();
             return !want.isEmpty() && actual.equalsIgnoreCase(want);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /**
+     * Đối chiếu giá trị thật trên UI sau khi điền với giá trị đã gõ — bắt các trường hợp UI tự
+     * lọc/định dạng lại ký tự (mask phía client) khiến giá trị "sai" cố tình gõ vào (ca âm) chưa
+     * từng thật sự tới được ô. Chỉ log + chụp ảnh khi thật sự lệch — không được phép làm gãy
+     * luồng chính nên nuốt mọi lỗi.
+     */
+    private void verifyFilledValue(By by, String expectedValue, String elementName) {
+        if (expectedValue == null || expectedValue.isBlank()) {
+            return;
+        }
+        try {
+            String actual = resolveInputValue(by).replace('\u00A0', ' ').trim();
+            String want = expectedValue.replace('\u00A0', ' ').trim();
+            if (actual.equalsIgnoreCase(want)) {
+                return;
+            }
+            if (!TestActionLog.firstTimeMismatch(elementName, expectedValue)) {
+                // Đã cảnh báo đúng field + đúng giá trị này rồi trong case hiện tại (thường do vòng
+                // soát lại sau VNeID gõ lại) — khỏi lặp lại cảnh báo + ảnh giống hệt lần trước.
+                return;
+            }
+            String msg = "Ô [" + elementName + "] sau khi điền có giá trị khác dữ liệu đã gõ — "
+                    + "gõ: '" + expectedValue + "' | thực tế trên UI: '" + actual + "'.";
+            logUi(" ⚠ " + msg);
+            TestActionLog.dienLechGiaTri(elementName, expectedValue, actual);
+            String shot = takeScreenshotPreserveToast();
+            // Ghi chú chẩn đoán, KHÔNG phải cảnh báo: đây thường là UI tự lọc/định dạng lại ký tự,
+            // không phải lỗi. Warning được xếp nặng hơn pass nên dùng warning ở đây sẽ khiến
+            // case chạy đúng vẫn hiện huy hiệu cam — người đọc tưởng có vấn đề.
+            BaoCao.logNoteWithScreenshot(msg, shot);
+        } catch (Exception ignored) {
+            // Không để bước đối chiếu (chẩn đoán) làm gãy luồng chính.
         }
     }
 
@@ -1668,13 +2051,38 @@ public class WebUI {
             String tenHienThi = tenTepHienThi(file.getName());
             logUi(" ➔ Tải lên: '" + tenHienThi + "' tại [" + elementName + "]");
             TestActionLog.taiLen(elementName, tenHienThi);
-            sleep(1);
+            waitUntilFileAttached(input);
         } catch (Exception e) {
             throw new RuntimeException("❌ Lỗi: Không thể tải file lên [" + elementName + "]: " + e.getMessage());
         }
     }
 
+    /**
+     * Chờ trình duyệt gắn xong file vào input — thay cho {@code sleep(1)} cứng trước đây.
+     * <p>
+     * File mẫu chỉ vài trăm byte nên thực tế trả về sau ~100ms. Hết giờ thì đi tiếp: đây là bước
+     * xác nhận, không phải điều kiện chặn (người gọi còn tự soát lại hàng tài liệu).
+     */
+    private void waitUntilFileAttached(WebElement input) {
+        try {
+            new WebDriverWait(driver, Duration.ofSeconds(3))
+                    .pollingEvery(Duration.ofMillis(100))
+                    .until(d -> Boolean.TRUE.equals(((JavascriptExecutor) d).executeScript(
+                            "return !!(arguments[0].files && arguments[0].files.length > 0);", input)));
+        } catch (Exception ignored) {
+        }
+    }
+
     public void selectCustomDropdown(By dropdownLocator, By optionsLocator, String expectedText, String elementName) {
+        UiProfiler.enter(UiProfiler.DROPDOWN);
+        try {
+            selectCustomDropdownInternal(dropdownLocator, optionsLocator, expectedText, elementName);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void selectCustomDropdownInternal(By dropdownLocator, By optionsLocator, String expectedText, String elementName) {
         List<String> availableOptions = new ArrayList<>();
         boolean isFound = trySelectFromDropdown(dropdownLocator, optionsLocator, expectedText, elementName, availableOptions);
         if (!isFound) {
@@ -1692,16 +2100,26 @@ public class WebUI {
         clickElementQuiet(dropdownLocator, elementName);
         sleepMillis(WaitConfig.SETTLE_SHORT_MS);
         for (int attempt = 0; attempt < 2; attempt++) {
-            for (WebElement option : driver.findElements(optionsLocator)) {
+            // Đọc trạng thái hiển thị + text của TOÀN BỘ option trong 2 lượt gọi, thay vì
+            // 2 lượt cho mỗi option. Dropdown tỉnh 63 mục: 127 lượt → 3 lượt.
+            List<WebElement> options = driver.findElements(optionsLocator);
+            boolean[] maybe = maybeDisplayed(options);
+            List<String> texts = textsOf(options);
+            for (int i = 0; i < options.size(); i++) {
                 try {
-                    if (!option.isDisplayed()) {
+                    if (!maybe[i]) {
                         continue;
                     }
-                    String textOnWeb = readElementText(option);
+                    String textOnWeb = texts.get(i);
                     if (!textOnWeb.isEmpty() && !availableOptions.contains(textOnWeb)) {
                         availableOptions.add(textOnWeb);
                     }
                     if (optionMatches(expectedText, textOnWeb)) {
+                        WebElement option = options.get(i);
+                        // Chỉ đến lúc sắp click mới hỏi Selenium — 1 lượt, đúng ngữ nghĩa cũ.
+                        if (!reallyDisplayed(option)) {
+                            continue;
+                        }
                         JavascriptExecutor js = (JavascriptExecutor) driver;
                         js.executeScript("arguments[0].scrollIntoView({block: 'center', inline: 'nearest'});", option);
                         option.click();
@@ -1712,7 +2130,10 @@ public class WebUI {
                 } catch (StaleElementReferenceException ignored) {
                 }
             }
-            sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            // Không nghỉ sau vòng cuối — sau nó là thoát vòng lặp, không quét lại nữa.
+            if (attempt == 0) {
+                sleepMillis(WaitConfig.SETTLE_SHORT_MS);
+            }
         }
         dismissOpenDropdownsQuiet();
         return false;
@@ -1722,20 +2143,17 @@ public class WebUI {
     private List<WebElement> waitForVisibleDropdownOptions(By optionsLocator, int timeoutSeconds) {
         long deadline = System.currentTimeMillis() + timeoutSeconds * 1000L;
         while (System.currentTimeMillis() < deadline) {
+            // 2 lượt gọi cho cả danh sách, thay vì 2-3 lượt cho mỗi option — và vòng lặp này còn
+            // chạy lại mỗi 250ms cho tới khi có option, nên chi phí cũ bị nhân lên theo số vòng.
+            List<WebElement> options = driver.findElements(optionsLocator);
             List<WebElement> visible = new ArrayList<>();
-            for (WebElement option : driver.findElements(optionsLocator)) {
-                try {
-                    if (!option.isDisplayed()) {
-                        continue;
+            if (!options.isEmpty()) {
+                boolean[] maybe = maybeDisplayed(options);
+                List<String> texts = textsOf(options);
+                for (int i = 0; i < options.size(); i++) {
+                    if (maybe[i] && !texts.get(i).isBlank() && reallyDisplayed(options.get(i))) {
+                        visible.add(options.get(i));
                     }
-                    String text = option.getText();
-                    if (text == null || text.isBlank()) {
-                        text = option.getAttribute("textContent");
-                    }
-                    if (text != null && !text.trim().isEmpty()) {
-                        visible.add(option);
-                    }
-                } catch (StaleElementReferenceException ignored) {
                 }
             }
             if (!visible.isEmpty()) {
@@ -1746,10 +2164,20 @@ public class WebUI {
         return List.of();
     }
 
+    /**
+     * Đóng dropdown/listbox đang mở — bấm ESC vô điều kiện.
+     * <p>
+     * ĐỪNG "tối ưu" bằng cách chỉ bấm ESC khi thấy {@code GLOBAL_DROPDOWN_OPTIONS}: đã thử và
+     * hỏng nặng. Locator đó chỉ bắt {@code [role=option]}, không phủ hết các loại menu/overlay mà
+     * ESC đang dọn — bỏ ESC khiến chúng ở lại chắn thao tác sau, sinh retry. Đo thực tế ở bước 3:
+     * số lần sleep <b>tăng gấp đôi</b> (75 → 151 lượt, 15.1s → 35.8s) và bước 3 chậm thêm 37%.
+     */
     private void dismissOpenDropdownsQuiet() {
         try {
+            // ESC vẫn bấm VÔ ĐIỀU KIỆN như javadoc trên yêu cầu — chỉ rút ngắn khoảng nghỉ sau đó,
+            // vốn là số 150 cứng nằm ngoài mọi hằng số. Hàm này chạy 15-25 lần mỗi case.
             driver.findElement(By.tagName("body")).sendKeys(Keys.ESCAPE);
-            sleepMillis(150);
+            sleepMillis(WaitConfig.SETTLE_SHORT_MS);
         } catch (Exception ignored) {
         }
     }
@@ -1764,7 +2192,7 @@ public class WebUI {
         for (int attempt = 1; attempt <= 3; attempt++) {
             if (hasFrontendCrashVisible()) {
                 recoverFromFrontendCrash();
-                sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
             }
             try {
                 if (trySelectDropdownWithSearch(dropdownLocator, searchInputLocator, optionsLocator,
@@ -1775,7 +2203,7 @@ public class WebUI {
                 lastError = ex;
                 if (shouldRetryAfterFrontendCrash(ex)) {
                     recoverFromFrontendCrash();
-                    sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                    sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
                     continue;
                 }
             }
@@ -1846,9 +2274,16 @@ public class WebUI {
     /** Chờ listbox có option — tránh gõ tìm kiếm khi API danhSach chưa về. */
     private void waitForDropdownOptionsLoaded(By optionsLocator, int timeoutSec) {
         long deadline = System.currentTimeMillis() + timeoutSec * 1000L;
+        // hasFrontendCrashVisible() quét XPath toàn tài liệu + đọc log trình duyệt — quá đắt để
+        // chạy mỗi 250ms. Frontend crash không tự khỏi nên soi mỗi ~1s là đủ phát hiện.
+        long nextCrashCheck = 0;
         while (System.currentTimeMillis() < deadline) {
-            if (hasFrontendCrashVisible()) {
-                throw new RuntimeException("FRONTEND_CRASH: dropdown options chưa load");
+            long now = System.currentTimeMillis();
+            if (now >= nextCrashCheck) {
+                nextCrashCheck = now + 1000;
+                if (hasFrontendCrashVisible()) {
+                    throw new RuntimeException("FRONTEND_CRASH: dropdown options chưa load");
+                }
             }
             try {
                 for (WebElement option : driver.findElements(optionsLocator)) {
@@ -1944,16 +2379,53 @@ public class WebUI {
     }
 
     /** XPath một thẻ địa chỉ trong parent; null nếu UI chưa dùng card này. */
+    /**
+     * Nhớ kết quả {@link #addressCardScope} trong lúc xử lý <b>một</b> khối địa chỉ.
+     * <p>
+     * {@code ADDRESS_CARD} là XPath nhiều tầng vị từ, mà 9 chỗ trong lớp này gọi
+     * {@code addressCardScope(parent, index)} với cùng tham số trong lúc xử lý một khối
+     * (resolveAdminDropdownButton, resolveAdminDropdownSearch, hasWardLabelVisible,
+     * findWardButtonForBlock, addressDetailTextareaAtBlock, focusAddressBlock…).
+     * <p>
+     * Chỉ nhớ <b>thẻ chứa</b> — nó có mặt từ đầu tới cuối quá trình xử lý khối. Cố ý KHÔNG nhớ nút
+     * tỉnh/phường: nút phường chưa tồn tại trước khi chọn tỉnh rồi mới hiện ra, nhớ lại là sai.
+     * Cache tắt mặc định, chỉ bật trong cửa sổ xử lý một khối.
+     */
+    private static final ThreadLocal<Map<String, String>> CARD_SCOPE_CACHE =
+            ThreadLocal.withInitial(HashMap::new);
+    private static final ThreadLocal<Boolean> CARD_SCOPE_CACHE_ON =
+            ThreadLocal.withInitial(() -> Boolean.FALSE);
+
+    private void beginAddressCardCache() {
+        CARD_SCOPE_CACHE.get().clear();
+        CARD_SCOPE_CACHE_ON.set(Boolean.TRUE);
+    }
+
+    private void endAddressCardCache() {
+        CARD_SCOPE_CACHE_ON.set(Boolean.FALSE);
+        CARD_SCOPE_CACHE.get().clear();
+    }
+
     private String addressCardScope(String parentScope, int zeroBasedIndex) {
         String parent = parentScope == null ? "" : parentScope;
+        String key = parent + " " + zeroBasedIndex;
+        boolean caching = Boolean.TRUE.equals(CARD_SCOPE_CACHE_ON.get());
+        Map<String, String> cache = CARD_SCOPE_CACHE.get();
+        if (caching && cache.containsKey(key)) {
+            return cache.get(key);
+        }
         String cardXpath = "(" + parent + ADDRESS_CARD + ")[" + (zeroBasedIndex + 1) + "]";
+        String resolved = null;
         try {
             if (existsNow(By.xpath(cardXpath))) {
-                return cardXpath;
+                resolved = cardXpath;
             }
         } catch (RuntimeException ignored) {
         }
-        return null;
+        if (caching) {
+            cache.put(key, resolved);
+        }
+        return resolved;
     }
 
     /**
@@ -1971,29 +2443,30 @@ public class WebUI {
     /** Đếm thẻ địa chỉ (ưu tiên) hoặc cặp Tỉnh/Phường trong scope. */
     public int countVisibleAddressBlocks(String scopeXPath) {
         String scope = scopeXPath == null ? "" : scopeXPath;
-        int cards = 0;
-        for (WebElement el : driver.findElements(By.xpath(scope + ADDRESS_CARD))) {
-            try {
-                if (el.isDisplayed()) {
-                    cards++;
-                }
-            } catch (StaleElementReferenceException ignored) {
-            }
-        }
+        int cards = countDisplayed(By.xpath(scope + ADDRESS_CARD));
         if (cards > 0) {
             return cards;
         }
-        int count = 0;
-        By labels = By.xpath(scope + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')]");
-        for (WebElement el : driver.findElements(labels)) {
-            try {
-                if (el.isDisplayed()) {
-                    count++;
-                }
-            } catch (StaleElementReferenceException ignored) {
+        return countDisplayed(
+                By.xpath(scope + "//label[contains(., 'Tỉnh') and contains(., 'thành phố')]"));
+    }
+
+    /** Đếm element đang hiển thị — 2 lượt gọi bất kể có bao nhiêu element khớp. */
+    private int countDisplayed(By by) {
+        List<WebElement> found = driver.findElements(by);
+        if (found.isEmpty()) {
+            return 0;
+        }
+        boolean[] maybe = maybeDisplayed(found);
+        int n = 0;
+        for (int i = 0; i < found.size(); i++) {
+            // Số đếm này quyết định nhánh (1 hay 2 khối địa chỉ) — phải đúng tuyệt đối,
+            // nên vẫn để Selenium chốt trên từng ứng viên qua được bộ lọc.
+            if (maybe[i] && reallyDisplayed(found.get(i))) {
+                n++;
             }
         }
-        return count;
+        return n;
     }
 
     /** Chọn Tỉnh/Phường cho một khối địa chỉ theo thứ tự (0 = khối đầu, 1 = khối thứ hai…). */
@@ -2056,17 +2529,50 @@ public class WebUI {
 
     /** Chọn lại phường/xã cho mọi khối địa chỉ (khi VNeID prefill lệch tỉnh). */
     public void forceSelectAdministrativeWardsInScope(String scopeXPath) {
+        forceSelectAdministrativeWardsInScope(scopeXPath, -1);
+    }
+
+    /**
+     * Lưới an toàn "phường/xã còn trống thì chọn giúp".
+     *
+     * @param onlyBlockIndex chỉ xử lý khối này ({@code -1} = mọi khối trong scope).
+     *                       <p>
+     *                       Hãy truyền đúng khối vừa điền. Quét cả scope sẽ đụng vào những khối
+     *                       <b>chưa tới lượt</b> và điền chúng bằng tỉnh/phường ngẫu nhiên. Đo
+     *                       thực tế: sau khi điền xong khối Thường trú, nó chọn luôn tỉnh + phường
+     *                       cho thẻ Liên lạc, rồi ngay sau đó {@code chonDiaChiLienLacGiongThuongTru}
+     *                       tick "giống thường trú" làm thẻ ấy ẩn đi — toàn bộ công đó bị vứt, và
+     *                       trên màn hình hiện đúng cảnh "tự nhiên nhảy ra một phường/xã rồi mất".
+     */
+    public void forceSelectAdministrativeWardsInScope(String scopeXPath, int onlyBlockIndex) {
         String parent = scopeXPath == null ? "" : scopeXPath;
         int total = Math.max(countVisibleAddressBlocks(parent), effectiveAddressBlockCount(parent));
         if (total <= 0) {
             total = 1;
         }
         for (int i = 0; i < total; i++) {
+            if (onlyBlockIndex >= 0 && i != onlyBlockIndex) {
+                continue;
+            }
+            beginAddressCardCache();
+            try {
             String blockSuffix = total > 1 ? " #" + (i + 1) : "";
             String card = addressCardScope(parent, i);
             String scope = card != null ? card : parent;
             int idx = card != null ? 1 : i + 1;
             if (!hasWardFieldInBlock(scope, idx) && !hasWardLabelVisible(parent, i)) {
+                continue;
+            }
+            // Khối đã có phường rồi thì KHÔNG đụng vào nữa.
+            //
+            // Đây là lưới an toàn cho các khối mà ensureAdministrativeAddressBlockInScope chưa
+            // xử lý — nhưng nó đang quét cả khối vừa được xử lý xong, và nó phân giải nút bằng
+            // đường khác (findWardButtonForBlock theo parent+index thay vì theo thẻ địa chỉ).
+            // Khi hai đường trỏ vào hai element khác nhau, nó tưởng phường còn trống → chọn lại
+            // tỉnh → phường bị reset → chọn lại phường. Đo trên 39 case: 139 lần chọn phường cho
+            // 104 khối (dư 34%), và số lần chọn tỉnh dư đúng bằng số lần chọn phường dư.
+            // Dùng đúng vị từ mà ensure... tin cậy để quyết định "đã xong hay chưa".
+            if (!isWardRequiredAndUnfilled(parent, i)) {
                 continue;
             }
             By btnTinh = resolveAdminDropdownButton(parent, i, false);
@@ -2083,16 +2589,33 @@ public class WebUI {
             String phuongName = "Dropdown [Phường / xã" + blockSuffix + "]";
             By searchTinh = resolveAdminDropdownSearch(parent, i, false);
             By searchPhuong = resolveAdminDropdownSearch(parent, i, true);
-            if (btnTinh != null && !isAdminDropdownFilledAt(btnTinh)) {
+            boolean daChonGiTri = false;
+            // Bắt buộc existsNow trước: resolveAdminDropdownButton có thể trả về locator KHÔNG
+            // tồn tại (nhánh cuối `return inParent` chạy cả khi existsNow(inParent) đã false).
+            // Khi đó readAdminDropdownValue ném ở findElement rồi nuốt lỗi trả "" — tỉnh đang có
+            // giá trị vẫn bị coi là trống, và ta chọn đè một tỉnh ngẫu nhiên khác.
+            if (btnTinh != null && existsNow(btnTinh) && !isAdminDropdownFilledAt(btnTinh)) {
                 selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
-                sleepMillis(WaitConfig.SETTLE_LONG_MS);
+                // Chịu lực: waitForWardDropdownReady thoát sớm khi nút phường "đã có giá trị"
+                // (đọc text CŨ của tỉnh trước) hoặc còn enabled — cả hai đều đúng thêm một nhịp
+                // sau khi đổi tỉnh. Bỏ khoảng này là chọn trúng phường của tỉnh cũ.
+                sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
                 waitForWardDropdownReady(btnPhuong, WaitConfig.WARD_READY);
+                daChonGiTri = true;
             }
             if (!isAdminDropdownFilledAt(btnPhuong)) {
                 logUi(" ➔ Chọn phường/xã bắt buộc" + blockSuffix + "...");
                 selectWardWithRetry(btnTinh, searchTinh, tinhName, btnPhuong, searchPhuong, phuongName, null, null);
+                daChonGiTri = true;
             }
-            sleepMillis(WaitConfig.SETTLE_MS);
+            // Khối đã đủ tỉnh/phường từ trước (vd. vừa được ensureAdministrativeAddressBlockInScope
+            // điền xong) — không có gì để chọn thêm, khỏi cần nghỉ settle.
+            if (daChonGiTri) {
+                sleepMillis(WaitConfig.SETTLE_MS);
+            }
+            } finally {
+                endAddressCardCache();
+            }
         }
     }
 
@@ -2109,6 +2632,11 @@ public class WebUI {
                     if (trySelectWardInOpenDropdown(btnPhuong, searchPhuong, wardHint, phuongName)) {
                         return;
                     }
+                    // Rơi sang ngẫu nhiên thì phải NÓI: phường trên báo cáo sẽ không khớp phường
+                    // trong dữ liệu test, trước đây im lặng nên không ai biết mà đối chiếu.
+                    logUi(" ⚠ Không khớp phường '" + wardHint + "' trong " + phuongName
+                            + " — chọn ngẫu nhiên thay thế (dữ liệu báo cáo sẽ khác dữ liệu sinh).");
+                    TestActionLog.ghiChu("Không khớp phường '" + wardHint + "' — đã chọn ngẫu nhiên thay thế");
                     selectRandomWardOption(btnPhuong, searchPhuong, phuongName);
                     return;
                 }
@@ -2144,7 +2672,8 @@ public class WebUI {
             exclude = provinceHint;
         }
         selectRandomFromCatalogExcluding(btnTinh, searchTinh, FALLBACK_PROVINCES, tinhName, exclude);
-        sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        // Chịu lực: cùng race tỉnh→phường, ở nhánh retry.
+        sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
     }
 
     /** Chờ dropdown phường/xã sẵn sàng sau khi chọn tỉnh (API async). Thoát ngay khi enabled. */
@@ -2152,7 +2681,9 @@ public class WebUI {
         long deadline = System.currentTimeMillis() + timeoutSec * 1000L;
         while (System.currentTimeMillis() < deadline) {
             try {
-                if (!isElementVisible(wardButton)) {
+                // existsNow (không chờ) — isElementVisible tự chờ tới 5s, dài hơn cả ngân sách
+                // timeoutSec=4 của vòng lặp này nên chỉ 1 vòng đã vượt trần.
+                if (!existsNow(wardButton)) {
                     sleepMillis(100);
                     continue;
                 }
@@ -2187,6 +2718,18 @@ public class WebUI {
 
     public void ensureAdministrativeAddressBlockInScope(String scopeXPath, int blockIndex,
                                                         String chiTietValue, String logContext) {
+        UiProfiler.enter(UiProfiler.DIA_CHI);
+        beginAddressCardCache();
+        try {
+            ensureAddressBlockInternal(scopeXPath, blockIndex, chiTietValue, logContext);
+        } finally {
+            endAddressCardCache();
+            UiProfiler.exit();
+        }
+    }
+
+    private void ensureAddressBlockInternal(String scopeXPath, int blockIndex,
+                                            String chiTietValue, String logContext) {
         String parentScope = scopeXPath == null ? "" : scopeXPath;
         int total = effectiveAddressBlockCount(parentScope);
         if (blockIndex >= total && total > 0) {
@@ -2225,6 +2768,8 @@ public class WebUI {
             return;
         }
 
+        // Tỉnh có đúng là tỉnh trong chuỗi địa chỉ không? Quyết định wardHint còn nghĩa lý gì không.
+        boolean tinhTheoDuLieu = true;
         if (!isAdminDropdownFilledAt(btnTinh)) {
             boolean selected = false;
             if (provinceHint != null && !provinceHint.isBlank()) {
@@ -2234,6 +2779,7 @@ public class WebUI {
             if (!selected) {
                 selectRandomDropdownOption(btnTinh, searchTinh, tinhName);
             }
+            tinhTheoDuLieu = selected;
             dismissOpenDropdownsQuiet();
             sleepMillis(WaitConfig.SETTLE_SHORT_MS);
             if (btnPhuong != null) {
@@ -2242,12 +2788,22 @@ public class WebUI {
         } else {
             logUi(" ⏩ " + tinhName + " đã có giá trị — bỏ qua.");
         }
+        if (!tinhTheoDuLieu && wardHint != null && !wardHint.isBlank()) {
+            // Tỉnh đã bị chọn ngẫu nhiên → danh sách phường thuộc tỉnh KHÁC, nên phường trong
+            // chuỗi địa chỉ chắc chắn không có trong đó. Thử nó chỉ tổ gõ vào ô tìm kiếm, chờ
+            // 800ms, quét trượt 4 vòng × 300ms rồi mới chịu — mất ~1.7s và hiện ra trên UI cảnh
+            // "ghi tên phường ra rồi xoá đi chọn lại". Bỏ thẳng sang chọn từ danh sách thật.
+            logUi(" ⏩ Tỉnh chọn ngẫu nhiên (không khớp '" + provinceHint
+                    + "') — bỏ qua gợi ý phường '" + wardHint + "', chọn theo danh sách của tỉnh này.");
+            wardHint = null;
+        }
 
         if (hasWardFieldInBlock(scope, idx) || hasWardLabelVisible(parentScope, blockIndex)) {
             waitForWardFieldInBlock(scope, idx, WaitConfig.WARD_READY);
             btnPhuong = findWardButtonForBlock(parentScope, blockIndex);
             searchPhuong = resolveAdminDropdownSearch(parentScope, blockIndex, true);
         }
+
         ensureWardSelectedBeforeDetail(parentScope, blockIndex, scope, idx, btnTinh, searchTinh, tinhName,
                 btnPhuong, searchPhuong, phuongName, provinceHint, wardHint);
 
@@ -2419,7 +2975,8 @@ public class WebUI {
 
     private boolean isWardDropdownInteractive(By wardButton) {
         try {
-            if (!isElementVisible(wardButton)) {
+            // Kiểm tra nhanh để quyết định có cần chờ lại hay không — không được tự chờ 5s.
+            if (!existsNow(wardButton)) {
                 return false;
             }
             return driver.findElement(wardButton).isEnabled();
@@ -2555,20 +3112,26 @@ public class WebUI {
         String card = addressCardScope(parent, blockIndex);
         String scope = card != null ? card : parent;
         int idx = card != null ? 1 : blockIndex + 1;
-        By byLabel = By.xpath("(" + scope + "//label[contains(., 'Phường') and contains(., 'xã')]"
-                + "/following::button[1])[" + idx + "]");
-        if (existsNow(byLabel)) {
-            return byLabel;
+        List<By> candidates = List.of(
+                By.xpath("(" + scope + "//label[contains(., 'Phường') and contains(., 'xã')]"
+                        + "/following::button[1])[" + idx + "]"),
+                By.xpath(scope + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1]"),
+                By.xpath("(" + parent + ADDRESS_CARD
+                        + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1])["
+                        + (blockIndex + 1) + "]"));
+        int hit = firstMaybeExisting(candidates);
+        if (hit >= 0) {
+            By picked = candidates.get(hit);
+            if (existsNow(picked)) {
+                return picked;
+            }
         }
-        byLabel = By.xpath(scope + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1]");
-        if (existsNow(byLabel)) {
-            return byLabel;
-        }
-        By inCards = By.xpath("(" + parent + ADDRESS_CARD
-                + "//label[contains(., 'Phường') and contains(., 'xã')]/following::button[1])["
-                + (blockIndex + 1) + "]");
-        if (existsNow(inCards)) {
-            return inCards;
+        if (hit == -2) {
+            for (By c : candidates) {
+                if (existsNow(c)) {
+                    return c;
+                }
+            }
         }
         return resolved;
     }
@@ -2632,22 +3195,35 @@ public class WebUI {
     private By resolveAdminDropdownButton(String parentScope, int blockIndex, boolean phuong) {
         String parent = parentScope == null ? "" : parentScope;
         String card = addressCardScope(parent, blockIndex);
-        if (card != null) {
-            By inCard = adminDropdownButtonAt(card, phuong, 1);
-            if (existsNow(inCard)) {
-                return inCard;
-            }
-        }
         int idx = blockIndex + 1;
         By inParent = adminDropdownButtonAt(parent, phuong, idx);
-        if (existsNow(inParent)) {
-            return inParent;
-        }
         String label = phuong ? "contains(., 'Phường') and contains(., 'xã')"
                 : "contains(., 'Tỉnh') and contains(., 'thành phố')";
         By fallback = By.xpath("(" + parent + ADDRESS_CARD + "//label[" + label + "]/following::button[1])[" + (blockIndex + 1) + "]");
-        if (existsNow(fallback)) {
-            return fallback;
+
+        List<By> candidates = new ArrayList<>(3);
+        if (card != null) {
+            candidates.add(adminDropdownButtonAt(card, phuong, 1));
+        }
+        candidates.add(inParent);
+        candidates.add(fallback);
+
+        // Thử cả 3 ứng viên trong 1 lượt gọi; hit nào cũng được existsNow soát lại đúng như cũ.
+        int hit = firstMaybeExisting(candidates);
+        if (hit >= 0) {
+            By picked = candidates.get(hit);
+            if (existsNow(picked)) {
+                return picked;
+            }
+        }
+        if (hit != -2) {
+            return inParent;
+        }
+        // Không gộp được (locator không phải XPath) — giữ nguyên đường tuần tự cũ.
+        for (By c : candidates) {
+            if (existsNow(c)) {
+                return c;
+            }
         }
         return inParent;
     }
@@ -2749,6 +3325,15 @@ public class WebUI {
      * Phường: đọc text listbox portal rồi chọn lại bằng tên.
      */
     public void selectRandomDropdownOption(By dropdownLocator, By searchInput, String elementName) {
+        UiProfiler.enter(UiProfiler.DROPDOWN);
+        try {
+            selectRandomDropdownOptionInternal(dropdownLocator, searchInput, elementName);
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private void selectRandomDropdownOptionInternal(By dropdownLocator, By searchInput, String elementName) {
         if (elementName.contains("Tỉnh")) {
             selectRandomFromCatalog(dropdownLocator, searchInput, FALLBACK_PROVINCES, elementName);
             return;
@@ -2817,19 +3402,24 @@ public class WebUI {
     }
 
     private boolean trySelectRandomWardOnce(By dropdownLocator, By searchInput, String elementName) {
-        scrollToElement(dropdownLocator);
+        // clickElementQuiet đã tự scrollToElement(dropdownLocator) ngay đầu — gọi thêm ở đây là
+        // cuộn 2 lần tới cùng một element, mất thêm 1 lượt tìm element + 120ms nghỉ vô ích.
         clickElementQuiet(dropdownLocator, elementName);
         sleepMillis(WaitConfig.SETTLE_MS);
         List<String> texts = collectValidDropdownOptionTexts(GLOBAL_DROPDOWN_OPTIONS, WaitConfig.DROPDOWN);
         if (!texts.isEmpty()) {
+            // Danh sách này vừa đọc từ chính dropdown đang mở, nên mục đã chọn CHẮC CHẮN có ở đó:
+            // chỉ cần 1 vòng quét, không phải 4 vòng × 300ms. Trước đây mỗi pick trượt tốn 900ms,
+            // mà còn shuffle cả danh sách rồi thử lần lượt.
             List<String> picks = new ArrayList<>(texts);
             Collections.shuffle(picks);
             for (String pick : picks) {
-                if (clickOptionInOpenDropdown(GLOBAL_DROPDOWN_OPTIONS, pick, elementName)) {
+                if (clickOptionInOpenDropdown(GLOBAL_DROPDOWN_OPTIONS, pick, elementName, 1)) {
                     return true;
                 }
             }
         }
+        // Chỉ tới đây khi dropdown không đọc được mục nào — lúc đó mới cần gõ dò.
         String[] probes = {"Phường", "Xã", "Thị trấn", "P.", "X."};
         if (searchInput != null && existsNow(searchInput)) {
             for (String probe : probes) {
@@ -2837,7 +3427,7 @@ public class WebUI {
                     WebElement search = driver.findElement(searchInput);
                     search.clear();
                     search.sendKeys(probe);
-                    sleepMillis(800);
+                    sleepMillis(WaitConfig.SETTLE_LONG_MS);
                     if (clickFirstOptionInOpenDropdown(GLOBAL_DROPDOWN_OPTIONS, elementName)) {
                         return true;
                     }
@@ -2855,17 +3445,20 @@ public class WebUI {
                                                 String elementName) {
         scrollToElement(dropdownLocator);
         clickElementQuiet(dropdownLocator, elementName);
-        sleepMillis(WaitConfig.SETTLE_LONG_MS);
+        // Chịu lực: chặn sendKeys khi option phường chưa render xong.
+        sleepMillis(WaitConfig.SETTLE_ASYNC_MS);
         if (searchInput != null && existsNow(searchInput)) {
             try {
                 WebElement search = driver.findElement(searchInput);
                 search.clear();
                 search.sendKeys(expected);
-                sleepMillis(800);
+                sleepMillis(WaitConfig.SETTLE_LONG_MS);
             } catch (Exception ignored) {
             }
         }
-        if (clickOptionInOpenDropdown(GLOBAL_DROPDOWN_OPTIONS, expected, elementName)) {
+        // 2 vòng đủ: đã lọc theo từ khoá nên danh sách ngắn và render nhanh. 4 vòng chỉ kéo dài
+        // trường hợp "phường này không thuộc tỉnh đang chọn" — vốn là trường hợp phổ biến nhất.
+        if (clickOptionInOpenDropdown(GLOBAL_DROPDOWN_OPTIONS, expected, elementName, 2)) {
             return true;
         }
         dismissOpenDropdownsQuiet();
@@ -2873,14 +3466,32 @@ public class WebUI {
     }
 
     private boolean clickOptionInOpenDropdown(By optionsLocator, String expectedText, String elementName) {
-        for (int round = 0; round < 4; round++) {
-            for (WebElement option : driver.findElements(optionsLocator)) {
+        return clickOptionInOpenDropdown(optionsLocator, expectedText, elementName, 4);
+    }
+
+    /**
+     * @param rounds số vòng quét lại. Dùng 4 khi chưa biết option đã render chưa; dùng 1 khi text
+     *               vừa được đọc ra từ chính dropdown đang mở — quét lại không thêm thông tin gì,
+     *               chỉ tốn 300ms mỗi vòng.
+     */
+    private boolean clickOptionInOpenDropdown(By optionsLocator, String expectedText, String elementName,
+                                              int rounds) {
+        int total = Math.max(1, rounds);
+        for (int round = 0; round < total; round++) {
+            List<WebElement> options = driver.findElements(optionsLocator);
+            boolean[] maybe = maybeDisplayed(options);
+            List<String> allTexts = textsOf(options);
+            for (int i = 0; i < options.size(); i++) {
                 try {
-                    if (!option.isDisplayed()) {
+                    if (!maybe[i]) {
                         continue;
                     }
-                    String text = readElementText(option);
+                    String text = allTexts.get(i);
                     if (!optionMatches(expectedText, text)) {
+                        continue;
+                    }
+                    WebElement option = options.get(i);
+                    if (!reallyDisplayed(option)) {
                         continue;
                     }
                     JavascriptExecutor js = (JavascriptExecutor) driver;
@@ -2897,20 +3508,31 @@ public class WebUI {
                 } catch (StaleElementReferenceException ignored) {
                 }
             }
-            sleepMillis(300);
+            // Không nghỉ sau vòng cuối — nghỉ xong là thoát, chỉ tổ đốt thêm 300ms mỗi lần
+            // dropdown không chứa option cần tìm.
+            if (round < total - 1) {
+                sleepMillis(300);
+            }
         }
         return false;
     }
 
     private boolean clickFirstOptionInOpenDropdown(By optionsLocator, String elementName) {
         for (int round = 0; round < 4; round++) {
-            for (WebElement option : driver.findElements(optionsLocator)) {
+            List<WebElement> options = driver.findElements(optionsLocator);
+            boolean[] maybe = maybeDisplayed(options);
+            List<String> allTexts = textsOf(options);
+            for (int i = 0; i < options.size(); i++) {
                 try {
-                    if (!option.isDisplayed()) {
+                    if (!maybe[i]) {
                         continue;
                     }
-                    String text = readElementText(option);
+                    String text = allTexts.get(i);
                     if (!isSelectableDropdownText(text)) {
+                        continue;
+                    }
+                    WebElement option = options.get(i);
+                    if (!reallyDisplayed(option)) {
                         continue;
                     }
                     JavascriptExecutor js = (JavascriptExecutor) driver;
@@ -2927,7 +3549,10 @@ public class WebUI {
                 } catch (StaleElementReferenceException ignored) {
                 }
             }
-            sleepMillis(300);
+            // Không ngủ sau vòng cuối — hàm sắp trả false (giống clickOptionInOpenDropdown ở trên).
+            if (round < 3) {
+                sleepMillis(300);
+            }
         }
         return false;
     }
@@ -2946,16 +3571,16 @@ public class WebUI {
         long deadline = System.currentTimeMillis() + timeoutSec * 1000L;
         while (System.currentTimeMillis() < deadline) {
             texts.clear();
-            for (WebElement option : driver.findElements(optionsLocator)) {
-                try {
-                    if (!option.isDisplayed()) {
-                        continue;
-                    }
-                    String trimmed = readElementText(option);
-                    if (isSelectableDropdownText(trimmed) && !texts.contains(trimmed)) {
+            List<WebElement> options = driver.findElements(optionsLocator);
+            if (!options.isEmpty()) {
+                boolean[] maybe = maybeDisplayed(options);
+                List<String> allTexts = textsOf(options);
+                for (int i = 0; i < options.size(); i++) {
+                    String trimmed = allTexts.get(i);
+                    if (maybe[i] && isSelectableDropdownText(trimmed) && !texts.contains(trimmed)
+                            && reallyDisplayed(options.get(i))) {
                         texts.add(trimmed);
                     }
-                } catch (StaleElementReferenceException ignored) {
                 }
             }
             if (!texts.isEmpty()) {
@@ -3088,12 +3713,21 @@ public class WebUI {
 
     /**
      * Một ảnh tổng quan (viewport hiện tại, cuộn về đầu trang).
-     * Dùng cho báo cáo Extent — không chụp nhiều khung theo bước.
+     * Dùng cho báo cáo — không chụp nhiều khung theo bước.
      */
     public String takeOverviewScreenshot() {
         if (!screenshotsEnabled()) {
             return null;
         }
+        UiProfiler.enter(UiProfiler.ANH);
+        try {
+            return takeOverviewScreenshotInternal();
+        } finally {
+            UiProfiler.exit();
+        }
+    }
+
+    private String takeOverviewScreenshotInternal() {
         try {
             dismissOverlaysForScreenshot();
             scrollWindowTo(0);
@@ -3258,69 +3892,25 @@ public class WebUI {
         }
     }
 
-    /** Đính 1 ảnh tổng quan vào báo cáo Extent. */
+    /** Đính 1 ảnh tổng quan vào báo cáo. */
     public void captureOverview(String message) {
         String shot = takeOverviewScreenshot();
         if (shot == null) {
             return;
         }
-        String base = message;
-        try {
-            String url = driver.getCurrentUrl();
-            if (url != null && !url.isBlank()) {
-                base = message + " · " + url;
-            }
-        } catch (Exception ignored) {
-        }
-        ExtentReportManager.logScreenshots(base, List.of(shot));
+        // Cố ý KHÔNG kèm URL vào chú thích: cả lượt chạy chỉ có một địa chỉ, dán nó vào từng dòng
+        // chỉ làm loãng câu mô tả mà không nói thêm được gì cho người đọc báo cáo.
+        BaoCao.logScreenshots(message, List.of(shot));
     }
 
     /**
-     * Chụp 1–3 ảnh theo chiều dọc biểu mẫu (đầu / giữa / cuối) — dùng khi cần chi tiết sâu.
-     * Form ngắn chỉ trả 1 ảnh. Không đổi zoom, không sửa CSS.
+     * Công tắc chụp ảnh — nay do {@code ScreenshotStore} giữ.
+     * <p>
+     * Trước đây cờ nằm riêng ở đây và chỉ chặn ba hàm của lớp này, còn {@code TestListener} gọi
+     * thẳng {@code getScreenshotAs} nên tắt cờ vẫn sinh ảnh cho mọi case hỏng.
      */
-    public List<String> takeContextScreenshots() {
-        List<String> shots = new ArrayList<>();
-        if (!screenshotsEnabled()) {
-            return shots;
-        }
-        try {
-            dismissOverlaysForScreenshot();
-            int[] positions = resolveScrollPositions();
-            for (int pos : positions) {
-                scrollWindowTo(pos);
-                sleepMillis(WaitConfig.SETTLE_MS);
-                String shot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64);
-                if (shot != null && !shot.isBlank()) {
-                    shots.add(shot);
-                }
-            }
-            scrollWindowTo(0);
-            sleepMillis(100);
-        } catch (Exception e) {
-            logUi(" ⚠ Không chụp được chuỗi ảnh ngữ cảnh: " + e.getMessage());
-            if (shots.isEmpty()) {
-                try {
-                    shots.add(((TakesScreenshot) driver).getScreenshotAs(OutputType.BASE64));
-                } catch (Exception ignored) {
-                }
-            }
-        }
-        return shots;
-    }
-
-    /** Tương thích cũ — lấy ảnh tổng quan 1 khung. */
-    public String takeContextScreenshot() {
-        return takeOverviewScreenshot();
-    }
-
-    /** Mặc định: ảnh tổng quan 1 khung (không multi-scroll). */
-    public void captureScreen(String message) {
-        captureOverview(message);
-    }
-
     private static boolean screenshotsEnabled() {
-        return !"false".equalsIgnoreCase(System.getProperty("taodon.screenshot", "true"));
+        return vn.tuphap.automation.report.ScreenshotStore.enabled();
     }
 
     private void dismissOverlaysForScreenshot() {
@@ -3329,33 +3919,6 @@ public class WebUI {
         } catch (Exception ignored) {
         }
         sleepMillis(100);
-    }
-
-    /**
-     * Vị trí cuộn cửa sổ: form ngắn → [0]; dài → [0, giữa, cuối].
-     */
-    private int[] resolveScrollPositions() {
-        try {
-            JavascriptExecutor js = (JavascriptExecutor) driver;
-            @SuppressWarnings("unchecked")
-            Map<String, Number> metrics = (Map<String, Number>) js.executeScript(
-                    "var se = document.scrollingElement || document.documentElement;"
-                            + "var view = window.innerHeight || se.clientHeight || 800;"
-                            + "var max = Math.max(0, (se.scrollHeight || 0) - view);"
-                            + "return { view: view, max: max };");
-            int max = metrics == null || metrics.get("max") == null ? 0 : metrics.get("max").intValue();
-            if (max < 120) {
-                return new int[]{0};
-            }
-            int mid = max / 2;
-            // Tránh trùng gần như nhau
-            if (mid < 80 || Math.abs(max - mid) < 80) {
-                return new int[]{0, max};
-            }
-            return new int[]{0, mid, max};
-        } catch (Exception e) {
-            return new int[]{0};
-        }
     }
 
     private void scrollWindowTo(int y) {
@@ -3368,15 +3931,14 @@ public class WebUI {
     }
 
     public void sleep(int seconds) {
-        try {
-            Thread.sleep(seconds * 1000L);
-        } catch (InterruptedException e) {
-        }
+        sleepMillis(seconds * 1000L);
     }
 
     public void sleepMillis(long millis) {
+        long ms = Math.max(0, millis);
+        UiProfiler.addDirect(UiProfiler.SLEEP, ms);
         try {
-            Thread.sleep(Math.max(0, millis));
+            Thread.sleep(ms);
         } catch (InterruptedException e) {
         }
     }
@@ -3474,8 +4036,4 @@ public class WebUI {
         driver.switchTo().frame(frame);
     }
 
-    public boolean existsIframe(By iframeLocator) {
-        switchToDefaultContent();
-        return existsNow(iframeLocator);
-    }
 }

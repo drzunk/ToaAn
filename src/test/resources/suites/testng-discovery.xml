@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Bộ quét dò field (Giai đoạn 1) — không nằm trong smoke/mid/full/master. Chạy: mvn -Pdiscovery test -->
+<suite name="ToaAn_Discovery_Suite" verbose="1">
+    <test name="Discovery">
+        <groups>
+            <run>
+                <include name="discovery"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.tests.FieldDiscoverySweepTest"/>
+        </classes>
+    </test>
+</suite>

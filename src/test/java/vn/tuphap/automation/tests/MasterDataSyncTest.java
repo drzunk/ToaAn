@@ -14,8 +14,10 @@ import vn.tuphap.automation.config.ConfigReader;
 import vn.tuphap.automation.data.MasterDataCatalog;
 import vn.tuphap.automation.data.ToaAnCatalog;
 import vn.tuphap.automation.data.UiMasterDataReader;
+import vn.tuphap.automation.report.AppsScriptCatalogWriter;
 import vn.tuphap.automation.ui.WaitConfig;
 
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -113,6 +115,15 @@ public class MasterDataSyncTest extends BaseTest {
 
         System.out.println("✅ Đã cập nhật master-data.properties từ UI (" + ConfigReader.getValue("baseUrl") + ")");
         merged.forEach((key, values) -> System.out.println(" - " + key + ": " + values));
+
+        Path gsFile = Path.of("test-output", "1-Catalog.gs");
+        try {
+            AppsScriptCatalogWriter.writeCatalogGs(gsFile, merged);
+            System.out.println("📄 Đã sinh " + gsFile.toAbsolutePath()
+                    + " — dán ĐÈ lên file \"1-Catalog\" trong Apps Script (Google Sheet).");
+        } catch (Exception e) {
+            System.out.println("⚠ Không sinh được 1-Catalog.gs: " + e.getMessage());
+        }
     }
 
     private static void logDiscoveryLabels(String step, List<String> labels) {

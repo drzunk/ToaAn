@@ -136,6 +136,11 @@ public final class BrowserLayout {
         }
     }
 
+    /**
+     * Chạy 1 hàng (2-3 trình duyệt, trường hợp phổ biến nhất): điền gần hết {@code columnBudget}
+     * theo {@code run.window.scale} — không còn trần cứng {@link #DEFAULT_WIDTH_CAP} như trước
+     * (trần đó khiến cửa sổ nhỏ xíu dù màn hình còn thừa chỗ khi chỉ mở 2 trình duyệt).
+     */
     private static int resolveWidth(int columnBudget) {
         int fixed = RunFlowConfig.windowWidth();
         if (fixed <= 0) {
@@ -144,14 +149,14 @@ public final class BrowserLayout {
         if (fixed > 200) {
             return Math.min(fixed, columnBudget);
         }
-        int capped = Math.min(DEFAULT_WIDTH_CAP, columnBudget);
         double scale = RunFlowConfig.windowScale();
-        if (scale > 0 && scale < 1.0) {
-            capped = (int) Math.round(capped * scale);
-        }
-        return Math.max(420, capped);
+        int target = (scale > 0 && scale < 1.0)
+                ? (int) Math.round(columnBudget * scale)
+                : columnBudget;
+        return Math.max(420, Math.min(target, columnBudget));
     }
 
+    /** Cùng nguyên tắc với {@link #resolveWidth} — điền gần hết {@code rowBudget}, không ép về 640px. */
     private static int resolveHeight(int rowBudget) {
         int fixed = RunFlowConfig.windowHeight();
         if (fixed <= 0) {
@@ -161,8 +166,7 @@ public final class BrowserLayout {
             return Math.min(fixed, rowBudget);
         }
         double scale = RunFlowConfig.windowScale();
-        int fromScale = (int) Math.round(rowBudget * clamp(scale, 0.45, 0.85));
-        int target = Math.min(DEFAULT_HEIGHT_1080, fromScale);
+        int target = (int) Math.round(rowBudget * clamp(scale, 0.45, 0.98));
         return Math.max(480, Math.min(target, rowBudget));
     }
 

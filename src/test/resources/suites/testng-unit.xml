@@ -10,6 +10,10 @@
         <classes>
             <class name="vn.tuphap.automation.tests.FullCoverageMatrixTest"/>
             <class name="vn.tuphap.automation.tests.MidCoverageMatrixTest"/>
+            <class name="vn.tuphap.automation.config.CaseSheetSourceTest"/>
+            <class name="vn.tuphap.automation.tests.ConfiguredCasesTest"/>
+            <class name="vn.tuphap.automation.report.BaoCaoTeeTest"/>
+            <class name="vn.tuphap.automation.report.BaoCaoHtmlTest"/>
         </classes>
     </test>
 </suite>

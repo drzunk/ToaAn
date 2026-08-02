@@ -4,7 +4,7 @@ import org.openqa.selenium.By;
 import org.openqa.selenium.WebDriver;
 import vn.tuphap.automation.data.DataDictionary;
 import vn.tuphap.automation.data.DongNguyenDonData;
-import vn.tuphap.automation.report.ExtentReportManager;
+import vn.tuphap.automation.report.BaoCao;
 import vn.tuphap.automation.report.TestActionLog;
 import vn.tuphap.automation.ui.UiSynonyms;
 import vn.tuphap.automation.ui.WaitConfig;
@@ -312,8 +312,14 @@ public class NguyenDonPage {
         System.out.println(" ⚠ Chưa xác nhận tab đồng ND [" + loaiChuThe + "] — vẫn thử điền form.");
     }
 
+    /**
+     * Kiểm tra không chờ — người gọi ({@code chonTabChuTheTrongScope}) đã tự giữ deadline
+     * {@link WaitConfig#FIELD} và ngủ 250ms mỗi vòng. Dùng {@code isElementVisible} ở đây khiến
+     * mỗi "vòng 250ms" thực tế tốn tới 3×{@link WaitConfig#PROBE_MS}, nên ngân sách 8s chỉ chạy
+     * được 2 vòng. {@code existsNow} giữ nguyên trần mà poll đúng nhịp 250ms.
+     */
     private boolean dongFieldVisible(String scope, String labelMatch) {
-        return webUI.isElementVisible(By.xpath(scope + "//label[" + labelMatch + "]/following-sibling::div/input"
+        return webUI.existsNow(By.xpath(scope + "//label[" + labelMatch + "]/following-sibling::div/input"
                 + " | " + scope + "//label[" + labelMatch + "]/following-sibling::input"
                 + " | " + scope + "//label[" + labelMatch + "]/following-sibling::textarea"
                 + " | " + scope + "//label[" + labelMatch + "]/parent::div//input[not(@type='hidden')]"
@@ -342,18 +348,24 @@ public class NguyenDonPage {
     /** Hoàn thiện tỉnh/phường/chi tiết — một lần theo đúng thứ tự form. */
     public void hoanThienDiaChiNguyenDon(String thuongTru, String lienLac) {
         boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
+        long t0 = System.currentTimeMillis();
         webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru, "Thường trú");
-        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+        // Chỉ khối 0. Quét cả scope ở đây sẽ điền luôn tỉnh/phường ngẫu nhiên cho thẻ Liên lạc,
+        // rồi chonDiaChiLienLacGiongThuongTru ngay dưới tick "giống thường trú" làm thẻ đó ẩn đi.
+        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION, 0);
+        System.out.println(" ⏱ Khối địa chỉ Thường trú: " + (System.currentTimeMillis() - t0) + "ms");
         chonDiaChiLienLacGiongThuongTru(giongThuongTru);
         if (giongThuongTru) {
             return;
         }
         int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
         if (blocks >= 2) {
+            long t1 = System.currentTimeMillis();
             webUI.dismissOpenDropdowns();
             webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
             webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac, "Liên lạc");
-            webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+            webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION, 1);
+            System.out.println(" ⏱ Khối địa chỉ Liên lạc: " + (System.currentTimeMillis() - t1) + "ms");
         } else if (webUI.existsNow(txtDiaChiLienLac) && webUI.isElementEnabledNow(txtDiaChiLienLac)) {
             webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
         }
@@ -410,9 +422,9 @@ public class NguyenDonPage {
         System.out.println(" ⚠ " + msg);
         TestActionLog.validation("Địa chỉ liên lạc giống thường trú", msg);
         if (shot != null) {
-            ExtentReportManager.logWarningWithScreenshot(msg, shot);
+            BaoCao.logWarningWithScreenshot(msg, shot);
         } else {
-            ExtentReportManager.logWarning(msg);
+            BaoCao.logWarning(msg);
         }
     }
 
@@ -493,6 +505,7 @@ public class NguyenDonPage {
             webUI.setTextWithCheck(detail, value, "Ô nhập [Chi tiết — " + label + "]");
             return;
         }
+        // Chỉ tới đây sau 2 lần existsNow trượt ở trên; không có gì render lại xen giữa.
         if (webUI.isElementVisible(legacyTextarea)) {
             webUI.setTextWithCheck(legacyTextarea, value, "Ô nhập [" + label + "]");
         }
@@ -540,6 +553,8 @@ public class NguyenDonPage {
         By txtHoTenRep = fieldInMain("contains(., 'Họ và tên người đại diện')");
         if (webUI.isElementVisible(txtHoTenRep)) {
             webUI.setTextWithCheck(txtHoTenRep, hoTen, "Ô nhập [Họ và tên người đại diện]");
+            // Từ đây trở xuống đều nằm trong khối người đại diện đã xác nhận hiển thị ở trên,
+            // không có re-render xen giữa → kiểm tra không chờ.
             By txtNgaySinhRep = fieldInMain("contains(., 'Ngày, tháng, năm sinh')");
             if (webUI.isElementVisible(txtNgaySinhRep)) {
                 webUI.setTextForMaskedInput(txtNgaySinhRep, ngaySinh, "Ô nhập [Ngày, tháng, năm sinh người đại diện]");
@@ -809,6 +824,7 @@ public class NguyenDonPage {
         webUI.setTextWithCheck(txtDiaChi, diaChiChiTiet, "Đồng ND — [Địa chỉ chi tiết]");
         String noiO = (noiOHienTai == null || noiOHienTai.isBlank()) ? diaChiChiTiet : noiOHienTai;
         By txtNoiO = fieldInDongScope("contains(., 'Nơi ở hiện tại')");
+        // Thẻ đồng ND vừa được setTextWithCheck ngay trên → chắc chắn đã render.
         if (webUI.isElementVisible(txtNoiO)) {
             webUI.setTextWithCheck(txtNoiO, noiO, "Đồng ND — [Nơi ở hiện tại]");
         }
@@ -884,9 +900,11 @@ public class NguyenDonPage {
         }
         By txtNgaySinh = fieldInDongScope("contains(., 'Ngày, tháng, năm sinh') or contains(., 'Ngày sinh')");
         By txtNamSinh = fieldInDongScope("contains(., 'Năm sinh')");
+        // Biểu mẫu chỉ có một trong hai ô → luôn có đúng 1 lần trượt. Với isElementVisible thì
+        // lần trượt đó đốt trọn PROBE_MS (1.2s) cho mỗi đồng nguyên đơn.
         if (webUI.isElementVisible(txtNgaySinh)) {
             webUI.setTextForMaskedInput(txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
-        } else         if (webUI.isElementVisible(txtNamSinh)) {
+        } else if (webUI.isElementVisible(txtNamSinh)) {
             webUI.setTextWithCheck(txtNamSinh, namSinhTuNgay(data.ngaySinh()), "Đồng ND — [Năm sinh]");
         } else {
             webUI.setTextForMaskedInput(txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
@@ -1023,14 +1041,14 @@ public class NguyenDonPage {
         boolean giongThuongTru = isGiongThuongTru(lienLac, thuongTru);
         chonDiaChiLienLacGiongThuongTru(giongThuongTru);
         webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 0, thuongTru, "Thường trú");
-        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+        webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION, 0);
         if (!giongThuongTru) {
             int blocks = webUI.countVisibleAddressBlocks(MAIN_SECTION);
             if (blocks >= 2) {
                 webUI.dismissOpenDropdowns();
                 webUI.sleepMillis(WaitConfig.ADDRESS_BLOCK_GAP_MS);
                 webUI.ensureAdministrativeAddressBlockInScope(MAIN_SECTION, 1, lienLac, "Liên lạc");
-                webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION);
+                webUI.forceSelectAdministrativeWardsInScope(MAIN_SECTION, 1);
             } else if (webUI.existsNow(txtDiaChiLienLac) && webUI.isElementEnabledNow(txtDiaChiLienLac)) {
                 webUI.setTextWithCheck(txtDiaChiLienLac, lienLac, "Ô nhập [Địa chỉ liên lạc]");
             }

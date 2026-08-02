@@ -166,7 +166,10 @@ public class TaiLieuPage {
             } catch (RuntimeException e) {
                 last = e;
             }
-            webUI.sleepMillis(WaitConfig.SETTLE_MS);
+            // Không nghỉ sau lần thử cuối — nghỉ xong là ném lỗi, chẳng chờ để làm gì.
+            if (attempt < maxAttempts) {
+                webUI.sleepMillis(WaitConfig.SETTLE_MS);
+            }
         }
         throw new RuntimeException("❌ Không đính kèm được [" + title + "].", last);
     }
@@ -255,13 +258,11 @@ public class TaiLieuPage {
                 if (isRowAttached(row)) {
                     continue;
                 }
+                // Tới đây chắc chắn !isRowAttached(row) → điều kiện cũ luôn đúng, mà nó còn tốn
+                // thêm 1 safeText() + 1 isRowAttached() (mỗi cái là 1-3 lượt getText) cho mỗi dòng.
                 String title = extractDocumentTitle(row);
-                String text = safeText(row);
-                if (text.toLowerCase(Locale.ROOT).contains("chưa đính kèm")
-                        || !isRowAttached(row)) {
-                    if (title != null && !title.isBlank()) {
-                        missing.add(title);
-                    }
+                if (title != null && !title.isBlank()) {
+                    missing.add(title);
                 }
             } catch (Exception ignored) {
             }
@@ -447,9 +448,10 @@ public class TaiLieuPage {
                 if (!row.isDisplayed()) {
                     continue;
                 }
-                String title = extractDocumentTitle(row);
+                // extractDocumentTitle đã strip dấu '*' nên title.contains("*") gần như không bao
+                // giờ đúng; mà text (toàn dòng) vốn đã bao trùm title — bỏ 1 lượt getText mỗi dòng.
                 String text = safeText(row);
-                if (title.contains("*") || text.contains("*")
+                if (text.contains("*")
                         || !row.findElements(By.xpath(".//span[contains(@class,'text-danger')]")).isEmpty()
                         || text.toLowerCase(Locale.ROOT).contains("bắt buộc")) {
                     rows.add(row);
@@ -497,6 +499,8 @@ public class TaiLieuPage {
     }
 
     private boolean tryUploadOptionalBoSung() {
+        // Trang bước 5 đã render từ lâu; ô này thường vắng mặt nên isElementVisible đốt đều
+        // PROBE_MS mỗi case có coTaiLieuBoSung=có.
         if (webUI.isElementVisible(optionalFileInput)) {
             webUI.uploadFile(optionalFileInput, TestFileHelper.getSamplePng(), "Tài liệu bổ sung (tùy chọn)");
             uploadedAnyFile = true;

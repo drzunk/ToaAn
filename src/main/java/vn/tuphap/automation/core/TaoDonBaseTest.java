@@ -8,7 +8,9 @@ import vn.tuphap.automation.flow.BrowserClosedException;
 import vn.tuphap.automation.pages.DashboardPage;
 import vn.tuphap.automation.pages.LoginPage;
 import vn.tuphap.automation.config.ConfigReader;
-import vn.tuphap.automation.report.ExtentReportManager;
+import vn.tuphap.automation.report.BaoCao;
+import vn.tuphap.automation.report.BaoCaoData;
+import vn.tuphap.automation.report.TrangThai;
 import vn.tuphap.automation.report.TestActionLog;
 import vn.tuphap.automation.ui.WaitConfig;
 import vn.tuphap.automation.ui.WebUI;
@@ -103,25 +105,33 @@ public abstract class TaoDonBaseTest extends BaseTest {
         String browser = BrowserLayout.browserLabel();
         System.out.println("=== THIẾT LẬP SESSION [" + browser + "] — ĐĂNG NHẬP ===");
         TestActionLog.pause();
-        ExtentReportManager.initReport();
-        ExtentReportManager.createTest(
+        BaoCao.setCaseCode("SETUP_" + browser);
+        BaoCao.createTest(
                 "Thiết lập session — đăng nhập (" + browser + ")",
                 "Setup trước khi chạy kịch bản tạo đơn trên " + browser + " (mỗi case chỉ 1 trình duyệt).");
+        // Đăng nhập hỏng là nguyên nhân gốc phổ biến nhất khiến cả một Chrome bị dừng và hàng chục
+        // kịch bản bị bỏ qua. Trước đây khối finally huỷ luôn mục này nên toàn bộ log đó chỉ ra
+        // console — người đọc báo cáo chỉ thấy N kịch bản "Bỏ qua" với lý do chung chung, không có
+        // dấu vết nào của việc đăng nhập hỏng. Giờ: thành công thì vẫn huỷ (nó không phải kịch bản
+        // kiểm thử, không được đếm), còn HỎNG thì giữ lại thành một mục để truy nguyên.
+        boolean hong = false;
         try {
             performLogin();
             THREAD_LOGGED_IN.set(Boolean.TRUE);
             DriverContext.clearAbortFlag();
-            ExtentReportManager.logPass(
+            BaoCao.logPass(
                     "Session " + browser + " sẵn sàng — reuse Chrome trên trình duyệt này.");
             System.out.println(" ✅ Session " + browser + " sẵn sàng (song song, case không trùng).");
         } catch (BrowserClosedException ex) {
+            hong = true;
             THREAD_LOGGED_IN.set(Boolean.FALSE);
-            ExtentReportManager.logFail(ex.getMessage());
+            BaoCao.logFail(ex.getMessage());
             DriverContext.abortCurrentThread(ex.getMessage());
             throw ex;
         } catch (RuntimeException ex) {
+            hong = true;
             THREAD_LOGGED_IN.set(Boolean.FALSE);
-            ExtentReportManager.logFail("Đăng nhập thất bại (" + browser + "): " + ex.getMessage());
+            BaoCao.logFail("Đăng nhập thất bại (" + browser + "): " + ex.getMessage());
             if (WebUI.isBrowserClosed(ex)) {
                 DriverContext.abortCurrentThread(ex.getMessage());
             } else {
@@ -129,8 +139,13 @@ public abstract class TaoDonBaseTest extends BaseTest {
             }
             throw ex;
         } finally {
-            ExtentReportManager.clearTestContext();
-            ExtentReportManager.flushReport();
+            if (hong) {
+                BaoCao.ketQuaMongDoi("Đăng nhập được vào hệ thống để chạy các kịch bản trên "
+                        + browser + ".");
+                BaoCao.ghiChuKetQua("Mọi kịch bản xếp cho trình duyệt này sẽ bị bỏ qua.");
+                BaoCaoData.ketThucCase(TrangThai.THAT_BAI, 0);
+            }
+            BaoCao.clearTestContext();
             TestActionLog.resume();
         }
     }

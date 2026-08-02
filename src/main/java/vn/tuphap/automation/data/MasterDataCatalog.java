@@ -233,7 +233,8 @@ public final class MasterDataCatalog {
         return filtered.toArray(new String[0]);
     }
 
-    private static boolean isProductionOption(String value) {
+    /** Lọc bỏ dữ liệu rác/nháp còn sót trên UI dev/UAT (vd. "test in don", "xoa sau"). */
+    public static boolean isProductionOption(String value) {
         String lower = value.toLowerCase();
         return !lower.contains("test in don")
                 && !lower.contains("fpt test")

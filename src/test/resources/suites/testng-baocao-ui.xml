@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!--
+  Bấm thật vào test-output/index.html bằng Chrome headless.
+  Tách khỏi bộ unit vì cần trình duyệt; chạy khi vừa sửa phần JS/CSS của báo cáo.
+      mvn -o test -DsuiteXmlFile=src/test/resources/suites/testng-baocao-ui.xml
+-->
+<suite name="BaoCao_UI_Suite" verbose="1">
+    <test name="Tuong tac bao cao">
+        <groups>
+            <run>
+                <include name="baocao-ui"/>
+            </run>
+        </groups>
+        <classes>
+            <class name="vn.tuphap.automation.report.BaoCaoTuongTacTest"/>
+        </classes>
+    </test>
+</suite>

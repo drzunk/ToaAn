@@ -63,8 +63,20 @@ $untilStep = Get-RunFlowValue 'run.untilStep' '6'
 $submitDon = Get-RunFlowValue 'run.submit' 'false'
 $slots = Get-RunFlowValue 'run.slots' ''
 $cases = Get-RunFlowValue 'run.cases' ''
+$casesSheet = Get-RunFlowValue 'run.casesSheet' ''
+$caseSource = (Get-RunFlowValue 'run.caseSource' 'sheet').ToLowerInvariant()
+$useSheet = ($casesSheet -and $caseSource -ne 'file' -and $caseSource -ne 'properties')
 
-if ($cases) {
+if ($useSheet) {
+    # Số case nằm trên sheet — Java đọc và tự kẹp run.browsers <= số case.
+    $suite = 'master'
+    $b = 1
+    try { $b = [int]$browsers } catch { $b = 1 }
+    if ($b -lt 1) { $b = 1 }
+    if ($b -gt 8) { $b = 8 }
+    $browsers = "$b"
+    $parallel = if ($b -gt 1) { 'true' } else { 'false' }
+} elseif ($cases) {
     $caseCount = @($cases -split '\|' | Where-Object { $_.Trim() -ne '' }).Count
     if ($caseCount -ge 1) {
         $suite = 'master'
@@ -135,7 +147,11 @@ Write-Host '             CHẠY THEO run-flow.properties' -ForegroundColor Cyan
 Write-Host '==============================================================' -ForegroundColor Cyan
 Write-Host ("  Gói       : {0}" -f $suite)
 Write-Host ("  Song song : {0}" -f ($(if ($isParallel) { "BẬT ($browsers Chrome)" } else { 'TẮT (1 Chrome)' })))
-if ($cases) {
+if ($useSheet) {
+    Write-Host '  Nguồn case: Google Sheet' -ForegroundColor Cyan
+    Write-Host ("              {0}" -f $casesSheet) -ForegroundColor DarkGray
+    Write-Host '              (Java tải sheet lúc chạy — số case in trong log)' -ForegroundColor DarkGray
+} elseif ($cases) {
     foreach ($line in (Get-CaseDisplayLines -CasesRaw $cases -Prefix '  cases     : ')) {
         Write-Host $line
     }
@@ -198,25 +214,52 @@ if ($slots) {
     $sysProps += "-Drun.slots=$slots"
     $sysProps += "-Dtaodon.slots=$slots"
 }
-if ($cases) {
+# Knob tinh chỉnh tốc độ, truyền qua biến môi trường để thử mà không phải sửa script/build lại.
+# Ví dụ:  $env:TAODON_EXTRA_PROPS = '-Dtaodon.wait.scale=0.6 -Dtaodon.longTextChars=15'
+# Danh sách knob: taodon.wait.scale | taodon.probeMs | taodon.pageLoad | taodon.longTextChars
+#                 taodon.countCalls | taodon.profile | taodon.screenshot | taodon.submit.timeoutSec
+if ($env:TAODON_EXTRA_PROPS) {
+    foreach ($p in ($env:TAODON_EXTRA_PROPS -split '\s+')) {
+        if ($p) { $sysProps += $p }
+    }
+    Write-Host ("  Knob thêm : {0}" -f $env:TAODON_EXTRA_PROPS) -ForegroundColor Yellow
+}
+if ($useSheet) {
+    # URL an toàn khi truyền -D (đã nằm trong 1 phần tử mảng, không bị shell tách).
+    $sysProps += "-Drun.caseSource=sheet"
+    $sysProps += "-Drun.casesSheet=$casesSheet"
+    $sheetGid = Get-RunFlowValue 'run.casesSheetGid' ''
+    if ($sheetGid) { $sysProps += "-Drun.casesSheetGid=$sheetGid" }
+} elseif ($cases) {
     # Không truyền -Drun.cases (ký tự ">" làm vỡ shell). Java đọc từ run-flow.properties.
+    $sysProps += "-Drun.caseSource=file"
     Write-Host '  (cases lấy từ run-flow.properties — không truyền -D)' -ForegroundColor DarkGray
 }
 
 Write-Host 'Đang khởi động Maven / mở Chrome...' -ForegroundColor Green
-Write-Host 'Log chi tiết không in ra CMD — chỉ ghi file (ghi đè mỗi lần).' -ForegroundColor DarkGray
+Write-Host 'Log chi tiết không in ra CMD — chỉ ghi file (giữ lại từng lượt chạy).' -ForegroundColor DarkGray
 
 $logDir = Join-Path $root 'test-output'
 if (-not (Test-Path $logDir)) {
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 }
-$logFile = Join-Path $logDir 'last-run.log'
+# Mỗi lượt một file riêng: bảng phân tích thời gian của UiProfiler chỉ nằm ở stdout, mà bản cũ
+# ghi đè last-run.log mỗi lần chạy nên số liệu lượt trước mất sạch — không so sánh trước/sau được.
+$runStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+$runLogDir = Join-Path $logDir 'runs'
+if (-not (Test-Path $runLogDir)) {
+    New-Item -ItemType Directory -Path $runLogDir -Force | Out-Null
+}
+$logFile = Join-Path $runLogDir ("run_{0}_{1}.log" -f $suite, $runStamp)
+$latestLogFile = Join-Path $logDir 'last-run.log'
 $header = [System.Collections.Generic.List[string]]::new()
-[void]$header.Add("==== ToaAn last-run.log ====")
+[void]$header.Add("==== ToaAn run log ====")
 [void]$header.Add(("Thời điểm : {0}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')))
 [void]$header.Add(("Gói       : {0}" -f $suite))
 [void]$header.Add(("Song song : {0}" -f ($(if ($isParallel) { "BẬT ($browsers Chrome)" } else { 'TẮT (1 Chrome)' }))))
-if ($cases) {
+if ($useSheet) {
+    [void]$header.Add(("cases     : Google Sheet -> {0}" -f $casesSheet))
+} elseif ($cases) {
     foreach ($line in (Get-CaseDisplayLines -CasesRaw $cases -Prefix 'cases     : ')) {
         [void]$header.Add($line)
     }
@@ -229,7 +272,9 @@ if ($cases) {
 [void]$header.Add('')
 $utf8Log = New-Object System.Text.UTF8Encoding $true
 [System.IO.File]::WriteAllLines($logFile, $header, $utf8Log)
+Copy-Item -LiteralPath $logFile -Destination $latestLogFile -Force
 Write-Host ("File log : {0}" -f $logFile) -ForegroundColor Cyan
+Write-Host ("           (bản mới nhất cũng ở {0})" -f $latestLogFile) -ForegroundColor DarkGray
 Write-Host 'Đang chạy... (chờ Chrome / Maven)' -ForegroundColor Yellow
 
 $prevEap = $ErrorActionPreference
@@ -256,6 +301,7 @@ $footer = @(
     ("==== Kết thúc | exit={0} | {1} ====" -f $exitCode, (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 )
 [System.IO.File]::WriteAllLines($logFile, ($header + $body + $footer), $utf8Log)
+Copy-Item -LiteralPath $logFile -Destination $latestLogFile -Force
 
 $logText = ($body -join "`n")
 Write-Host ''

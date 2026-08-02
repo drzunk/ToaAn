@@ -337,6 +337,55 @@ $script:UseArrowMenu = Test-HasRealConsole
 function Clear-CustomProps {
     Set-Prop 'run.cases' ''
     Set-Prop 'run.slots' ''
+    # Các preset / wizard chạy theo cấu hình trong file — không để sheet chiếm quyền.
+    Set-Prop 'run.caseSource' 'file'
+}
+
+function Get-CfgValue([string]$key, [string]$default) {
+    if (-not (Test-Path $cfgPath)) { return $default }
+    $line = Get-Content $cfgPath -Encoding UTF8 |
+        Where-Object { $_ -match "^\s*$([regex]::Escape($key))\s*=" } |
+        Select-Object -Last 1
+    if (-not $line) { return $default }
+    $val = ($line -split '=', 2)[1]
+    if ($null -eq $val) { return $default }
+    $val = $val.Trim()
+    if ([string]::IsNullOrWhiteSpace($val)) { return $default }
+    return $val
+}
+
+# Chạy danh sách case lấy từ Google Sheet (run.casesSheet).
+function Apply-SheetSource {
+    $url = Get-CfgValue 'run.casesSheet' ''
+    if (-not $url) {
+        Write-Host ''
+        Write-Host 'Chưa có link Google Sheet trong run-flow.properties (khoá run.casesSheet).' -ForegroundColor Red
+        Write-Host 'Mở file src\test\resources\run-flow.properties và dán link vào rồi thử lại.' -ForegroundColor Yellow
+        Write-Host 'Nhấn Enter để quay lại menu...' -ForegroundColor DarkGray
+        [void][Console]::ReadLine()
+        return $false
+    }
+
+    $nChromeStr = Show-SelectMenu -Title 'Số cửa sổ Chrome mở cùng lúc:' -Items @(
+        @{ Label = '1. 1 Chrome  —  chạy tuần tự từng case trong sheet'; Data = '1' }
+        @{ Label = '2. 2 Chrome  —  tối đa 2 case song song'; Data = '2' }
+        @{ Label = '3. 3 Chrome  —  tối đa 3 case song song'; Data = '3' }
+    ) -Context 'Danh sách case lấy từ Google Sheet'
+    $nChrome = [int]$nChromeStr
+
+    Set-Prop 'run.cases' ''
+    Set-Prop 'run.slots' ''
+    Set-Prop 'run.caseSource' 'sheet'
+    Set-Prop 'run.suite' 'master'
+    Set-Prop 'run.browsers' "$nChrome"
+    Set-Prop 'run.parallel' $(if ($nChrome -gt 1) { 'true' } else { 'false' })
+
+    Write-Host ''
+    Write-Host 'Đã ghi: nguồn case = Google Sheet' -ForegroundColor Cyan
+    Write-Host ("  Link   : {0}" -f $url) -ForegroundColor DarkCyan
+    Write-Host ("  Chrome : {0}" -f $nChrome) -ForegroundColor DarkCyan
+    Write-Host '  Độ sâu / gửi đơn lấy theo từng dòng trong sheet (cột "Đến bước", "Gửi đơn").' -ForegroundColor DarkGray
+    return $true
 }
 
 function Apply-Preset {
@@ -480,13 +529,14 @@ function Ask-CustomWizard {
 
 # ---- Menu chính (lặp lại sau mỗi lần chạy) ----
 $mainItems = @(
-    @{ Label = '1. Cấu hình case rồi chạy  —  chọn loại đơn / CN-TC / bước dừng'; Data = '1' }
-    @{ Label = '2. Smoke nhanh — 1 Chrome  —  vài case mẫu, có gửi đơn'; Data = '2' }
-    @{ Label = '3. Smoke nhanh — 3 Chrome  —  chạy song song 3 cửa sổ'; Data = '3' }
-    @{ Label = '4. Chỉ đăng nhập  —  kiểm tra login, không tạo đơn'; Data = '4' }
-    @{ Label = '5. Mid regression — 3 Chrome  —  khoảng 40 case'; Data = '5' }
-    @{ Label = '6. Full coverage — 3 Chrome  —  đủ ma trận (lâu)'; Data = '6' }
-    @{ Label = '7. Xem cấu hình hiện tại  —  không chạy test'; Data = 'V' }
+    @{ Label = '1. Chạy theo Google Sheet  —  danh sách case lấy từ link trong run-flow.properties'; Data = 'S' }
+    @{ Label = '2. Cấu hình case rồi chạy  —  chọn loại đơn / CN-TC / bước dừng'; Data = '1' }
+    @{ Label = '3. Smoke nhanh — 1 Chrome  —  vài case mẫu, có gửi đơn'; Data = '2' }
+    @{ Label = '4. Smoke nhanh — 3 Chrome  —  chạy song song 3 cửa sổ'; Data = '3' }
+    @{ Label = '5. Chỉ đăng nhập  —  kiểm tra login, không tạo đơn'; Data = '4' }
+    @{ Label = '6. Mid regression — 3 Chrome  —  khoảng 40 case'; Data = '5' }
+    @{ Label = '7. Full coverage — 3 Chrome  —  đủ ma trận (lâu)'; Data = '6' }
+    @{ Label = '8. Xem cấu hình hiện tại  —  không chạy test'; Data = 'V' }
     @{ Label = '0. Thoát'; Data = '0' }
 )
 
@@ -501,6 +551,7 @@ while ($true) {
 
     $shouldRun = $true
     switch ($choice) {
+        'S' { if (-not (Apply-SheetSource)) { $shouldRun = $false } }
         '1' { Ask-CustomWizard }
         '2' { Apply-Preset -Suite 'smoke' -Browsers 1 }
         '3' { Apply-Preset -Suite 'smoke' -Browsers 3 }
