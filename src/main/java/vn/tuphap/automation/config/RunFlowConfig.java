@@ -5,6 +5,8 @@ import vn.tuphap.automation.core.BrowserSlot;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -112,8 +114,10 @@ public final class RunFlowConfig {
      * Danh sách case sẽ chạy.
      * <p>
      * Nguồn theo {@code run.caseSource}: {@code sheet} (mặc định khi có {@code run.casesSheet})
-     * đọc Google Sheet — mất mạng thì dùng cache, không có cache thì quay về {@code run.cases};
-     * {@code file} đọc thẳng {@code run.cases} trong {@code run-flow.properties}.
+     * đọc Google Sheet — mất mạng thì dùng cache, không có cache thì quay về {@code run.casesFile}
+     * / {@code run.cases}; {@code file} + {@code run.casesFile} trỏ tới một file {@code .json} đọc
+     * qua {@link CaseFileSource} (validate nghiêm, dùng cho trình khai báo case cục bộ); còn lại đọc
+     * thẳng cú pháp {@code run.cases} trong {@code run-flow.properties}.
      */
     public static List<CaseProfile> cases() {
         if (useSheet()) {
@@ -123,7 +127,31 @@ public final class RunFlowConfig {
                 return fromSheet;
             }
         }
+        Path casesFile = casesFilePath();
+        if (casesFile != null) {
+            return CaseFileSource.load(casesFile);
+        }
         return parseCases(raw("run.cases"));
+    }
+
+    /**
+     * {@code run.caseSource=file} rõ ràng (không phải chỉ "không phải sheet") — tách riêng để sheet
+     * lỗi/rỗng vẫn quay về {@code run.cases} cũ như trước, không bị JSON (thường để trống) che mất.
+     */
+    private static boolean isFileCaseSource() {
+        return "file".equals(text("run.caseSource", "sheet").trim().toLowerCase(Locale.ROOT));
+    }
+
+    /** {@code run.casesFile} khi trỏ tới một file {@code .json} hợp lệ — {@code null} nếu không dùng. */
+    public static Path casesFilePath() {
+        if (!isFileCaseSource()) {
+            return null;
+        }
+        String casesFile = text("run.casesFile", "");
+        if (!hasText(casesFile) || !casesFile.toLowerCase(Locale.ROOT).endsWith(".json")) {
+            return null;
+        }
+        return Paths.get(casesFile);
     }
 
     /** URL Google Sheet chứa danh sách case ({@code run.casesSheet}); rỗng = không dùng sheet. */
@@ -142,14 +170,21 @@ public final class RunFlowConfig {
 
     /** Nhãn nguồn case để in ra log / báo cáo. */
     public static String caseSourceLabel() {
-        String fromFile = hasText(raw("run.cases"))
-                ? "run.cases (" + parseCases(raw("run.cases")).size() + " case)"
-                : "(không có case)";
         if (!useSheet()) {
-            return fromFile;
+            return fallbackCaseLabel();
         }
         CaseSheetSource.Result r = CaseSheetSource.load(casesSheetUrl(), text("run.casesSheetGid", ""));
-        return r.cases().isEmpty() ? r.sourceLabel() + " → " + fromFile : r.sourceLabel();
+        return r.cases().isEmpty() ? r.sourceLabel() + " → " + fallbackCaseLabel() : r.sourceLabel();
+    }
+
+    private static String fallbackCaseLabel() {
+        Path casesFile = casesFilePath();
+        if (casesFile != null) {
+            return casesFile + " (" + CaseFileSource.load(casesFile).size() + " case)";
+        }
+        return hasText(raw("run.cases"))
+                ? "run.cases (" + parseCases(raw("run.cases")).size() + " case)"
+                : "(không có case)";
     }
 
     /** Có cấu hình từng Chrome ({@code run.slots} thuần — không suy từ run.cases). */
@@ -295,6 +330,10 @@ public final class RunFlowConfig {
         String sheetUrl = text("run.casesSheet", "");
         if (hasText(sheetUrl)) {
             putIfAbsentSys("taodon.casesSheet", sheetUrl);
+        }
+        String casesFile = text("run.casesFile", "");
+        if (hasText(casesFile)) {
+            putIfAbsentSys("taodon.casesFile", casesFile);
         }
     }
 
@@ -608,6 +647,7 @@ public final class RunFlowConfig {
             case "run.cases" -> System.getProperty("taodon.cases");
             case "run.casesSheet" -> System.getProperty("taodon.casesSheet");
             case "run.casesSheetGid" -> System.getProperty("taodon.casesSheetGid");
+            case "run.casesFile" -> System.getProperty("taodon.casesFile");
             case "run.caseSource" -> System.getProperty("taodon.caseSource");
             case "run.window.width" -> System.getProperty("taodon.window.width");
             case "run.window.height" -> System.getProperty("taodon.window.height");

@@ -537,6 +537,7 @@ $mainItems = @(
     @{ Label = '6. Mid regression — 3 Chrome  —  khoảng 40 case'; Data = '5' }
     @{ Label = '7. Full coverage — 3 Chrome  —  đủ ma trận (lâu)'; Data = '6' }
     @{ Label = '8. Xem cấu hình hiện tại  —  không chạy test'; Data = 'V' }
+    @{ Label = '9. Mở Dashboard (web)  —  case / báo cáo / locator trong 1 trang'; Data = 'D' }
     @{ Label = '0. Thoát'; Data = '0' }
 )
 
@@ -560,6 +561,30 @@ while ($true) {
         '6' { Apply-Preset -Suite 'full' -Browsers 3 }
         'V' {
             & $runFlow -DryRun
+            $shouldRun = $false
+            Write-Host ''
+            Write-Host 'Nhấn Enter để quay lại menu...' -ForegroundColor DarkGray
+            [void][Console]::ReadLine()
+        }
+        'D' {
+            Write-Host ''
+            if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
+                $jdk = 'C:\Users\ADMIN\.jdks\ms-17.0.19'
+                if (Test-Path $jdk) { $env:JAVA_HOME = $jdk }
+            }
+            $mvnFound = Get-Command mvn -ErrorAction SilentlyContinue
+            $mvnExe = if ($mvnFound) { 'mvn' } else {
+                $bundled = 'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3\bin\mvn.cmd'
+                if (Test-Path $bundled) { $bundled } else { $null }
+            }
+            if (-not $mvnExe) {
+                Write-Host 'LỖI: Không tìm thấy mvn.' -ForegroundColor Red
+            } else {
+                Write-Host 'Đang khởi động Dashboard (case / báo cáo / locator)...' -ForegroundColor Green
+                Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$mvnExe`" exec:java" -WorkingDirectory $root
+                Write-Host 'Sẽ tự mở http://localhost:8787 khi Maven khởi động xong (vài giây).' -ForegroundColor DarkCyan
+                Write-Host 'Đóng cửa sổ CMD đó để dừng Dashboard.' -ForegroundColor DarkGray
+            }
             $shouldRun = $false
             Write-Host ''
             Write-Host 'Nhấn Enter để quay lại menu...' -ForegroundColor DarkGray

@@ -277,8 +277,8 @@ public class DataGenerator {
     }
 
     /**
-     * Thử ép field {@code truongLoiRaw} (nhãn tiếng Việt, xem 13 giá trị nhận diện được ở
-     * {@link #normalizeNegativeFieldKey}) sang {@code value} trên một bản sao của {@code scenario}.
+     * Thử ép field {@code truongLoiRaw} (nhãn tiếng Việt, xem {@link #TRUONG_LOI_HOP_LE}) sang
+     * {@code value} trên một bản sao của {@code scenario}.
      * Không throw — field không nhận diện được hoặc không áp dụng cho ngữ cảnh hiện tại
      * (loại chủ thể nguyên đơn/bị đơn, loại đơn) đều trả {@code applicable=false} kèm lý do.
      */
@@ -367,9 +367,43 @@ public class DataGenerator {
                 }
                 b.giaTriTranhChap(v);
             }
+            case "gioitinh" -> {
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario, "nguyên đơn đang là Tổ chức (không có ô Giới tính)");
+                }
+                b.gioiTinh(v);
+            }
+            case "thuongtru" -> {
+                if (nguyenDonToChuc) {
+                    return notApplicable(scenario, "nguyên đơn đang là Tổ chức (không có ô Địa chỉ thường trú)");
+                }
+                b.thuongTru(v);
+            }
+            case "nghenghiepbd" -> {
+                if (!biDonNhanhCaNhan) {
+                    return notApplicable(scenario,
+                            "bị đơn không thuộc nhánh Cá nhân chuẩn (Hành chính/Phá sản/Tổ chức)");
+                }
+                b.ngheNghiepBD(v);
+            }
+            case "noiohientai" -> {
+                if (!biDonNhanhCaNhan) {
+                    return notApplicable(scenario,
+                            "bị đơn không thuộc nhánh Cá nhân chuẩn (Hành chính/Phá sản/Tổ chức)");
+                }
+                b.noiOHienTaiBD(v);
+            }
+            // 4 field dưới đây thuộc bước 4 (nhánh textarea cố định) — không có predicate riêng theo
+            // loại đơn trong DataDictionary như giatritranhchap, nên coi là luôn áp dụng được (giống
+            // sdt/email). Với Dân sự/Bồi thường, bước 4 có thể đổi sang eform trong iframe — override
+            // vẫn set được field Java, chỉ là không chắc phản ánh lên UI cho 2 loại đơn đó.
+            case "tomtatquatrinh" -> b.tomTatQuaTrinh(v);
+            case "yeucaucuthe" -> b.yeuCauCuThe(v);
+            case "cancuphaply" -> b.canCuPhapLy(v);
+            case "thoidiemphatsinh" -> b.thoiDiemPhatSinh(v);
             default -> {
                 return notApplicable(scenario, "Trường lỗi '" + truongLoiRaw + "' không nhận diện được"
-                        + " — xem 13 giá trị hợp lệ ở README mục 6.4");
+                        + " — xem danh sách hợp lệ ở DataGenerator.TRUONG_LOI_HOP_LE / README mục 6.4");
             }
         }
         return new FieldOverrideAttempt(true, "", b.build());
@@ -379,7 +413,7 @@ public class DataGenerator {
         return new FieldOverrideAttempt(false, reason, original);
     }
 
-    /** 13 tên trường hợp lệ cho "Trường lỗi" — khớp đúng nhãn trên sheet, không phân biệt dấu/hoa thường. */
+    /** Tên trường hợp lệ cho "Trường lỗi" (xem {@link #TRUONG_LOI_HOP_LE}) — không phân biệt dấu/hoa thường. */
     private static String normalizeNegativeFieldKey(String raw) {
         String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT).replace('đ', 'd');
         norm = java.text.Normalizer.normalize(norm, java.text.Normalizer.Form.NFD)
@@ -409,7 +443,61 @@ public class DataGenerator {
         if (norm.contains("giatritranhchap")) {
             return "giatritranhchap";
         }
+        if (norm.contains("gioitinh")) {
+            return "gioitinh";
+        }
+        if (norm.contains("thuongtru")) {
+            return "thuongtru";
+        }
+        if (norm.contains("nghenghiep")) {
+            return "nghenghiepbd";
+        }
+        if (norm.contains("noiohientai")) {
+            return "noiohientai";
+        }
+        if (norm.contains("tomtatquatrinh")) {
+            return "tomtatquatrinh";
+        }
+        if (norm.contains("yeucaucuthe")) {
+            return "yeucaucuthe";
+        }
+        if (norm.contains("cancuphaply")) {
+            return "cancuphaply";
+        }
+        if (norm.contains("thoidiemphatsinh")) {
+            return "thoidiemphatsinh";
+        }
         return "";
+    }
+
+    /**
+     * 21 nhãn "Trường lỗi" hợp lệ cho ca âm — nguồn DUY NHẤT cho validate khai báo case
+     * ({@code CaseFileSource}) và dropdown trên dashboard ({@code CaseEditorServer}). Mỗi nhãn phải
+     * khớp đúng {@link #normalizeNegativeFieldKey} — đổi 1 bên mà quên đổi bên kia thì nhãn liệt kê
+     * ở đây sẽ "hợp lệ" trên form nhưng lại rơi vào {@code default} lúc chạy thật.
+     */
+    public static final List<String> TRUONG_LOI_HOP_LE = List.of(
+            "Số điện thoại", "Số điện thoại (Bị đơn)",
+            "Email", "Email (Bị đơn)",
+            "CCCD", "CCCD (Bị đơn)",
+            "Ngày sinh",
+            "Ngày cấp",
+            "Họ tên", "Họ tên (Bị đơn)",
+            "Mã số thuế", "Mã số thuế (Bị đơn)",
+            "Giá trị tranh chấp",
+            "Giới tính",
+            "Địa chỉ thường trú",
+            "Nghề nghiệp (Bị đơn)",
+            "Nơi ở hiện tại (Bị đơn)",
+            "Tóm tắt quá trình",
+            "Yêu cầu cụ thể",
+            "Căn cứ pháp lý",
+            "Thời điểm phát sinh"
+    );
+
+    /** true nếu {@code truongLoiRaw} khớp 1 trong các trường ca âm hệ thống nhận diện được. */
+    public static boolean isKnownNegativeField(String truongLoiRaw) {
+        return !normalizeNegativeFieldKey(truongLoiRaw).isEmpty();
     }
 
     private static RowSelections buildConfiguredSelections(

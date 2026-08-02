@@ -508,7 +508,7 @@ public final class BaoCaoHtml {
 
     private static String dongSoSanh(Map<String, String> nhan, boolean coLuotTruoc) {
         if (!coLuotTruoc) {
-            return "<span class=\"mo\">Lượt đầu tiên của bộ này — chưa có gì để so sánh.</span>";
+            return "";
         }
         long moiHong = nhan.values().stream().filter("moihong"::equals).count();
         long daSua = nhan.values().stream().filter("dasua"::equals).count();
@@ -571,7 +571,7 @@ public final class BaoCaoHtml {
                 + "<span class=\"luot-ngay\">" + esc(ngay) + "</span>"
                 + "<span class=\"chip\">" + esc(nhanBo(d)) + "</span>"
                 + thanhPhanBo(d.dat(), d.thatBai(), d.boQua())
-                + "<span class=\"luot-tile\">" + pct(d.tiLe()) + "</span>"
+                + "<span class=\"luot-tile\">" + d.dat() + "/" + d.tong() + "</span>"
                 + "<span class=\"luot-tg\">" + esc(TaoDonReportBuilder.formatDuration(d.wallMs()))
                 + "</span></summary><div class=\"luot-than\"><p class=\"trong\">"
                 + "Chi tiết của lượt này đã lược để trang nhẹ — dữ liệu gốc vẫn nằm ở "
@@ -589,19 +589,10 @@ public final class BaoCaoHtml {
                 .append("<span class=\"luot-ngay\">").append(esc(ngay)).append("</span>")
                 .append("<span class=\"chip\">").append(esc(d.bo())).append("</span>")
                 .append(thanhPhanBo(d.dat(), d.thatBai(), d.boQua()))
-                .append("<span class=\"luot-tile\">").append(pct(d.tiLe())).append("</span>")
+                .append("<span class=\"luot-tile\">").append(d.dat()).append('/').append(d.tong())
+                .append("</span>")
                 .append("<span class=\"luot-tg\">").append(esc(TaoDonReportBuilder.formatDuration(d.wallMs())))
-                .append("</span></summary><div class=\"luot-than\">")
-                .append("<p class=\"lienket\">");
-        // Chỉ dẫn link khi thư mục ảnh thật sự tồn tại. Lượt hỏng ngay từ khâu đăng nhập không chụp
-        // được ảnh nào, và một liên kết dẫn tới trang lỗi làm hỏng lòng tin vào cả bản báo cáo.
-        if (Files.isDirectory(RUNS.resolve(d.moc()).resolve("screenshots"))) {
-            sb.append("<a href=\"runs/").append(esc(d.moc()))
-                    .append("/screenshots\">Thư mục ảnh của lượt này</a><span class=\"cach\">·</span>");
-        }
-        sb.append("<span class=\"mo\">Tổng thời gian máy ")
-                .append(esc(TaoDonReportBuilder.formatDuration(d.tongCaseMs())))
-                .append(" trên các trình duyệt song song</span></p>");
+                .append("</span></summary><div class=\"luot-than\">");
 
         if (d.cases() == null || d.cases().isEmpty()) {
             sb.append("<p class=\"trong\">Lượt chạy này không ghi nhận kịch bản nào.</p>");
@@ -1201,14 +1192,15 @@ public final class BaoCaoHtml {
                     .append("\" cy=\"").append(fmt(p[1])).append("\" r=\"4.5\"><title>")
                     .append(esc(nhanBo(d))).append(" · ")
                     .append(esc(d.luc().format(DateTimeFormatter.ofPattern("dd/MM HH:mm"))))
-                    .append(" — ").append(pct(d.tiLe())).append(" · ").append(d.dat()).append('/')
+                    .append(" — ").append(d.dat()).append('/')
                     .append(d.tong()).append(" đạt · ")
                     .append(esc(TaoDonReportBuilder.formatDuration(d.wallMs())))
                     .append("</title></circle>");
         }
         double[] cuoi = diem.get(diem.size() - 1);
         sb.append("<text class=\"xh-nhan\" x=\"").append(fmt(cuoi[0] + 10)).append("\" y=\"")
-                .append(fmt(cuoi[1] + 4)).append("\">").append(pct(ds.get(ds.size() - 1).tiLe())).append("</text>");
+                .append(fmt(cuoi[1] + 4)).append("\">").append(ds.get(ds.size() - 1).dat())
+                .append('/').append(ds.get(ds.size() - 1).tong()).append("</text>");
         if (ds.size() >= 2) {
             sb.append("<text class=\"truc\" x=\"").append(trai).append("\" y=\"").append(h - 9).append("\">")
                     .append(esc(ds.get(0).luc().format(DateTimeFormatter.ofPattern("dd/MM HH:mm")))).append("</text>")
@@ -1264,11 +1256,11 @@ public final class BaoCaoHtml {
         StringBuilder sb = new StringBuilder();
         sb.append("<!doctype html><html lang=\"vi\"><head><meta charset=\"utf-8\">")
                 .append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
-                .append("<title>Báo cáo kiểm thử tự động — Tạo đơn điện tử</title>")
+                .append("<title>Báo cáo kiểm thử tự động — Tạo đơn dịch vụ tư pháp toà án</title>")
                 .append("<style>").append(css()).append("</style></head><body>")
                 .append("<a class=\"boqua-toi\" href=\"#ds-luot\">Bỏ qua tới danh sách lượt chạy</a>")
                 .append("<header class=\"dau\"><div class=\"dau-trai\"><h1>Báo cáo kiểm thử tự động</h1>")
-                .append("<p class=\"phu\">Tạo đơn điện tử<span class=\"cach\">·</span>cập nhật ")
+                .append("<p class=\"phu\">Tạo đơn dịch vụ tư pháp toà án<span class=\"cach\">·</span>cập nhật ")
                 .append(esc(capNhat)).append("<span class=\"cach\">·</span>")
                 .append(lichSu.size()).append(" lượt chạy đã lưu</p></div>")
                 .append("<button id=\"doigiaodien\" class=\"nut\" type=\"button\">Giao diện tối</button>")
@@ -1383,9 +1375,9 @@ public final class BaoCaoHtml {
         // thatBai = 0 nhưng boQua = 39 — bản cũ tô "0.0%" màu xanh lá cho đúng cái lượt không
         // kiểm được gì cả.
         String cls = (d.thatBai() > 0 || d.boQua() > 0 || d.dat() == 0) ? "xau" : "ok";
-        return "<div class=\"the dan\"><div class=\"the-nhan\">Tỉ lệ đạt</div>"
-                + "<div class=\"the-so " + cls + "\">" + pct(d.tiLe()) + "</div>"
-                + "<div class=\"the-phu\">" + d.dat() + "/" + d.tong() + " kịch bản đạt</div></div>";
+        return "<div class=\"the dan\"><div class=\"the-nhan\">Kịch bản đạt</div>"
+                + "<div class=\"the-so " + cls + "\">" + d.dat() + "/" + d.tong() + "</div>"
+                + "<div class=\"the-phu\">trong lượt này</div></div>";
     }
 
     private static String the(String nhan, String giaTri, String phu, String cls) {
@@ -1505,9 +1497,6 @@ public final class BaoCaoHtml {
                 .luot-tg{color:var(--mo);font-size:12.5px;font-variant-numeric:tabular-nums;
                 min-width:92px;text-align:right}
                 .luot-than{padding:2px 14px 14px}
-                .lienket{margin:0 0 10px;font-size:12.5px}
-                .lienket a{color:var(--xanh);text-decoration:none}
-                .lienket a:hover{text-decoration:underline}
                 .mo{color:var(--mo)}
                 .case{border:1px solid var(--vien);border-radius:9px;margin-bottom:7px;background:var(--nen)}
                 .case-dau{display:flex;gap:10px;align-items:center;padding:9px 12px;flex-wrap:wrap}
@@ -1517,6 +1506,7 @@ public final class BaoCaoHtml {
                 .huy.bo{background:var(--bo);color:#3a2a00}.huy.khac{background:var(--mo)}
                 .ma{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;color:var(--muc2)}
                 .tende{flex:1;min-width:190px}
+                .case[data-tt="loi"]>summary .ma,.case[data-tt="loi"]>summary .tende{font-weight:700}
                 .case-tg{color:var(--mo);font-size:12.5px;font-variant-numeric:tabular-nums}
                 .case-than{padding:2px 12px 12px}
                 .mota{margin:4px 0 8px;color:var(--muc2);font-size:13px}
@@ -2034,10 +2024,6 @@ public final class BaoCaoHtml {
                   });
                 })();
                 """;
-    }
-
-    private static String pct(double v) {
-        return String.format(Locale.ROOT, "%.1f%%", v);
     }
 
     private static String fmt(double v) {

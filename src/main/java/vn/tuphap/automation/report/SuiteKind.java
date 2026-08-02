@@ -1,5 +1,6 @@
 package vn.tuphap.automation.report;
 
+import vn.tuphap.automation.config.RunFlowConfig;
 import vn.tuphap.automation.data.TaoDonScenario;
 
 /**
@@ -13,7 +14,9 @@ public enum SuiteKind {
     SMOKE("smoke", "SMOKE", "Mẫu nhanh"),
     MID("mid", "MID", "Trung bình"),
     FULL("full", "FULL", "Đầy đủ"),
-    LOGIN("login", "LOGIN", "Đăng nhập");
+    LOGIN("login", "LOGIN", "Đăng nhập"),
+    LE("le", "LE", "Chạy lẻ"),
+    VALIDATE("validate", "VALIDATE", "Kiểm tra ràng buộc");
 
     private final String folder;
     private final String fileTag;
@@ -50,6 +53,9 @@ public enum SuiteKind {
             if (n.contains("mid")) {
                 return MID;
             }
+            if (n.contains("le")) {
+                return LE;
+            }
             if (n.contains("full")) {
                 return FULL;
             }
@@ -64,6 +70,9 @@ public enum SuiteKind {
         }
         if ("login".equalsIgnoreCase(prop)) {
             return LOGIN;
+        }
+        if ("le".equalsIgnoreCase(prop)) {
+            return LE;
         }
         return FULL;
     }
@@ -91,14 +100,25 @@ public enum SuiteKind {
      * @return {@code null} khi không có kịch bản (vd. test đăng nhập) — người gọi tự chọn cách khác
      */
     public static String maCase(TaoDonScenario s) {
+        return maCase(s, null);
+    }
+
+    /**
+     * Như {@link #maCase(TaoDonScenario)}, nhưng case âm (kỳ vọng hệ thống chặn — cột "Trường lỗi"
+     * trong sheet khác rỗng) luôn mang tag {@code VALIDATE} riêng, bất kể bộ đang chạy là gì. Case
+     * đó về bản chất khác hẳn case thường trong cùng lượt, dù chạy chung một suite.
+     */
+    public static String maCase(TaoDonScenario s, RunFlowConfig.CaseProfile caseProfile) {
         if (s == null) {
             return null;
         }
+        String tag = caseProfile != null && caseProfile.hasNegativeExpectation()
+                ? VALIDATE.fileTag() : hienTai.fileTag();
         String stt = String.valueOf(s.stt()).trim();
         try {
-            return "TC_" + hienTai.fileTag() + "_" + String.format("%03d", Integer.parseInt(stt));
+            return "TC_" + tag + "_" + String.format("%03d", Integer.parseInt(stt));
         } catch (NumberFormatException e) {
-            return stt.isBlank() ? null : "TC_" + hienTai.fileTag() + "_" + stt;
+            return stt.isBlank() ? null : "TC_" + tag + "_" + stt;
         }
     }
 }

@@ -1,5 +1,6 @@
 package vn.tuphap.automation.report;
 
+import vn.tuphap.automation.config.RunFlowConfig;
 import vn.tuphap.automation.data.TaoDonScenario;
 
 import vn.tuphap.automation.data.DataDictionary;
@@ -19,9 +20,18 @@ public final class TaoDonReportBuilder {
         return scenario;
     }
 
+    /** {@link RunFlowConfig.CaseProfile} đi kèm scenario khi case đến từ Google Sheet — {@code null} nếu không. */
+    public static RunFlowConfig.CaseProfile asCaseProfile(Object[] parameters) {
+        if (parameters == null || parameters.length < 2
+                || !(parameters[1] instanceof RunFlowConfig.CaseProfile caseProfile)) {
+            return null;
+        }
+        return caseProfile;
+    }
+
     public static String buildTestTitle(TaoDonScenario s) {
         if (s == null) {
-            return "Kiểm thử tạo đơn điện tử";
+            return "Kiểm thử tạo đơn dịch vụ tư pháp toà án";
         }
         return String.format("Kịch bản số %s — %s / %s", s.stt(), s.loaiDon(), s.loaiViec());
     }

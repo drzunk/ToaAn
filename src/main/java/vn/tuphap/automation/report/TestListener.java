@@ -55,7 +55,7 @@ public class TestListener implements ITestListener {
         if (scenario != null) {
             testName = TaoDonReportBuilder.buildTestTitle(scenario);
             description = TaoDonReportBuilder.buildTestDescription(scenario);
-            String maCase = SuiteKind.maCase(scenario);
+            String maCase = SuiteKind.maCase(scenario, TaoDonReportBuilder.asCaseProfile(result.getParameters()));
             ScreenshotStore.beginCase(maCase);
             BaoCao.setCaseCode(maCase);
             // Gắn cả loại đơn lẫn loại việc: trước đây chỉ có loại đơn, mà getLoaiViecCategory()
@@ -162,7 +162,7 @@ public class TestListener implements ITestListener {
             if (s != null) {
                 // Đặt mã case TRƯỚC createTest. Nhánh này không đi qua onTestStart nên nếu không
                 // đặt, createTest sẽ dùng mã còn sót của kịch bản trước trên cùng thread.
-                String maCase = SuiteKind.maCase(s);
+                String maCase = SuiteKind.maCase(s, TaoDonReportBuilder.asCaseProfile(result.getParameters()));
                 ScreenshotStore.beginCase(maCase);
                 BaoCao.setCaseCode(maCase);
                 BaoCao.createTest(

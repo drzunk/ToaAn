@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard tự động hoá — Tạo đơn dịch vụ tư pháp toà án</title>
+<style>
+  :root{--nen:#f9f9f7;--mat:#fff;--muc:#0b0b0b;--muc2:#52514e;--mo:#6b6963;
+    --vien:rgba(11,11,11,.12);--xanh:#2a78d6;--dat:#0ca30c;--loi:#d03b3b;--bo:#fab219}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--nen);color:var(--muc);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;
+    display:flex;flex-direction:column}
+  header{flex:none;padding:16px 24px;border-bottom:1px solid var(--vien);background:var(--mat)}
+  header h1{margin:0;font-size:18px}
+  header p{margin:4px 0 0;color:var(--muc2);font-size:12.5px}
+  main{flex:1 1 auto;min-height:0;overflow-y:auto;
+    padding:20px 24px 60px;max-width:1180px;margin:0 auto;width:100%}
+  /* Tab Dashboard: bỏ khung/lề để báo cáo dùng trọn màn hình thay vì bó trong cột 1180px. */
+  main.dash-full{padding:0;max-width:none;margin:0;overflow:hidden;
+    display:flex;flex-direction:column}
+  /* Tiền tố d- trên các class dùng chung tên (mo/nut/khoi/nho/ok/canhbao) với CSS của báo cáo
+     BaoCaoHtml — báo cáo giờ được fetch và nhúng thẳng vào #khung-baocao (không còn iframe), nên
+     2 CSS sống chung 1 trang; đổi tên bên Dashboard để khỏi đụng độ, không đụng vào file báo cáo gốc. */
+  .d-khoi{background:var(--mat);border:1px solid var(--vien);border-radius:10px;
+    padding:16px 18px;margin-bottom:18px}
+  .d-khoi h2{margin:0 0 12px;font-size:15px}
+  .hang{display:flex;gap:10px;flex-wrap:wrap}
+  .truong{display:flex;flex-direction:column;gap:4px;min-width:160px;flex:1}
+  .truong.d-nho{min-width:100px;flex:0 0 auto}
+  /* .truong{display:flex} và [hidden]{display:none} mặc định của trình duyệt có độ ưu tiên CSS
+     ngang nhau — CSS tác giả (.truong) thắng CSS user-agent nên thuộc tính hidden mất tác dụng.
+     Không có rule này thì #khoi-tuCachNopDon vẫn hiện dù JS đã gán hidden=true. */
+  .truong[hidden]{display:none}
+  label{font-size:12px;color:var(--muc2)}
+  input,select{padding:6px 8px;border:1px solid var(--vien);border-radius:6px;
+    font-size:13.5px;background:var(--mat);color:var(--muc)}
+  input[type=checkbox]{width:16px;height:16px;align-self:center;margin-top:14px}
+  .d-nut{padding:7px 14px;border-radius:7px;border:1px solid var(--vien);background:var(--mat);
+    color:var(--muc);cursor:pointer;font-size:13.5px}
+  .d-nut:hover{background:var(--nen)}
+  .d-nut.chinh{background:var(--xanh);border-color:var(--xanh);color:#fff}
+  .d-nut.chinh:hover{opacity:.9}
+  .d-nut.d-canhbao{background:var(--loi);border-color:var(--loi);color:#fff}
+  .thanh-nut{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:7px 8px;border-bottom:1px solid var(--vien);text-align:left;white-space:nowrap}
+  th{color:var(--muc2);font-weight:600;font-size:12px}
+  tr.tat{opacity:.45}
+  .the-ban{padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600;color:#fff}
+  .the-ban.am{background:var(--loi)}
+  .thongbao{padding:10px 14px;border-radius:8px;margin-bottom:14px;font-size:13.5px;display:none;white-space:pre-wrap}
+  .thongbao.loi{background:rgba(208,59,59,.12);color:#8a1f1f;border:1px solid rgba(208,59,59,.3);display:block}
+  .thongbao.d-ok{background:rgba(12,163,12,.12);color:#0a5c0a;border:1px solid rgba(12,163,12,.3);display:block}
+  .thongbao.info{background:rgba(42,120,214,.1);color:#194e8c;border:1px solid rgba(42,120,214,.3);display:block}
+  .d-mo{color:var(--mo);font-size:12px}
+  .cot-nut{white-space:nowrap}
+  nav.tab{flex:none;display:flex;gap:4px;padding:0 24px;background:var(--mat);border-bottom:1px solid var(--vien)}
+  nav.tab button{padding:11px 16px;border:none;background:none;color:var(--muc2);cursor:pointer;
+    font-size:13.5px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  nav.tab button.dang-chon{color:var(--xanh);border-bottom-color:var(--xanh);font-weight:600}
+  nav.tab button:hover{color:var(--muc)}
+  .tab-noi-dung{display:none}
+  .tab-noi-dung.hien{display:block}
+  #tab-dashboard.hien{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  #khung-baocao{flex:1 1 auto;width:100%;overflow:auto;background:var(--mat)}
+  .locator-buoc{margin:0 0 6px;font-size:12.5px;color:var(--xanh);font-weight:600}
+  code.mau{background:var(--nen);border:1px solid var(--vien);border-radius:5px;padding:1px 6px;
+    font-size:12px;white-space:normal;word-break:break-all}
+  .khoi-locator-file{border-bottom:1px solid var(--vien);padding:4px 0}
+  .khoi-locator-file:last-child{border-bottom:none}
+  .khoi-locator-file td,.khoi-locator-file th{white-space:normal;vertical-align:top}
+  .loc-noidung{font-weight:600;min-width:200px}
+  .loc-noidung .rong{font-weight:400;color:var(--mo);font-style:italic}
+  .loc-cach{white-space:nowrap}
+  .the-cach{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;
+    background:var(--xanh-mo,rgba(42,120,214,.12));color:var(--xanh);white-space:nowrap}
+  .loc-ma{max-width:360px}
+  .loc-ma summary{color:var(--mo);font-size:11.5px;cursor:pointer}
+  .loc-ma code.mau{display:block;margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dashboard tự động hoá — Tạo đơn dịch vụ tư pháp toà án</h1>
+  <p>Báo cáo, khai báo case (thay Google Sheet) và tra cứu locator — tất cả trong 1 trang cục bộ</p>
+</header>
+<nav class="tab">
+  <button type="button" class="dang-chon" data-tab="dashboard">Dashboard</button>
+  <button type="button" data-tab="testcase">Test case</button>
+  <button type="button" data-tab="locator">Config locator</button>
+</nav>
+<main>
+  <section id="tab-dashboard" class="tab-noi-dung hien">
+    <div id="khung-baocao"></div>
+  </section>
+
+  <section id="tab-locator" class="tab-noi-dung">
+    <div class="d-khoi">
+      <h2>Toàn bộ locator (<span id="dem-locator">0</span>)</h2>
+      <p class="d-mo">Đây là nơi hệ thống tìm phần tử trên màn hình để bấm/điền. Khi thấy lỗi kiểu
+        "không tìm thấy phần tử" / "element not found", tra ở đây xem hệ thống đang tìm theo
+        <b>nội dung chữ / ID</b> nào — nếu giao diện đã đổi chữ đó thì đây chính là chỗ cần báo lại
+        cho dev. Mỗi nhóm dưới đây là 1 màn hình trong luồng 6 bước. Chỉ để XEM, chưa sửa được.</p>
+      <div class="hang">
+        <div class="truong">
+          <input type="search" id="tim-locator" placeholder="Tìm theo tên màn hình, chữ trên UI hoặc nội dung locator…">
+        </div>
+      </div>
+      <div class="thanh-nut">
+        <button type="button" class="d-nut d-nho" id="btn-mo-tat-ca-locator">Mở tất cả</button>
+        <button type="button" class="d-nut d-nho" id="btn-thu-gon-locator">Thu gọn</button>
+      </div>
+      <div id="ds-locator" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section id="tab-testcase" class="tab-noi-dung">
+  <div id="thongbao" class="thongbao"></div>
+
+  <section class="d-khoi">
+    <h2 id="tieu-de-form">Thêm case mới</h2>
+    <form id="form-case">
+      <div class="hang">
+        <div class="truong">
+          <label>Loại đơn *</label>
+          <select id="f-loaiDon" required></select>
+        </div>
+        <div class="truong">
+          <label>Loại việc</label>
+          <select id="f-loaiViec"><option value="">(tự chọn)</option></select>
+        </div>
+        <div class="truong">
+          <label>Chủ thể</label>
+          <select id="f-chuThe"><option value="">(tự chọn — mặc định Cá nhân)</option></select>
+        </div>
+        <div class="truong" id="khoi-tuCachNopDon" hidden>
+          <label>Tư cách nộp đơn (chỉ Phá sản)</label>
+          <select id="f-tuCachNopDon"><option value="">(tự chọn)</option></select>
+        </div>
+        <div class="truong">
+          <label>Tòa án</label>
+          <select id="f-toaAn"><option value="">(tự chọn)</option></select>
+        </div>
+      </div>
+      <div class="hang" style="margin-top:10px">
+        <div class="truong d-nho">
+          <label>Số bị đơn</label>
+          <select id="f-soLuongBiDon">
+            <option value="0">Tự chọn</option><option value="1">1</option><option value="2">2</option>
+          </select>
+        </div>
+        <div class="truong d-nho">
+          <label>Đồng nguyên đơn</label>
+          <select id="f-coDongNguyenDon"><option value="">Tự chọn</option><option value="true">Có</option><option value="false">Không</option></select>
+        </div>
+        <div class="truong d-nho">
+          <label>Người đại diện</label>
+          <select id="f-coNguoiDaiDien"><option value="">Tự chọn</option><option value="true">Có</option><option value="false">Không</option></select>
+        </div>
+        <div class="truong d-nho">
+          <label>Người liên quan</label>
+          <select id="f-coNguoiLienQuan"><option value="">Tự chọn</option><option value="true">Có</option><option value="false">Không</option></select>
+        </div>
+        <div class="truong d-nho">
+          <label>Tài liệu bổ sung</label>
+          <select id="f-coTaiLieuBoSung"><option value="">Tự chọn</option><option value="true">Có</option><option value="false">Không</option></select>
+        </div>
+        <div class="truong d-nho">
+          <label>Đến bước</label>
+          <select id="f-untilStep">
+            <option value="0">0 — login</option><option value="1">1</option><option value="2">2</option>
+            <option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="6" selected>6 — Xem lại</option>
+          </select>
+        </div>
+        <div class="truong d-nho">
+          <label>Gửi đơn</label>
+          <input type="checkbox" id="f-submit">
+        </div>
+        <div class="truong d-nho">
+          <label>Chạy</label>
+          <input type="checkbox" id="f-chay" checked>
+        </div>
+      </div>
+      <div class="hang" style="margin-top:10px">
+        <div class="truong"><label>Ghi chú</label><input id="f-ghiChu" placeholder="Tên case dễ nhớ (tuỳ chọn)"></div>
+      </div>
+      <div class="hang" style="margin-top:10px">
+        <div class="truong"><label>Trường lỗi (ca âm — bỏ trống nếu là case bình thường)</label>
+          <select id="f-truongLoi"><option value="">(không phải ca âm)</option></select></div>
+        <div class="truong"><label>Giá trị lỗi</label><input id="f-giaTriLoi" placeholder="Giá trị sai muốn ép vào"></div>
+        <div class="truong"><label>Thông báo mong đợi</label><input id="f-thongBaoMongDoi" placeholder="Chuỗi con phải có trong thông báo chặn"></div>
+      </div>
+      <div class="thanh-nut">
+        <button type="submit" class="d-nut chinh">Lưu case này vào danh sách</button>
+        <button type="button" class="d-nut" id="btn-huy-sua">Huỷ sửa</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="d-khoi">
+    <h2>Danh sách case (<span id="dem-case">0</span>)</h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th>Chạy</th><th>Loại đơn</th><th>Loại việc / Tư cách (Phá sản)</th><th>Chủ thể</th><th>Tòa án</th>
+          <th>Số BĐ</th><th>Đến bước</th><th>Gửi</th><th>Ghi chú</th><th></th>
+        </tr></thead>
+        <tbody id="than-bang"></tbody>
+      </table>
+    </div>
+    <div class="thanh-nut">
+      <button class="d-nut chinh" id="btn-luu-tat-ca">Lưu tất cả xuống file</button>
+      <button class="d-nut" id="btn-nhap-sheet">Nhập từ Sheet (ghi đè)</button>
+      <button class="d-nut chinh" id="btn-chay" style="background:var(--dat);border-color:var(--dat)">Chạy</button>
+    </div>
+    <p class="d-mo">"Lưu tất cả" mới thật sự ghi xuống file JSON git-tracked — thao tác trên bảng chỉ sửa tạm trong trình duyệt.</p>
+  </section>
+  </section>
+</main>
+
+<script>
+(function(){
+  var state = { rows: [], catalog: null, editIndex: -1 };
+
+  function el(id){ return document.getElementById(id); }
+
+  function baoTin(loai, msg){
+    var b = el('thongbao');
+    // Lớp CSS thật là "d-ok" (tránh trùng .ok của báo cáo nhúng) — gọi ngoài vẫn dùng 'ok' cho gọn.
+    b.className = 'thongbao ' + (loai === 'ok' ? 'd-ok' : loai);
+    b.textContent = msg;
+  }
+
+  function taiOptions(select, values, giuChon){
+    var cu = giuChon ? select.value : '';
+    // Giữ option đầu (placeholder) nếu có, xoá phần còn lại rồi nạp lại.
+    var giuLai = select.querySelector('option[value=""]');
+    select.innerHTML = '';
+    if (giuLai) select.appendChild(giuLai);
+    (values || []).forEach(function(v){
+      var o = document.createElement('option');
+      o.value = v; o.textContent = v;
+      select.appendChild(o);
+    });
+    if (giuChon) select.value = cu;
+  }
+
+  function napCatalog(){
+    return fetch('/api/catalog').then(function(r){ return r.json(); }).then(function(c){
+      state.catalog = c;
+      taiOptions(el('f-loaiDon'), c.loaiDon, false);
+      taiOptions(el('f-toaAn'), c.toaAn, false);
+      taiOptions(el('f-chuThe'), c.chuThe, false);
+      taiOptions(el('f-tuCachNopDon'), c.tuCachNopDonPhaSan, false);
+      taiOptions(el('f-truongLoi'), c.truongLoiHopLe, false);
+      capNhatLoaiViec();
+    });
+  }
+
+  function capNhatLoaiViec(){
+    var loaiDon = el('f-loaiDon').value;
+    var ds = (state.catalog.loaiViecByLoaiDon || {})[loaiDon] || [];
+    taiOptions(el('f-loaiViec'), ds, false);
+    // "Tư cách nộp đơn" chỉ có ý nghĩa với Phá sản — DataGenerator bỏ qua âm thầm với loại đơn khác
+    // (buildConfiguredSelections), nên ẩn hẳn trên form để khỏi gây hiểu nhầm là chọn xong sẽ có tác dụng.
+    var laPhaSan = /phá sản/i.test(loaiDon);
+    el('khoi-tuCachNopDon').hidden = !laPhaSan;
+    if (!laPhaSan) {
+      el('f-tuCachNopDon').value = '';
+    }
+  }
+  el('f-loaiDon').addEventListener('change', capNhatLoaiViec);
+
+  function napCases(){
+    return fetch('/api/cases').then(function(r){ return r.json(); }).then(function(rows){
+      state.rows = rows || [];
+      veBang();
+    });
+  }
+
+  function veBang(){
+    var tbody = el('than-bang');
+    tbody.innerHTML = '';
+    state.rows.forEach(function(r, i){
+      var tr = document.createElement('tr');
+      if (!r.chay) tr.className = 'tat';
+      var amBadge = (r.truongLoi && r.truongLoi.trim()) ? '<span class="the-ban am">CA ÂM</span>' : '';
+      // Phá sản không có "Loại việc" (luôn trống) — hiện "Tư cách nộp đơn" ngay tại đó thay vì để
+      // trống, vì bảng chưa có cột riêng cho trường này (trước đây lưu đúng nhưng nhìn bảng không
+      // thấy đâu, tưởng bị mất).
+      var loaiViecOThi = /phá sản/i.test(r.loaiDon || '') && r.tuCachNopDon
+        ? '<i>Tư cách: ' + escHtml(r.tuCachNopDon) + '</i>'
+        : escHtml(r.loaiViec);
+      tr.innerHTML =
+        '<td><input type="checkbox" data-idx="' + i + '" class="chk-chay" ' + (r.chay ? 'checked' : '') + '></td>' +
+        '<td>' + escHtml(r.loaiDon) + '</td>' +
+        '<td>' + loaiViecOThi + ' ' + amBadge + '</td>' +
+        '<td>' + escHtml(r.chuThe) + '</td>' +
+        '<td>' + escHtml(r.toaAn) + '</td>' +
+        '<td>' + (r.soLuongBiDon || 0) + '</td>' +
+        '<td>' + r.untilStep + '</td>' +
+        '<td>' + (r.submit ? 'Có' : '') + '</td>' +
+        '<td>' + escHtml(r.ghiChu) + '</td>' +
+        '<td class="cot-nut"><button type="button" class="d-nut" data-sua="' + i + '">Sửa</button> ' +
+        '<button type="button" class="d-nut" data-xoa="' + i + '">Xoá</button></td>';
+      tbody.appendChild(tr);
+    });
+    el('dem-case').textContent = state.rows.length;
+    tbody.querySelectorAll('.chk-chay').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        state.rows[+cb.dataset.idx].chay = cb.checked;
+        veBang();
+      });
+    });
+    tbody.querySelectorAll('[data-sua]').forEach(function(btn){
+      btn.addEventListener('click', function(){ suaCase(+btn.dataset.sua); });
+    });
+    tbody.querySelectorAll('[data-xoa]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        state.rows.splice(+btn.dataset.xoa, 1);
+        veBang();
+      });
+    });
+  }
+
+  function escHtml(s){
+    return (s || '').replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  function docForm(){
+    function boolOrNull(v){ return v === '' ? null : (v === 'true'); }
+    return {
+      chay: el('f-chay').checked,
+      loaiDon: el('f-loaiDon').value,
+      loaiViec: el('f-loaiViec').value,
+      chuThe: el('f-chuThe').value,
+      tuCachNopDon: el('f-tuCachNopDon').value,
+      toaAn: el('f-toaAn').value,
+      soLuongBiDon: parseInt(el('f-soLuongBiDon').value, 10) || 0,
+      coDongNguyenDon: boolOrNull(el('f-coDongNguyenDon').value),
+      coNguoiDaiDien: boolOrNull(el('f-coNguoiDaiDien').value),
+      coNguoiLienQuan: boolOrNull(el('f-coNguoiLienQuan').value),
+      coTaiLieuBoSung: boolOrNull(el('f-coTaiLieuBoSung').value),
+      ghiChu: el('f-ghiChu').value,
+      truongLoi: el('f-truongLoi').value,
+      giaTriLoi: el('f-giaTriLoi').value,
+      thongBaoMongDoi: el('f-thongBaoMongDoi').value,
+      untilStep: parseInt(el('f-untilStep').value, 10),
+      submit: el('f-submit').checked
+    };
+  }
+
+  function napVaoForm(r){
+    el('f-chay').checked = r.chay;
+    el('f-loaiDon').value = r.loaiDon || '';
+    capNhatLoaiViec();
+    el('f-loaiViec').value = r.loaiViec || '';
+    el('f-chuThe').value = r.chuThe || '';
+    el('f-tuCachNopDon').value = r.tuCachNopDon || '';
+    el('f-toaAn').value = r.toaAn || '';
+    el('f-soLuongBiDon').value = String(r.soLuongBiDon || 0);
+    el('f-coDongNguyenDon').value = r.coDongNguyenDon === null || r.coDongNguyenDon === undefined ? '' : String(r.coDongNguyenDon);
+    el('f-coNguoiDaiDien').value = r.coNguoiDaiDien === null || r.coNguoiDaiDien === undefined ? '' : String(r.coNguoiDaiDien);
+    el('f-coNguoiLienQuan').value = r.coNguoiLienQuan === null || r.coNguoiLienQuan === undefined ? '' : String(r.coNguoiLienQuan);
+    el('f-coTaiLieuBoSung').value = r.coTaiLieuBoSung === null || r.coTaiLieuBoSung === undefined ? '' : String(r.coTaiLieuBoSung);
+    el('f-ghiChu').value = r.ghiChu || '';
+    el('f-truongLoi').value = r.truongLoi || '';
+    el('f-giaTriLoi').value = r.giaTriLoi || '';
+    el('f-thongBaoMongDoi').value = r.thongBaoMongDoi || '';
+    el('f-untilStep').value = String(r.untilStep === undefined ? 6 : r.untilStep);
+    el('f-submit').checked = !!r.submit;
+  }
+
+  function resetForm(){
+    el('form-case').reset();
+    el('f-chay').checked = true;
+    el('f-untilStep').value = '6';
+    capNhatLoaiViec();
+    state.editIndex = -1;
+    el('tieu-de-form').textContent = 'Thêm case mới';
+  }
+
+  function suaCase(i){
+    state.editIndex = i;
+    napVaoForm(state.rows[i]);
+    el('tieu-de-form').textContent = 'Sửa case #' + (i + 1);
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  el('btn-huy-sua').addEventListener('click', resetForm);
+
+  el('form-case').addEventListener('submit', function(e){
+    e.preventDefault();
+    var row = docForm();
+    if (state.editIndex >= 0) {
+      state.rows[state.editIndex] = row;
+    } else {
+      state.rows.push(row);
+    }
+    veBang();
+    resetForm();
+    baoTin('ok', 'Đã thêm vào danh sách (chưa lưu xuống file — bấm "Lưu tất cả xuống file" để lưu thật).');
+  });
+
+  el('btn-luu-tat-ca').addEventListener('click', function(){
+    fetch('/api/cases', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(state.rows)
+    }).then(function(r){ return r.json().then(function(body){ return {ok: r.ok, body: body}; }); })
+      .then(function(res){
+        if (!res.ok) { baoTin('loi', res.body.error || 'Lưu thất bại.'); return; }
+        baoTin('ok', res.body.message);
+      });
+  });
+
+  el('btn-nhap-sheet').addEventListener('click', function(){
+    if (!confirm('Nhập từ Google Sheet sẽ GHI ĐÈ toàn bộ danh sách hiện tại trong file JSON. Tiếp tục?')) return;
+    fetch('/api/import-sheet', {method: 'POST'})
+      .then(function(r){ return r.json().then(function(body){ return {ok: r.ok, body: body}; }); })
+      .then(function(res){
+        if (!res.ok) { baoTin('loi', res.body.error || 'Nhập thất bại.'); return; }
+        baoTin('ok', res.body.message);
+        napCases();
+      });
+  });
+
+  el('btn-chay').addEventListener('click', function(){
+    if (!confirm('Chạy toàn bộ case đang bật ("Chạy" = tick) trong danh sách hiện đã lưu trên file?')) return;
+    fetch('/api/run', {method: 'POST'})
+      .then(function(r){ return r.json().then(function(body){ return {ok: r.ok, body: body}; }); })
+      .then(function(res){
+        if (!res.ok) { baoTin('loi', res.body.error || 'Không chạy được.'); return; }
+        baoTin('info', res.body.message);
+      });
+  });
+
+  // ── Tab: chuyển Dashboard / Test case / Config locator ────────────────
+  var locatorDaTai = false;
+
+  function chonTab(ten){
+    document.querySelectorAll('nav.tab button').forEach(function(b){
+      b.classList.toggle('dang-chon', b.dataset.tab === ten);
+    });
+    document.querySelectorAll('.tab-noi-dung').forEach(function(s){
+      s.classList.toggle('hien', s.id === 'tab-' + ten);
+    });
+    document.querySelector('main').classList.toggle('dash-full', ten === 'dashboard');
+    if (ten === 'dashboard') {
+      // Tải lại mỗi lần vào tab để luôn thấy lượt chạy mới nhất (vd vừa bấm Chạy xong).
+      napBaoCao();
+    }
+    if (ten === 'locator' && !locatorDaTai) {
+      locatorDaTai = true;
+      napLocators();
+    }
+  }
+
+  /**
+   * Nhúng thẳng nội dung báo cáo vào #khung-baocao — KHÔNG dùng iframe nữa, để cảm giác là 1 trang
+   * duy nhất (cuộn chung, deep-link #c-... từ chỗ khác trong dashboard nhảy thẳng tới case).
+   * <p>
+   * CSS/HTML/class của báo cáo giữ nguyên 100% (không sửa BaoCaoHtml.java) — chỉ CSS bên Dashboard
+   * đã đổi tên 6 class trùng (mo/nut/khoi/nho/ok/canhbao → d-...) để 2 stylesheet sống chung 1 DOM
+   * không đè lẫn nhau. Script trong báo cáo không tự chạy khi gán qua innerHTML — phải tạo lại
+   * &lt;script&gt; mới để trình duyệt thực thi (giới hạn chuẩn của innerHTML, không phải lỗi).
+   */
+  function napBaoCao(){
+    var host = el('khung-baocao');
+    fetch('/report/index.html?_=' + Date.now()).then(function(r){
+      if (!r.ok) { throw new Error('HTTP ' + r.status); }
+      return r.text();
+    }).then(function(html){
+      var doc = new DOMParser().parseFromString(html, 'text/html');
+      var style = doc.querySelector('style');
+      host.innerHTML = (style ? '<style>' + style.textContent + '</style>' : '') + doc.body.innerHTML;
+      host.querySelectorAll('script').forEach(function(cu){
+        var moi = document.createElement('script');
+        if (cu.src) { moi.src = cu.src; } else { moi.textContent = cu.textContent; }
+        cu.replaceWith(moi);
+      });
+    }).catch(function(e){
+      host.innerHTML = '<p class="d-mo" style="padding:20px">Chưa có báo cáo hoặc không tải được ('
+        + escHtml(String(e)) + ') — chạy 1 lượt test trước (tab Test case → Chạy).</p>';
+    });
+  }
+  document.querySelectorAll('nav.tab button').forEach(function(b){
+    b.addEventListener('click', function(){ chonTab(b.dataset.tab); });
+  });
+
+  // Tên file Java → tên màn hình dễ hiểu cho tester manual (khớp luồng 6 bước).
+  var TEN_MAN_HINH = {
+    'LoginPage.java': 'Đăng nhập',
+    'DashboardPage.java': 'Trang chủ sau đăng nhập',
+    'TaoDonPage.java': 'Bước 1 — Chọn loại đơn & Tòa án',
+    'NguyenDonPage.java': 'Bước 2 — Nguyên đơn',
+    'BiDonPage.java': 'Bước 3 — Bị đơn',
+    'NoiDungDonPage.java': 'Bước 4 — Nội dung đơn',
+    'TaiLieuPage.java': 'Bước 5 — Tài liệu đính kèm',
+    'XemLaiGuiDonPage.java': 'Bước 6 — Xem lại & Gửi đơn',
+    'GuiDonKetQua.java': 'Bước 6 — Kết quả gửi đơn',
+    'EformDropdownHelper.java': 'Tiện ích chọn dropdown (dùng chung nhiều bước)',
+    'UiSynonyms.java': 'Catalog nhãn UI dùng chung (nhiều bước)',
+    'LoaiDonLocator.java': 'Catalog thẻ Loại đơn (Bước 1)'
+  };
+  var TEN_CACH_TIM = {
+    xpath: 'Theo đường dẫn (XPath)',
+    id: 'Theo mã ID',
+    cssSelector: 'Theo CSS',
+    className: 'Theo class CSS',
+    name: 'Theo thuộc tính name',
+    tagName: 'Theo tên thẻ HTML',
+    linkText: 'Theo chữ trên link',
+    partialLinkText: 'Theo 1 phần chữ trên link'
+  };
+
+  /** Lấy chữ trong nháy đơn/kép trong mã locator — đây là thứ tester manual thật sự cần đọc. */
+  function noiDungTimTu(ma){
+    var re = /'([^']*)'|"([^"]*)"/g;
+    var ket = [];
+    var m;
+    while ((m = re.exec(ma)) !== null) {
+      var chu = (m[1] !== undefined ? m[1] : m[2]).trim();
+      // Bỏ chuỗi kỹ thuật thuần (tên class CSS, số...) không có chữ cái — không giúp ích cho tester.
+      if (chu && /[a-zA-ZÀ-ỹ]/.test(chu) && chu.length > 1) {
+        ket.push(chu);
+      }
+    }
+    return ket;
+  }
+
+  // Đoán LOẠI PHẦN TỬ trên màn hình (nút/ô nhập/nhãn...) — người không biết code vẫn hiểu được.
+  // Ưu tiên đoán theo quy ước đặt tên biến trong code, không đoán ra thì đoán theo tên thẻ HTML.
+  var THEO_TEN_BIEN = [
+    [/\bbtn\b|button/i, 'Nút bấm'],
+    [/\btxt\b|\binput\b/i, 'Ô nhập'],
+    [/\blbl\b|label/i, 'Nhãn / chữ hiển thị'],
+    [/\bchk\b|checkbox/i, 'Hộp chọn (checkbox)'],
+    [/\bcbo\b|dropdown|select/i, 'Ô chọn (dropdown)'],
+    [/\brad\b|radio/i, 'Nút chọn (radio)'],
+    [/\blink\b|href/i, 'Đường dẫn (link)'],
+    [/\bcard\b/i, 'Thẻ để chọn'],
+    [/\bmarker\b/i, 'Mốc đánh dấu vùng (không bấm được)']
+  ];
+  var THEO_THE_HTML = [
+    [/\/\/button/, 'Nút bấm'],
+    [/\/\/input/, 'Ô nhập'],
+    [/\/\/select/, 'Ô chọn (dropdown)'],
+    [/\/\/textarea/, 'Ô nhập (nhiều dòng)'],
+    [/\/\/a\[|\/\/a\s/, 'Đường dẫn (link)'],
+    [/\/\/label/, 'Nhãn / chữ hiển thị'],
+    [/\/\/h[1-6]\b/, 'Tiêu đề']
+  ];
+  function loaiPhanTu(nhan, ma){
+    var i;
+    for (i = 0; i < THEO_TEN_BIEN.length; i++) {
+      if (THEO_TEN_BIEN[i][0].test(nhan || '')) return THEO_TEN_BIEN[i][1];
+    }
+    for (i = 0; i < THEO_THE_HTML.length; i++) {
+      if (THEO_THE_HTML[i][0].test(ma || '')) return THEO_THE_HTML[i][1];
+    }
+    return 'Phần tử trên màn hình';
+  }
+
+  function napLocators(){
+    fetch('/api/locators').then(function(r){ return r.json(); }).then(function(d){
+      el('dem-locator').textContent = d.tongSo || 0;
+      var wrap = el('ds-locator');
+      wrap.innerHTML = '';
+      // Sắp theo đúng thứ tự luồng 6 bước (như Test case) — server trả theo alphabet tên file,
+      // ở đây xếp lại theo thứ tự khai báo trong TEN_MAN_HINH (Đăng nhập → Bước 1..6 → catalog dùng chung).
+      var thuTu = Object.keys(TEN_MAN_HINH);
+      var files = (d.files || []).slice().sort(function(a, b){
+        var ia = thuTu.indexOf(a.ten); if (ia < 0) ia = thuTu.length;
+        var ib = thuTu.indexOf(b.ten); if (ib < 0) ib = thuTu.length;
+        return ia - ib;
+      });
+      files.forEach(function(file){
+        var det = document.createElement('details');
+        det.className = 'khoi-locator-file';
+        det.dataset.tim = (file.ten + ' ' + (TEN_MAN_HINH[file.ten] || '') + ' '
+          + file.locators.map(function(l){ return l.nhan + ' ' + l.ma; }).join(' ')).toLowerCase();
+        var rows = file.locators.map(function(l){
+          var chu = noiDungTimTu(l.ma);
+          var loaiPT = loaiPhanTu(l.nhan, l.ma);
+          var chiTiet;
+          if (chu.length) {
+            chiTiet = chu.map(function(c){ return escHtml(c); }).join(' <span class="d-mo">·</span> ');
+            if (l.loai === 'id') { chiTiet = '<span class="d-mo">mã hệ thống:</span> ' + chiTiet; }
+          } else {
+            chiTiet = '<span class="rong">(ghép động lúc chạy, không có chữ cố định)</span>';
+          }
+          var noiDungHtml = '<b>' + escHtml(loaiPT) + '</b><br>' + chiTiet;
+          var cachTim = TEN_CACH_TIM[l.loai] || escHtml(l.loai);
+          return '<tr>' +
+            '<td class="loc-noidung">' + noiDungHtml + '</td>' +
+            '<td class="loc-cach"><span class="the-cach">' + escHtml(cachTim) + '</span></td>' +
+            '<td class="loc-ma"><details><summary>Xem mã kỹ thuật (' + escHtml(l.nhan)
+              + ' · dòng ' + l.dong + ')</summary>' +
+              '<code class="mau">' + escHtml(l.ma) + '</code></details></td>' +
+            '</tr>';
+        }).join('');
+        var tenManHinh = TEN_MAN_HINH[file.ten] || file.ten;
+        det.innerHTML =
+          '<summary style="cursor:pointer;font-weight:600;padding:6px 0">' +
+            escHtml(tenManHinh) + ' <span class="d-mo">(' + file.locators.length + ' locator — '
+              + escHtml(file.ten) + ')</span></summary>' +
+          '<table><thead><tr><th>Tìm theo nội dung</th><th>Cách tìm</th>' +
+          '<th>Mã kỹ thuật</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table>';
+        wrap.appendChild(det);
+      });
+      loCanBoLoc();
+    });
+  }
+
+  function loCanBoLoc(){
+    var tu = el('tim-locator').value.trim().toLowerCase();
+    document.querySelectorAll('#ds-locator details').forEach(function(det){
+      det.style.display = (!tu || det.dataset.tim.indexOf(tu) >= 0) ? '' : 'none';
+    });
+  }
+  el('tim-locator').addEventListener('input', loCanBoLoc);
+  el('btn-mo-tat-ca-locator').addEventListener('click', function(){
+    document.querySelectorAll('#ds-locator details').forEach(function(d){ d.open = true; });
+  });
+  el('btn-thu-gon-locator').addEventListener('click', function(){
+    document.querySelectorAll('#ds-locator details').forEach(function(d){ d.open = false; });
+  });
+
+  napCatalog().then(napCases);
+  chonTab('dashboard');
+})();
+</script>
+</body>
+</html>

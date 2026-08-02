@@ -129,6 +129,19 @@
                     <encoding>UTF-8</encoding>
                 </configuration>
             </plugin>
+            <!-- Chỉ dùng để khởi động CaseEditorServer (dashboard cục bộ) qua `mvn exec:java` —
+                 không tham gia build test bình thường. classpathScope=test BẮT BUỘC: run-flow.properties
+                 và local-cases.json nằm ở src/test/resources (target/test-classes), classpath mặc định
+                 của exec:java chỉ có target/classes nên sẽ không thấy 2 file này nếu để mặc định. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.2.0</version>
+                <configuration>
+                    <mainClass>vn.tuphap.automation.caseui.CaseEditorServer</mainClass>
+                    <classpathScope>test</classpathScope>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
