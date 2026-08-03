@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<!-- WF-{{NNNN}} | Pattern: list -->
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{TITLE}}</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.344.0/umd/lucide.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900">
+
+  <main class="max-w-7xl mx-auto p-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">{{TITLE}}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{SUBTITLE}}</p>
+      </div>
+      <button class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700">
+        <i data-lucide="plus" class="w-4 h-4"></i>
+        {{ACTION_ADD}}
+      </button>
+    </div>
+
+    <!-- Toolbar: search + filter -->
+    <div class="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+      <div class="flex flex-wrap gap-3 items-center">
+        <div class="flex-1 min-w-64 relative">
+          <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+          <input
+            type="search"
+            class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="{{SEARCH_PLACEHOLDER}}"
+          />
+        </div>
+
+        <select class="px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500">
+          <option>{{FILTER_1_LABEL}}</option>
+          <option>{{FILTER_1_OPT_1}}</option>
+          <option>{{FILTER_1_OPT_2}}</option>
+        </select>
+
+        <button class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          {{ACTION_FILTER}}
+        </button>
+
+        <button class="inline-flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          {{ACTION_EXPORT}}
+        </button>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th class="px-4 py-3 text-left">
+              <input type="checkbox" class="w-4 h-4 rounded border-gray-300" />
+            </th>
+            <th class="px-4 py-3 text-left font-medium text-gray-700">{{COL_1}}</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-700">{{COL_2}}</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-700">{{COL_3}}</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-700">{{COL_4}}</th>
+            <th class="px-4 py-3 text-right font-medium text-gray-700">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3">
+              <input type="checkbox" class="w-4 h-4 rounded border-gray-300" />
+            </td>
+            <td class="px-4 py-3 font-medium">Row data 1</td>
+            <td class="px-4 py-3 text-gray-600">Cell B</td>
+            <td class="px-4 py-3 text-gray-600">Cell C</td>
+            <td class="px-4 py-3">
+              <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+                Approved
+              </span>
+            </td>
+            <td class="px-4 py-3 text-right">
+              <button class="p-1 rounded hover:bg-gray-100" aria-label="Edit">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button class="p-1 rounded hover:bg-gray-100" aria-label="Delete">
+                <i data-lucide="trash-2" class="w-4 h-4 text-red-500"></i>
+              </button>
+            </td>
+          </tr>
+          <!-- Repeat rows -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <nav class="flex items-center justify-between mt-4 text-sm">
+      <div class="text-gray-600">
+        Hiển thị 1-10 / <strong>247</strong> kết quả
+      </div>
+      <div class="flex gap-1">
+        <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">Trước</button>
+        <button class="w-8 h-8 rounded text-sm bg-blue-600 text-white">1</button>
+        <button class="w-8 h-8 rounded text-sm hover:bg-gray-100">2</button>
+        <button class="w-8 h-8 rounded text-sm hover:bg-gray-100">3</button>
+        <button class="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50">Sau</button>
+      </div>
+    </nav>
+
+  </main>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>

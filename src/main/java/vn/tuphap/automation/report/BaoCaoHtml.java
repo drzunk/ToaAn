@@ -594,6 +594,12 @@ public final class BaoCaoHtml {
                 .append("<span class=\"luot-tg\">").append(esc(TaoDonReportBuilder.formatDuration(d.wallMs())))
                 .append("</span></summary><div class=\"luot-than\">");
 
+        // Đường dẫn dạng chữ, không phải liên kết: lượt hỏng ngay khâu đăng nhập không chụp được
+        // ảnh nào, một liên kết dẫn tới trang lỗi làm hỏng lòng tin vào cả bản báo cáo. Mốc ở đây
+        // phải trùng giờ trên dòng tiêu đề, nếu không người đọc không ghép được với log.
+        sb.append("<p class=\"lienket mo\">Dữ liệu, ảnh và log của lượt này nằm ở <code>runs/")
+                .append(esc(nz(d.moc()))).append("/</code></p>");
+
         if (d.cases() == null || d.cases().isEmpty()) {
             sb.append("<p class=\"trong\">Lượt chạy này không ghi nhận kịch bản nào.</p>");
         } else {
@@ -1497,6 +1503,7 @@ public final class BaoCaoHtml {
                 .luot-tg{color:var(--mo);font-size:12.5px;font-variant-numeric:tabular-nums;
                 min-width:92px;text-align:right}
                 .luot-than{padding:2px 14px 14px}
+                .lienket{margin:0 0 10px;font-size:12.5px}
                 .mo{color:var(--mo)}
                 .case{border:1px solid var(--vien);border-radius:9px;margin-bottom:7px;background:var(--nen)}
                 .case-dau{display:flex;gap:10px;align-items:center;padding:9px 12px;flex-wrap:wrap}

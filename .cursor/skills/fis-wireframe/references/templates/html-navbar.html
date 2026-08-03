@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<!-- WF-{{NNNN}} | Pattern: navbar + sidebar (full layout) -->
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>{{TITLE}}</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/3.4.1/tailwind.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.344.0/umd/lucide.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900 flex flex-col">
+
+  <!-- Top navbar -->
+  <header class="bg-white border-b border-gray-200">
+    <div class="flex items-center justify-between px-4 py-3">
+      <!-- Left: Logo + Hamburger -->
+      <div class="flex items-center gap-4">
+        <button class="md:hidden p-2 rounded hover:bg-gray-100" aria-label="Menu">
+          <i data-lucide="menu" class="w-5 h-5"></i>
+        </button>
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded bg-blue-600 flex items-center justify-center text-white font-bold">F</div>
+          <span class="font-semibold">{{BRAND_NAME}}</span>
+        </div>
+      </div>
+
+      <!-- Center: Search -->
+      <div class="hidden md:block flex-1 max-w-md mx-4">
+        <div class="relative">
+          <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+          <input type="search" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="Tìm kiếm..." />
+        </div>
+      </div>
+
+      <!-- Right: User menu -->
+      <div class="flex items-center gap-3">
+        <button class="p-2 rounded hover:bg-gray-100 relative" aria-label="Notifications">
+          <i data-lucide="bell" class="w-5 h-5"></i>
+          <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+        </button>
+        <div class="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded-md p-1 pr-2">
+          <div class="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium">PA</div>
+          <div class="hidden md:block">
+            <p class="text-sm font-medium">{{USER_NAME}}</p>
+            <p class="text-xs text-gray-500">{{USER_ROLE}}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main: sidebar + content -->
+  <div class="flex-1 flex">
+
+    <!-- Sidebar -->
+    <aside class="hidden md:block w-60 bg-white border-r border-gray-200">
+      <nav class="p-3 space-y-1">
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md bg-blue-50 text-blue-700 font-medium">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          Dashboard
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          Khách hàng
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+          <i data-lucide="credit-card" class="w-4 h-4"></i>
+          Giao dịch
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          Báo cáo
+        </a>
+        <hr class="my-3 border-gray-200" />
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+          Cấu hình
+        </a>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 rounded-md text-gray-700 hover:bg-gray-100">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+          Đăng xuất
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Content area -->
+    <main class="flex-1 p-6">
+      <h1 class="text-2xl font-bold mb-4">{{CONTENT_TITLE}}</h1>
+      <p class="text-gray-600">{{CONTENT_PLACEHOLDER}}</p>
+    </main>
+
+  </div>
+
+  <script>lucide.createIcons();</script>
+</body>
+</html>

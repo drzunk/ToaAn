@@ -1,0 +1,8 @@
+{
+  "url": "https://gitlab.fis.vn/fis-ai-first/fis-ai-kit",
+  "ref": "v0.4.3",
+  "installed_at": "2026-08-03T06:46:39Z",
+  "targets": [
+    "cursor"
+  ]
+}
