@@ -18,6 +18,7 @@ Dùng **↑ / ↓** để chọn, **Enter** để vào (hoặc bấm phím số 
 | 6 | Mid regression — 3 Chrome |
 | 7 | Full coverage — 3 Chrome (lâu) |
 | 8 | Xem cấu hình (không chạy) |
+| **9** | **Mở Dashboard web** (`http://localhost:8787`) — báo cáo / Test case / **Sinh test case theo màn** / locator |
 
 ### Menu 1 — chạy theo Google Sheet
 
@@ -43,6 +44,16 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 - Case 2: Hành chính → Quyết định → Tổ chức → điền đủ + gửi đơn  
 
 → ghi `run.cases=...`, mở đúng số Chrome đã chọn.
+
+### Menu 9 — Dashboard web + Sinh test case
+
+1. `.\scripts\chay.cmd` → chọn **9**.
+2. Tab **Sinh test case** → «Sinh / làm mới đề xuất» (hoặc tự tải lần đầu vào tab).
+3. Chọn case theo từng màn (Login → Dashboard → Bước 1…6) → **Thêm case đã chọn vào danh sách**.
+4. Tab **Test case** → **Lưu tất cả xuống file** → **Chạy**.
+
+Đề xuất lấy từ `master-data.properties` + whitelist ca âm. Nếu đã chạy `mvn -Pdiscovery test`,
+thông báo mong đợi được gắn từ CSV mới nhất trong `test-output/discovery-sweep/`.
 
 ---
 

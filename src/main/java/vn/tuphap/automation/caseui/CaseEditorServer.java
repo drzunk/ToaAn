@@ -30,11 +30,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Dashboard cục bộ — 1 trang, 3 tab: <b>Dashboard</b> (nhúng {@code test-output/index.html} qua
- * iframe), <b>Test case</b> (form web sửa {@code local-cases.json} — thay Google Sheet, validate
- * nghiêm qua {@link CaseFileSource} — và nút "Chạy" gọi thẳng {@code mvn test -Pmaster}), <b>Config
- * locator</b> (xem — không sửa — mọi {@code By.*} quét trực tiếp từ 9 Page Object + 2 lớp catalog
- * dùng chung {@code vn.tuphap.automation.ui.UiSynonyms}/{@code LoaiDonLocator}).
+ * Dashboard cục bộ — 1 trang, 4 tab: <b>Dashboard</b> (nhúng {@code test-output/index.html}),
+ * <b>Test case</b> (form web sửa {@code local-cases.json} — thay Google Sheet, validate nghiêm qua
+ * {@link CaseFileSource} — và nút "Chạy" gọi thẳng {@code mvn test -Pmaster}), <b>Sinh test case</b>
+ * (đề xuất theo từng màn từ {@link TestCaseGenerator} + CSV discovery nếu có), <b>Config locator</b>
+ * (xem — không sửa — mọi {@code By.*} quét từ Page Object + catalog UI).
  * <p>
  * Không stream log Maven lên trang (quyết định có chủ đích — bản đầu giữ đơn giản): nút Chạy kích
  * hoạt tiến trình rồi trả lời ngay; xem tiến độ ở {@code test-output/last-run.log}, xem kết quả ở
@@ -62,6 +62,7 @@ public final class CaseEditorServer {
         server.createContext("/api/catalog", CaseEditorServer::handleCatalog);
         server.createContext("/api/locators", CaseEditorServer::handleLocators);
         server.createContext("/api/cases", CaseEditorServer::handleCases);
+        server.createContext("/api/generate-cases", CaseEditorServer::handleGenerateCases);
         server.createContext("/api/import-sheet", CaseEditorServer::handleImportSheet);
         server.createContext("/api/run", CaseEditorServer::handleRun);
         server.createContext("/report/", CaseEditorServer::handleReport);
@@ -300,6 +301,17 @@ public final class CaseEditorServer {
             return;
         }
         sendJson(ex, 200, Map.of("message", "Đã lưu " + list.size() + " dòng.", "savedCount", list.size()));
+    }
+
+    // ── /api/generate-cases — đề xuất theo từng màn (không ghi file) ──────
+
+    private static void handleGenerateCases(HttpExchange ex) throws IOException {
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendText(ex, 405, "Chỉ hỗ trợ GET.");
+            return;
+        }
+        TestCaseGenerator.KetQua ketQua = TestCaseGenerator.generate();
+        sendJson(ex, 200, ketQua);
     }
 
     // ── /api/import-sheet ────────────────────────────────────────────────

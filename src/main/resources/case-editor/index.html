@@ -79,21 +79,63 @@
   .loc-ma{max-width:360px}
   .loc-ma summary{color:var(--mo);font-size:11.5px;cursor:pointer}
   .loc-ma code.mau{display:block;margin-top:4px}
+  .the-loai{display:inline-block;padding:2px 7px;border-radius:5px;font-size:11px;font-weight:600;color:#fff}
+  .the-loai.duong{background:var(--dat)}
+  .the-loai.am{background:var(--loi)}
+  .the-loai.kham-pha{background:var(--bo);color:#5a4200}
+  .gen-man{border:1px solid var(--vien);border-radius:8px;margin-bottom:10px;background:var(--mat)}
+  .gen-man>summary{cursor:pointer;padding:10px 14px;font-weight:600;list-style:none}
+  .gen-man>summary::-webkit-details-marker{display:none}
+  .gen-man>summary::before{content:'▸ ';color:var(--xanh)}
+  .gen-man[open]>summary::before{content:'▾ '}
+  .gen-man .gen-body{padding:0 14px 12px}
+  .gen-man table{font-size:12.5px}
+  .gen-man td{white-space:normal;vertical-align:top}
+  .gen-lydo{color:var(--muc2);font-size:12px}
+  .gen-meta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 </style>
 </head>
 <body>
 <header>
   <h1>Dashboard tự động hoá — Tạo đơn dịch vụ tư pháp toà án</h1>
-  <p>Báo cáo, khai báo case (thay Google Sheet) và tra cứu locator — tất cả trong 1 trang cục bộ</p>
+  <p>Báo cáo, khai báo case, sinh đề xuất theo màn hình, và tra cứu locator — 1 trang cục bộ</p>
 </header>
 <nav class="tab">
   <button type="button" class="dang-chon" data-tab="dashboard">Dashboard</button>
   <button type="button" data-tab="testcase">Test case</button>
+  <button type="button" data-tab="sinh">Sinh test case</button>
   <button type="button" data-tab="locator">Config locator</button>
 </nav>
 <main>
   <section id="tab-dashboard" class="tab-noi-dung hien">
     <div id="khung-baocao"></div>
+  </section>
+
+  <section id="tab-sinh" class="tab-noi-dung">
+    <div id="thongbao-sinh" class="thongbao"></div>
+    <div class="d-khoi">
+      <h2>Sinh đề xuất test case theo màn hình</h2>
+      <p class="d-mo">Quét catalog (<code class="mau">master-data.properties</code>) + ma trận ca âm field,
+        ghép thông báo từ CSV Discovery nếu đã chạy <code class="mau">mvn -Pdiscovery test</code>.
+        Chọn case → thêm vào tab <b>Test case</b> (chưa ghi file — vẫn cần «Lưu tất cả»),
+        hoặc bấm «Chạy riêng màn này» để chạy ngay đúng nhóm case của một màn.
+        Ca âm mặc định tắt tick «Chạy» để tránh nộp đơn lỗi hàng loạt.</p>
+      <p class="d-mo"><b>Không có cách nhảy thẳng vào một màn.</b> Wizard giữ trạng thái theo phiên,
+        nên case của bước N vẫn đăng nhập → điền hợp lệ bước 1…N−1 → <b>dừng lại ở bước N</b>
+        (<code class="mau">untilStep = N</code>). Chỉ bước N là phần được kiểm tra; các bước trước
+        chạy bằng dữ liệu hợp lệ sinh sẵn. Riêng ca âm sẽ dừng sớm hơn nếu hệ thống chặn đúng kỳ vọng.</p>
+      <div class="gen-meta">
+        <button type="button" class="d-nut chinh" id="btn-sinh-dexuat">Sinh / làm mới đề xuất</button>
+        <button type="button" class="d-nut" id="btn-gen-chon-mac-dinh">Chọn mặc định</button>
+        <button type="button" class="d-nut" id="btn-gen-bo-chon">Bỏ chọn hết</button>
+        <button type="button" class="d-nut chinh" id="btn-gen-them" style="background:var(--dat);border-color:var(--dat)">
+          Thêm case đã chọn vào danh sách
+        </button>
+        <span class="d-mo" id="gen-tong">Chưa sinh.</span>
+      </div>
+      <p class="d-mo" id="gen-ghichu"></p>
+      <div id="ds-sinh"></div>
+    </div>
   </section>
 
   <section id="tab-locator" class="tab-noi-dung">
@@ -223,13 +265,19 @@
 
 <script>
 (function(){
-  var state = { rows: [], catalog: null, editIndex: -1 };
+  var state = { rows: [], catalog: null, editIndex: -1, gen: null };
 
   function el(id){ return document.getElementById(id); }
 
   function baoTin(loai, msg){
     var b = el('thongbao');
     // Lớp CSS thật là "d-ok" (tránh trùng .ok của báo cáo nhúng) — gọi ngoài vẫn dùng 'ok' cho gọn.
+    b.className = 'thongbao ' + (loai === 'ok' ? 'd-ok' : loai);
+    b.textContent = msg;
+  }
+
+  function baoTinSinh(loai, msg){
+    var b = el('thongbao-sinh');
     b.className = 'thongbao ' + (loai === 'ok' ? 'd-ok' : loai);
     b.textContent = msg;
   }
@@ -440,8 +488,9 @@
       });
   });
 
-  // ── Tab: chuyển Dashboard / Test case / Config locator ────────────────
+  // ── Tab: Dashboard / Test case / Sinh / Config locator ────────────────
   var locatorDaTai = false;
+  var sinhDaTai = false;
 
   function chonTab(ten){
     document.querySelectorAll('nav.tab button').forEach(function(b){
@@ -452,12 +501,15 @@
     });
     document.querySelector('main').classList.toggle('dash-full', ten === 'dashboard');
     if (ten === 'dashboard') {
-      // Tải lại mỗi lần vào tab để luôn thấy lượt chạy mới nhất (vd vừa bấm Chạy xong).
       napBaoCao();
     }
     if (ten === 'locator' && !locatorDaTai) {
       locatorDaTai = true;
       napLocators();
+    }
+    if (ten === 'sinh' && !sinhDaTai) {
+      sinhDaTai = true;
+      napDeXuat();
     }
   }
 
@@ -631,6 +683,178 @@
   });
   el('btn-thu-gon-locator').addEventListener('click', function(){
     document.querySelectorAll('#ds-locator details').forEach(function(d){ d.open = false; });
+  });
+
+  // ── Tab Sinh test case ─────────────────────────────────────────────────
+
+  function tenLoaiCase(loai){
+    if (loai === 'am') return 'Ca âm';
+    if (loai === 'kham-pha') return 'Khám phá';
+    return 'Ca dương';
+  }
+
+  function napDeXuat(){
+    baoTinSinh('info', 'Đang sinh đề xuất…');
+    return fetch('/api/generate-cases').then(function(r){
+      if (!r.ok) { throw new Error('máy chủ trả HTTP ' + r.status); }
+      return r.json();
+    }).then(function(d){
+      state.gen = d;
+      veDeXuat();
+      var csv = d.discoveryCsv ? (' · CSV: ' + d.discoveryCsv) : '';
+      el('gen-tong').textContent = 'Tổng ' + (d.tongDeXuat || 0) + ' đề xuất / '
+        + ((d.screens || []).length) + ' màn' + csv;
+      el('gen-ghichu').textContent = d.ghiChu || '';
+      baoTinSinh('ok', 'Đã sinh ' + (d.tongDeXuat || 0) + ' đề xuất theo màn hình.');
+    }).catch(function(e){
+      // "Failed to fetch" = trình duyệt không nối được máy chủ, hầu như luôn là server đã tắt
+      // (đóng cửa sổ CMD chạy exec:java) chứ không phải lỗi dữ liệu — nói thẳng cách khắc phục.
+      var mo = String(e && e.message ? e.message : e);
+      var goiY = /failed to fetch|networkerror|load failed/i.test(mo)
+        ? 'Máy chủ Dashboard đã tắt. Mở lại: scripts\\chay.cmd → mục 9 (hoặc mvn exec:java), rồi tải lại trang.'
+        : mo;
+      baoTinSinh('loi', 'Không sinh được đề xuất — ' + goiY);
+    });
+  }
+
+  function veDeXuat(){
+    var wrap = el('ds-sinh');
+    wrap.innerHTML = '';
+    if (!state.gen || !state.gen.screens) return;
+    state.gen.screens.forEach(function(man, mi){
+      var det = document.createElement('details');
+      det.className = 'gen-man';
+      det.open = mi < 2;
+      var soChon = (man.cases || []).filter(function(c){ return c.chonMacDinh; }).length;
+      var rows = (man.cases || []).map(function(c, ci){
+        var r = c.caseRow || {};
+        var am = (r.truongLoi || '').trim();
+        var chiTiet = escHtml(r.loaiDon || '')
+          + (r.loaiViec ? ' / ' + escHtml(r.loaiViec) : '')
+          + ' · đến bước ' + r.untilStep
+          + (r.submit ? ' · gửi đơn' : '')
+          + (am ? ' · lỗi: ' + escHtml(r.truongLoi) + '=' + escHtml(r.giaTriLoi || '(trống)') : '');
+        return '<tr>' +
+          '<td><input type="checkbox" class="chk-gen" data-mi="' + mi + '" data-ci="' + ci + '"'
+            + (c.chonMacDinh ? ' checked' : '') + '></td>' +
+          '<td><span class="the-loai ' + escHtml(c.loai || 'duong') + '">'
+            + escHtml(tenLoaiCase(c.loai)) + '</span></td>' +
+          '<td><div>' + escHtml(r.ghiChu || c.id) + '</div>'
+            + '<div class="gen-lydo">' + escHtml(c.lyDo || '') + '</div>'
+            + '<div class="d-mo">' + chiTiet + '</div></td>' +
+          '</tr>';
+      }).join('');
+      det.innerHTML =
+        '<summary>' + escHtml(man.ten) + ' <span class="d-mo">('
+          + (man.cases || []).length + ' đề xuất'
+          + (soChon ? ', mặc định chọn ' + soChon : '')
+          + ')</span></summary>' +
+        '<div class="gen-body">' +
+          '<p class="d-mo" style="margin:0 0 8px">' + escHtml(man.moTa || '') + '</p>' +
+          '<div class="thanh-nut" style="margin:0 0 8px">' +
+            '<button type="button" class="d-nut" data-gen-man="' + mi + '" data-gen-act="all">Chọn hết màn này</button>' +
+            '<button type="button" class="d-nut" data-gen-man="' + mi + '" data-gen-act="none">Bỏ chọn màn này</button>' +
+            '<button type="button" class="d-nut chinh" data-gen-chay="' + mi + '">Chạy riêng màn này</button>' +
+          '</div>' +
+          '<table><thead><tr><th></th><th>Loại</th><th>Đề xuất</th></tr></thead>' +
+          '<tbody>' + rows + '</tbody></table></div>';
+      wrap.appendChild(det);
+    });
+    wrap.querySelectorAll('[data-gen-act]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var mi = +btn.dataset.genMan;
+        var bat = btn.dataset.genAct === 'all';
+        wrap.querySelectorAll('.chk-gen[data-mi="' + mi + '"]').forEach(function(cb){
+          cb.checked = bat;
+        });
+      });
+    });
+    wrap.querySelectorAll('[data-gen-chay]').forEach(function(btn){
+      btn.addEventListener('click', function(){ chayRiengMan(+btn.dataset.genChay); });
+    });
+  }
+
+  /**
+   * Chạy đúng các case của MỘT màn: ghi đè file case bằng đúng nhóm đó rồi gọi /api/run.
+   * Ép chay=true cho cả ca âm (mặc định ca âm tắt tick) — người dùng đã chủ động chọn màn để chạy.
+   */
+  function chayRiengMan(mi){
+    if (!state.gen) return;
+    var man = state.gen.screens[mi];
+    var chon = [];
+    document.querySelectorAll('.chk-gen[data-mi="' + mi + '"]:checked').forEach(function(cb){
+      var c = man.cases[+cb.dataset.ci];
+      if (c && c.caseRow) chon.push(Object.assign({}, c.caseRow, {chay: true}));
+    });
+    if (!chon.length) {
+      baoTinSinh('loi', 'Chưa tick case nào trong màn «' + man.ten + '».');
+      return;
+    }
+    if (!confirm('Chạy riêng «' + man.ten + '» với ' + chon.length + ' case.\n\n'
+        + 'Danh sách case trong file sẽ bị GHI ĐÈ bằng đúng ' + chon.length + ' case này.\n'
+        + 'Mỗi case vẫn đi từ đăng nhập qua các bước trước rồi DỪNG ở màn này.')) {
+      return;
+    }
+    baoTinSinh('info', 'Đang lưu ' + chon.length + ' case và khởi động Maven…');
+    fetch('/api/cases', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(chon)
+    }).then(function(r){ return r.json().then(function(b){ return {ok: r.ok, body: b}; }); })
+      .then(function(res){
+        if (!res.ok) { throw new Error(res.body.error || 'Lưu thất bại.'); }
+        state.rows = chon;
+        veBang();
+        return fetch('/api/run', {method: 'POST'})
+          .then(function(r){ return r.json().then(function(b){ return {ok: r.ok, body: b}; }); });
+      })
+      .then(function(res){
+        if (!res.ok) { throw new Error(res.body.error || 'Không chạy được.'); }
+        baoTinSinh('ok', 'Đang chạy màn «' + man.ten + '» (' + chon.length + ' case). '
+          + res.body.message);
+      })
+      .catch(function(e){ baoTinSinh('loi', String(e.message || e)); });
+  }
+
+  el('btn-sinh-dexuat').addEventListener('click', function(){ napDeXuat(); });
+  el('btn-gen-chon-mac-dinh').addEventListener('click', function(){
+    if (!state.gen) return;
+    document.querySelectorAll('.chk-gen').forEach(function(cb){
+      var c = state.gen.screens[+cb.dataset.mi].cases[+cb.dataset.ci];
+      cb.checked = !!(c && c.chonMacDinh);
+    });
+  });
+  el('btn-gen-bo-chon').addEventListener('click', function(){
+    document.querySelectorAll('.chk-gen').forEach(function(cb){ cb.checked = false; });
+  });
+  el('btn-gen-them').addEventListener('click', function(){
+    if (!state.gen) {
+      baoTinSinh('loi', 'Chưa có đề xuất — bấm «Sinh / làm mới đề xuất» trước.');
+      return;
+    }
+    var them = [];
+    document.querySelectorAll('.chk-gen:checked').forEach(function(cb){
+      var c = state.gen.screens[+cb.dataset.mi].cases[+cb.dataset.ci];
+      if (c && c.caseRow) them.push(Object.assign({}, c.caseRow));
+    });
+    if (!them.length) {
+      baoTinSinh('loi', 'Chưa chọn case nào.');
+      return;
+    }
+    // Tránh trùng ghiChu đã có trong danh sách hiện tại.
+    var daCo = {};
+    state.rows.forEach(function(r){ if (r.ghiChu) daCo[r.ghiChu] = true; });
+    var boQua = 0;
+    them.forEach(function(r){
+      if (r.ghiChu && daCo[r.ghiChu]) { boQua++; return; }
+      state.rows.push(r);
+      if (r.ghiChu) daCo[r.ghiChu] = true;
+    });
+    veBang();
+    baoTinSinh('ok', 'Đã thêm ' + (them.length - boQua) + ' case vào tab Test case'
+      + (boQua ? ' (bỏ trùng ghi chú: ' + boQua + ')' : '')
+      + '. Vào tab Test case → «Lưu tất cả xuống file» rồi «Chạy».');
+    baoTin('ok', 'Đã nhận ' + (them.length - boQua) + ' case từ tab Sinh test case (chưa lưu file).');
   });
 
   napCatalog().then(napCases);

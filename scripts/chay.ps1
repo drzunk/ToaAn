@@ -537,7 +537,7 @@ $mainItems = @(
     @{ Label = '6. Mid regression — 3 Chrome  —  khoảng 40 case'; Data = '5' }
     @{ Label = '7. Full coverage — 3 Chrome  —  đủ ma trận (lâu)'; Data = '6' }
     @{ Label = '8. Xem cấu hình hiện tại  —  không chạy test'; Data = 'V' }
-    @{ Label = '9. Mở Dashboard (web)  —  case / báo cáo / locator trong 1 trang'; Data = 'D' }
+    @{ Label = '9. Mở Dashboard (web)  —  báo cáo / case / sinh TC theo màn / locator'; Data = 'D' }
     @{ Label = '0. Thoát'; Data = '0' }
 )
 
@@ -569,20 +569,32 @@ while ($true) {
         'D' {
             Write-Host ''
             if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
-                $jdk = 'C:\Users\ADMIN\.jdks\ms-17.0.19'
-                if (Test-Path $jdk) { $env:JAVA_HOME = $jdk }
+                foreach ($jdk in @(
+                    'C:\Users\ADMIN\.jdks\ms-17.0.19',
+                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3\jbr',
+                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\jbr'
+                )) {
+                    if (Test-Path $jdk) { $env:JAVA_HOME = $jdk; break }
+                }
             }
             $mvnFound = Get-Command mvn -ErrorAction SilentlyContinue
             $mvnExe = if ($mvnFound) { 'mvn' } else {
-                $bundled = 'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3\bin\mvn.cmd'
-                if (Test-Path $bundled) { $bundled } else { $null }
+                $mvnExe = $null
+                foreach ($bundled in @(
+                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3\bin\mvn.cmd',
+                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3\plugins\maven\lib\maven3\bin\mvn.cmd'
+                )) {
+                    if (Test-Path $bundled) { $mvnExe = $bundled; break }
+                }
+                $mvnExe
             }
             if (-not $mvnExe) {
                 Write-Host 'LỖI: Không tìm thấy mvn.' -ForegroundColor Red
             } else {
-                Write-Host 'Đang khởi động Dashboard (case / báo cáo / locator)...' -ForegroundColor Green
+                Write-Host 'Đang khởi động Dashboard (báo cáo / case / sinh TC / locator)...' -ForegroundColor Green
                 Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$mvnExe`" exec:java" -WorkingDirectory $root
                 Write-Host 'Sẽ tự mở http://localhost:8787 khi Maven khởi động xong (vài giây).' -ForegroundColor DarkCyan
+                Write-Host 'Tab «Sinh test case»: đề xuất theo từng màn → thêm vào Test case → Lưu → Chạy.' -ForegroundColor DarkCyan
                 Write-Host 'Đóng cửa sổ CMD đó để dừng Dashboard.' -ForegroundColor DarkGray
             }
             $shouldRun = $false
