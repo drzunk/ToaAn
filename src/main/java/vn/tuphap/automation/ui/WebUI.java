@@ -1922,6 +1922,31 @@ public class WebUI {
         setText(by, value, elementName);
     }
 
+    /**
+     * Field <b>bắt buộc</b>: giá trị trống vẫn bỏ qua (phục vụ ca âm “để trống”); còn lại nếu ô
+     * ẩn/khóa thì <b>fail sớm</b> kèm tên field — không soft-skip như {@link #setTextWithCheck}.
+     */
+    public void setTextRequired(By by, String value, String elementName) {
+        if (value == null || value.trim().isEmpty()) {
+            logUi(" ⏩ Bỏ qua (bắt buộc, giá trị trống): [" + elementName + "].");
+            TestActionLog.boQua(elementName, "Giá trị trống — không nhập (field bắt buộc / ca âm để trống)");
+            return;
+        }
+        if (!existsNow(by)) {
+            throw new IllegalStateException(
+                    "Field bắt buộc không có trên giao diện: [" + elementName + "] — không soft-skip.");
+        }
+        if (!isElementEnabledNow(by)) {
+            throw new IllegalStateException(
+                    "Field bắt buộc đang bị khóa: [" + elementName + "] — không soft-skip.");
+        }
+        if (inputValueMatches(by, value)) {
+            logUi(" ⏩ [" + elementName + "] đã đúng — không điền lại.");
+            return;
+        }
+        setText(by, value, elementName);
+    }
+
     public void setTextForMaskedInput(By by, String value, String elementName) {
         if (value == null || value.trim().isEmpty()) {
             logUi(" ⏩ Bỏ qua: [" + elementName + "] do dữ liệu trống.");
@@ -1953,6 +1978,42 @@ public class WebUI {
             verifyFilledValue(by, value, elementName);
         } catch (Exception e) {
             throw new RuntimeException("❌ Lỗi: Không thể nhập dữ liệu vào ô [" + elementName + "]");
+        }
+    }
+
+    /**
+     * Masked input bắt buộc — cùng quy ước {@link #setTextRequired}: trống = bỏ qua; ẩn/khóa = fail.
+     */
+    public void setTextForMaskedInputRequired(By by, String value, String elementName) {
+        if (value == null || value.trim().isEmpty()) {
+            logUi(" ⏩ Bỏ qua (bắt buộc, giá trị trống): [" + elementName + "].");
+            TestActionLog.boQua(elementName, "Giá trị trống — không nhập (field bắt buộc / ca âm để trống)");
+            return;
+        }
+        if (!existsNow(by)) {
+            throw new IllegalStateException(
+                    "Field bắt buộc không có trên giao diện: [" + elementName + "] — không soft-skip.");
+        }
+        if (!isElementEnabledNow(by)) {
+            throw new IllegalStateException(
+                    "Field bắt buộc đang bị khóa: [" + elementName + "] — không soft-skip.");
+        }
+        if (inputValueMatches(by, value)) {
+            logUi(" ⏩ [" + elementName + "] đã đúng — không điền lại.");
+            return;
+        }
+        try {
+            WebElement element = waitForDisplayedEnabled(by, WaitConfig.FIELD);
+            scrollToElement(element);
+            element.sendKeys(Keys.chord(Keys.CONTROL, "a"), Keys.DELETE);
+            element.sendKeys(value);
+            logUi(" ➔ Điền (định dạng đặc biệt): '" + value + "' vào [" + elementName + "]");
+            TestActionLog.dienMask(elementName, value);
+            verifyFilledValue(by, value, elementName);
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("❌ Lỗi: Không thể nhập dữ liệu vào ô bắt buộc [" + elementName + "]", e);
         }
     }
 

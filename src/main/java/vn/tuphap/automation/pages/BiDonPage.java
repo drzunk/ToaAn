@@ -868,12 +868,12 @@ public class BiDonPage {
         // UI: Họ tên → Ngày/Năm sinh → Giới tính → CCCD → Địa chỉ nơi cư trú → Nơi ở hiện tại → Nghề nghiệp → SĐT → Email
         dienSinhBiDonCaNhan(index, loaiDon, namSinh, who);
         chonGioiTinhBiDon(index, loaiDon, gioiTinh, who);
-        webUI.setTextWithCheck(getTxtCCCD(index, loaiDon), cccd, "Ô nhập [Số CCCD / Hộ chiếu] (" + who + ")");
+        webUI.setTextRequired(getTxtCCCD(index, loaiDon), cccd, "Ô nhập [Số CCCD / Hộ chiếu] (" + who + ")");
         dienDiaChiBiDon(loaiDon, index, diaChi, false, who);
         dienNoiOHienTaiBiDon(loaiDon, index, noiOHienTai, who);
         webUI.setTextWithCheck(getTxtNgheNghiep(index, loaiDon), ngheNghiep,
                 "Ô nhập [Nghề nghiệp, nơi làm việc] (" + who + ")");
-        webUI.setTextWithCheck(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại] (" + who + ")");
+        webUI.setTextRequired(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại] (" + who + ")");
         webUI.setTextWithCheck(getTxtEmail(index, loaiDon), email, "Ô nhập [Địa chỉ thư điện tử] (" + who + ")");
     }
 
@@ -919,11 +919,11 @@ public class BiDonPage {
             webUI.selectDropdownWithCheck(getBtnLoaiHinhToChuc(index, loaiDon), LIST_OPTIONS_LOAI_HINH, loaiHinh,
                     "Dropdown [Loại hình] (" + who + ")");
         }
-        webUI.setTextWithCheck(getTxtMaSoThue(index, loaiDon), mst, "Ô nhập [Mã số thuế] (" + who + ")");
+        webUI.setTextRequired(getTxtMaSoThue(index, loaiDon), mst, "Ô nhập [Mã số thuế] (" + who + ")");
         dienDiaChiBiDon(loaiDon, index, diaChi, true, who);
         webUI.setTextWithCheck(getTxtNguoiDaiDien(index, loaiDon), nguoiDaiDien, "Ô nhập [Người đại diện] (" + who + ")");
         webUI.setTextWithCheck(getTxtChucVu(index, loaiDon), chucVu, "Ô nhập [Chức vụ] (" + who + ")");
-        webUI.setTextWithCheck(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại tổ chức] (" + who + ")");
+        webUI.setTextRequired(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại tổ chức] (" + who + ")");
         webUI.setTextWithCheck(getTxtEmail(index, loaiDon), email, "Ô nhập [Email tổ chức] (" + who + ")");
     }
 

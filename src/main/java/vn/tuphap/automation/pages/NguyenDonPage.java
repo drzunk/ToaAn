@@ -327,21 +327,21 @@ public class NguyenDonPage {
     }
 
     public void dienThongTinCaNhan(String hoTen, String ngaySinh, String gioiTinh, String cccd, String ngayCap, String noiCap) {
-        webUI.setTextWithCheck(txtHoTen, hoTen, "Ô nhập [Họ và tên]");
-        webUI.setTextForMaskedInput(txtNgaySinh, ngaySinh, "Ô nhập [Ngày sinh]");
+        webUI.setTextRequired(txtHoTen, hoTen, "Ô nhập [Họ và tên]");
+        webUI.setTextForMaskedInputRequired(txtNgaySinh, ngaySinh, "Ô nhập [Ngày sinh]");
 
         if (gioiTinh != null && !gioiTinh.isEmpty()) {
             webUI.clickChoiceChipIfNeeded(getGioiTinh(gioiTinh), "Thẻ Giới tính: [" + gioiTinh + "]");
         }
 
-        webUI.setTextWithCheck(txtCCCD, cccd, "Ô nhập [Số CCCD / CMND]");
-        webUI.setTextForMaskedInput(txtNgayCapCCCD, ngayCap, "Ô nhập [Ngày cấp CCCD]");
+        webUI.setTextRequired(txtCCCD, cccd, "Ô nhập [Số CCCD / CMND]");
+        webUI.setTextForMaskedInputRequired(txtNgayCapCCCD, ngayCap, "Ô nhập [Ngày cấp CCCD]");
         webUI.setTextWithCheck(txtNoiCapCCCD, noiCap, "Ô nhập [Nơi cấp CCCD]");
     }
 
     public void dienThongTinLienHe(String thuongTru, String lienLac, String sdt, String email) {
         hoanThienDiaChiNguyenDon(thuongTru, lienLac);
-        webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
+        webUI.setTextRequired(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
         webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
     }
 
@@ -534,13 +534,13 @@ public class NguyenDonPage {
                                    String nguoiDaiDien, String chucVu, String sdt, String email,
                                    String repNgaySinh, String repGioiTinh, String repCccd,
                                    String repNgayCap, String noiCap) {
-        webUI.setTextWithCheck(txtTenToChuc, tenToChuc, "Ô nhập [Tên tổ chức / doanh nghiệp]");
+        webUI.setTextRequired(txtTenToChuc, tenToChuc, "Ô nhập [Tên tổ chức / doanh nghiệp]");
         webUI.selectDropdownWithCheck(btnLoaiHinhToChuc, listOptionsLoaiHinh, loaiHinh, "Dropdown [Loại hình tổ chức]");
-        webUI.setTextWithCheck(txtMaSoThue, mst, "Ô nhập [Mã số thuế / MSDN]");
+        webUI.setTextRequired(txtMaSoThue, mst, "Ô nhập [Mã số thuế / MSDN]");
         dienDiaChiToChuc(diaChi);
         dienNguoiDaiDienToChuc(nguoiDaiDien, repNgaySinh, repGioiTinh, repCccd, repNgayCap, noiCap,
                 chucVu, diaChi, email);
-        webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại tổ chức]");
+        webUI.setTextRequired(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại tổ chức]");
     }
 
     private void dienDiaChiToChuc(String diaChi) {

@@ -98,6 +98,28 @@ public class XemLaiGuiDonPage {
         waitXemTruocDonContentReady();
     }
 
+    /** Marker bước 6 đã hiện (không chờ thêm) — dùng assert mỏng sau khi flow báo đến Xem lại. */
+    public boolean isOnReviewScreen() {
+        return webUI.existsNow(stepReadyMarker);
+    }
+
+    /**
+     * Tín hiệu ổn định trên card Xem lại: chuỗi {@code needle} xuất hiện trong vùng review
+     * (không {@code getText()} cả card có iframe PDF). Dùng cho loại đơn / nhãn mục.
+     */
+    public boolean reviewContainsStableSignal(String needle) {
+        if (needle == null || needle.isBlank()) {
+            return true;
+        }
+        String safe = needle.replace("'", "").trim();
+        if (safe.isEmpty()) {
+            return true;
+        }
+        By by = By.xpath("(" + REVIEW_CARD + " | //h2[contains(., 'Xem lại')]/parent::div)"
+                + "//*[contains(normalize-space(.), '" + safe + "')]");
+        return webUI.existsNow(by);
+    }
+
     /**
      * Chờ card Xem trước đơn render nội dung eform/PDF (dữ liệu đã nhập ở bước 4).
      * Chỉ sau khi preview sẵn sàng mới tick xác nhận / Gửi đơn.

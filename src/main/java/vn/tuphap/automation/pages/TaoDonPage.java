@@ -99,7 +99,7 @@ public class TaoDonPage {
         webUI.selectToaAnWithCheck(btnDropdownToaAn, inputSearchToaAn, listOptionsToaAn, toaAn,
                 "Dropdown [Tòa án nhận đơn]");
 
-        webUI.setTextWithCheck(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
+        webUI.setTextRequired(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
     }
 
     /** Điền phần còn lại bước 1 khi loại đơn + loại việc đã chọn sẵn (vd. sau scrape catalog). */
@@ -108,7 +108,7 @@ public class TaoDonPage {
         webUI.sleepMillis(WaitConfig.SETTLE_MS);
         webUI.selectToaAnWithCheck(btnDropdownToaAn, inputSearchToaAn, listOptionsToaAn, toaAn,
                 "Dropdown [Tòa án nhận đơn]");
-        webUI.setTextWithCheck(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
+        webUI.setTextRequired(txtTomTat, tomTat, "Ô nhập [Tóm tắt sơ bộ yêu cầu]");
     }
 
     public void waitForBuoc1Ready() {

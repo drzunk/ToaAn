@@ -146,6 +146,12 @@ public class MasterExecutionTest extends TaoDonBaseTest {
             }
 
             Assert.assertNotNull(review, "untilStep=6 phải đến màn Xem lại");
+            Assert.assertTrue(review.isOnReviewScreen(),
+                    "Marker màn Xem lại / Gửi đơn không hiện sau untilStep=6");
+            if (s.loaiDon() != null && !s.loaiDon().isBlank()) {
+                Assert.assertTrue(review.reviewContainsStableSignal(s.loaiDon()),
+                        "Màn Xem lại không thấy tín hiệu loại đơn: " + s.loaiDon());
+            }
             BaoCao.logPass("Đã điền bước 1→5 và đến màn Xem lại.");
 
             if (!RunFlowConfig.submit()) {

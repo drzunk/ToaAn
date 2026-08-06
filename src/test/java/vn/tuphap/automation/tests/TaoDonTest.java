@@ -84,6 +84,12 @@ public class TaoDonTest extends TaoDonBaseTest {
         TaoDonFlow flow = new TaoDonFlow(getDriver(), getWebUI());
 
         XemLaiGuiDonPage review = flow.denManXemLai(s);
+        Assert.assertTrue(review.isOnReviewScreen(),
+                "Marker màn Xem lại / Gửi đơn không hiện sau bước 1→5");
+        if (s.loaiDon() != null && !s.loaiDon().isBlank()) {
+            Assert.assertTrue(review.reviewContainsStableSignal(s.loaiDon()),
+                    "Màn Xem lại không thấy tín hiệu loại đơn: " + s.loaiDon());
+        }
         BaoCao.logPass("Đã điền biểu mẫu bước 1→5 và đến màn Xem lại.");
 
         long t = BaoCao.markStepStart();
