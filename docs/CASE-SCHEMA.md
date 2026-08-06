@@ -42,6 +42,29 @@ Validate nghiêm lúc **Lưu** / nạp file (`CaseFileSource`) — sai catalog h
 - Merge: tick → **Thêm vào danh sách** (bỏ trùng `ghiChu`) → **Lưu tất cả**; hoặc **Chạy riêng màn này** (ghi đè file bằng đúng nhóm đã tick).
 - Nếu có CSV `test-output/discovery-sweep/field-discovery_*.csv`, generator gắn `thongBaoMongDoi` khi discovery từng thấy hệ thống chặn.
 
+### Field ca âm lấy từ đâu (`FieldCoverageCatalog`)
+
+Generator không còn giữ danh sách field cứng trong từng màn. Field ca âm là giao của ba nguồn:
+
+1. whitelist `DataGenerator.TRUONG_LOI_HOP_LE` — tên field hợp lệ của schema `CaseRow`;
+2. `DataGenerator.tryFieldOverride` — framework thật sự ép được giá trị lỗi vào kịch bản (ép không được thì field bị bỏ, nêu trong `boQua`);
+3. CSV discovery mới nhất nếu có — chỉ để gắn `thongBaoMongDoi` và đánh dấu field từng bị chặn, **không** thu hẹp danh sách.
+
+Mỗi field gắn một biến thể form để case sinh ra đúng ngữ cảnh:
+
+| Bước | Biến thể | Field đặc trưng |
+| --- | --- | --- |
+| 2 | `B2_CA_NHAN` | CCCD, Họ tên, Ngày sinh, Ngày cấp, Giới tính, SĐT, Email, Địa chỉ thường trú |
+| 2 | `B2_TO_CHUC` | Mã số thuế |
+| 3 | `B3_CA_NHAN` | CCCD/Họ tên/Nghề nghiệp/Nơi ở hiện tại (Bị đơn) |
+| 3 | `B3_TO_CHUC_PHA_SAN` | Mã số thuế (Bị đơn) — luồng Phá sản là chỗ UI bảo đảm bị đơn là tổ chức |
+| 4 | `B4_TEXTAREA` | Thời điểm phát sinh, Giá trị tranh chấp, Tóm tắt quá trình, Yêu cầu cụ thể, Căn cứ pháp lý |
+| 4 | `B4_EFORM` | (trống) — eform có schema động trong iframe, không gắn override Java |
+
+Vì vậy ca âm bước 4 chỉ sinh cho loại việc dùng textarea; loại việc eform chỉ có ca dương.
+
+`GET /api/generate-cases` trả thêm `fieldCoverage` (`tongFieldUngVien`, `fieldDaCoCaAm`, `phanTramPhu`, `fieldDiscoveryDaThay`, `fieldChuaPhu`); tab Sinh test case hiện dòng `phủ field ca âm: x/y (z%)`. Muốn có `thongBaoMongDoi` thật thì chạy `mvn -Pdiscovery test` trước khi Sinh.
+
 ### Ca đăng nhập (màn Login trên tab Sinh test case)
 
 - **1 ca dương** (`GEN_Login_Smoke`, `untilStep=0`): có `CaseRow`, thêm vào `local-cases` và chạy qua master như case wizard.

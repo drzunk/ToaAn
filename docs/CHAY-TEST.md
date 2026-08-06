@@ -55,8 +55,14 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 4. Các màn khác: chọn case → **Thêm case đã chọn vào danh sách** hoặc **Chạy riêng màn này**.
 5. Tab **Test case** → **Lưu tất cả xuống file** → **Chạy** (wizard / ca dương login qua master).
 
-Đề xuất lấy từ `master-data.properties` + whitelist ca âm. Nếu đã chạy `mvn -Pdiscovery test`,
-thông báo mong đợi được gắn từ CSV mới nhất trong `test-output/discovery-sweep/`.
+Đề xuất lấy từ `master-data.properties` + bản đồ field ca âm (`FieldCoverageCatalog`: whitelist
+`TRUONG_LOI_HOP_LE` ∩ field `tryFieldOverride` ép được, gắn theo biến thể CN/TC/Phá sản và
+textarea/eform — xem `docs/CASE-SCHEMA.md`).
+
+**Muốn phủ field tốt hơn thì chạy `mvn -Pdiscovery test` trước khi Sinh:** discovery ghi CSV vào
+`test-output/discovery-sweep/`, generator đọc CSV mới nhất để gắn `thongBaoMongDoi` thật (thay vì
+để trống) và đánh dấu field từng bị hệ thống chặn. Dòng meta trên tab hiện `phủ field ca âm: x/y (z%)`
+kèm danh sách field chưa có ca âm.
 
 ---
 
