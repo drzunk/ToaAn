@@ -744,9 +744,14 @@
           + ' ca âm (suite LoginTest riêng)';
       }
       var csv = d.discoveryCsv ? (' · CSV: ' + d.discoveryCsv) : '';
+      var fc = d.fieldCoverage;
+      var phu = fc ? (' · phủ field ca âm: ' + fc.fieldDaCoCaAm + '/' + fc.tongFieldUngVien
+        + ' (' + fc.phanTramPhu + '%)') : '';
       el('gen-tong').textContent = 'Tổng ' + (d.tongDeXuat || 0) + ' đề xuất / '
-        + ((d.screens || []).length) + ' màn' + csv;
-      el('gen-ghichu').textContent = d.ghiChu || '';
+        + ((d.screens || []).length) + ' màn' + phu + csv;
+      var thieu = (fc && fc.fieldChuaPhu && fc.fieldChuaPhu.length)
+        ? ' Field chưa có ca âm: ' + fc.fieldChuaPhu.join(', ') + '.' : '';
+      el('gen-ghichu').textContent = (d.ghiChu || '') + thieu;
       baoTinSinh('ok', 'Đã sinh ' + (d.tongDeXuat || 0) + ' đề xuất theo màn hình.');
     }).catch(function(e){
       // "Failed to fetch" = trình duyệt không nối được máy chủ, hầu như luôn là server đã tắt

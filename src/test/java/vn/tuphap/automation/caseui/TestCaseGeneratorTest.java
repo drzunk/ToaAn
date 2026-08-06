@@ -11,12 +11,15 @@ import java.util.Set;
 
 /**
  * Khóa hợp đồng đề xuất: đủ màn, id không trùng, ca âm nằm trong whitelist, parse CSV discovery.
+ * <p>
+ * Dùng catalog fallback thay cho {@code generate()} không tham số: máy đã chạy {@code -Pdiscovery}
+ * và máy chưa chạy phải cho cùng kết quả (CSV thật nằm ngoài repo).
  */
 public class TestCaseGeneratorTest {
 
     @Test(groups = "unit", description = "Sinh đủ màn Login→Bước 6, không trùng id ghi chú")
     public void generateDuManVaKhongTrungId() {
-        TestCaseGenerator.KetQua kq = TestCaseGenerator.generate();
+        TestCaseGenerator.KetQua kq = TestCaseGenerator.generate(FieldCoverageCatalog.fallback());
         Assert.assertTrue(kq.tongDeXuat() >= 15, "Quá ít đề xuất: " + kq.tongDeXuat());
         Assert.assertEquals(kq.screens().size(), 8, "Cần 8 nhóm màn (login, dashboard, bước 1–6)");
 
@@ -49,7 +52,8 @@ public class TestCaseGeneratorTest {
 
     @Test(groups = "unit", description = "Màn login: 1 dương master + 3 âm suite LoginTest")
     public void manLoginCoDuongVaAm() {
-        TestCaseGenerator.ManHinh login = TestCaseGenerator.generate().screens().get(0);
+        TestCaseGenerator.ManHinh login =
+                TestCaseGenerator.generate(FieldCoverageCatalog.fallback()).screens().get(0);
         Assert.assertEquals(login.id(), "login");
         Assert.assertEquals(login.cases().size(), 4);
         long duong = login.cases().stream().filter(c -> "duong".equals(c.loai())).count();

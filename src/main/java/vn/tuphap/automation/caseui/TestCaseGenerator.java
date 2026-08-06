@@ -6,18 +6,13 @@ import vn.tuphap.automation.data.DataGenerator;
 import vn.tuphap.automation.data.MasterDataCatalog;
 import vn.tuphap.automation.report.TaoDonReportBuilder;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.Set;
 
 /**
  * Sinh đề xuất test case theo từng màn hình luồng nộp đơn — nguồn catalog
@@ -68,15 +63,16 @@ public final class TestCaseGenerator {
             List<ManHinh> screens,
             int tongDeXuat,
             String discoveryCsv,
-            String ghiChu
+            String ghiChu,
+            FieldCoverageCatalog.BaoCao fieldCoverage
     ) {
     }
 
     public static KetQua generate() {
-        Map<String, String> thongBaoTuDiscovery = docThongBaoTuDiscoveryMoiNhat();
-        String csvPath = thongBaoTuDiscovery.isEmpty() ? "" : thongBaoTuDiscovery.getOrDefault("_file", "");
-        thongBaoTuDiscovery.remove("_file");
+        return generate(FieldCoverageCatalog.loadLatest(DISCOVERY_DIR));
+    }
 
+    static KetQua generate(FieldCoverageCatalog fieldCatalog) {
         String loaiDonMacDinh = first(MasterDataCatalog.getLoaiDon(), "Dân sự");
         String loaiViecMacDinh = firstLoaiViec(loaiDonMacDinh, "Hợp đồng dân sự");
         String toaAnMacDinh = first(MasterDataCatalog.getToaAn(), "");
@@ -88,11 +84,11 @@ public final class TestCaseGenerator {
         screens.add(manDashboard());
         screens.add(manBuoc1(loaiDonMacDinh, toaAnMacDinh, chuTheCn));
         screens.add(manBuoc2(loaiDonMacDinh, loaiViecMacDinh, toaAnMacDinh, chuTheCn, chuTheTc,
-                thongBaoTuDiscovery));
+                fieldCatalog));
         screens.add(manBuoc3(loaiDonMacDinh, loaiViecMacDinh, toaAnMacDinh, chuTheCn,
-                thongBaoTuDiscovery));
+                fieldCatalog));
         screens.add(manBuoc4(loaiDonMacDinh, loaiViecMacDinh, toaAnMacDinh, chuTheCn,
-                thongBaoTuDiscovery));
+                fieldCatalog));
         screens.add(manBuoc5(loaiDonMacDinh, loaiViecMacDinh, toaAnMacDinh, chuTheCn));
         screens.add(manBuoc6(loaiDonMacDinh, loaiViecMacDinh, toaAnMacDinh, chuTheCn, chuTheTc));
 
@@ -100,10 +96,24 @@ public final class TestCaseGenerator {
         for (ManHinh m : screens) {
             tong += m.cases().size();
         }
-        String ghiChu = csvPath.isBlank()
-                ? "Chưa có CSV discovery — thông báo mong đợi của ca âm để trống (chấp nhận mọi thông báo khi chạy)."
-                : "Đã gắn thông báo mong đợi từ " + csvPath + " khi discovery từng ghi nhận hệ thống chặn.";
-        return new KetQua(screens, tong, csvPath, ghiChu);
+        Set<String> generatedFields = new LinkedHashSet<>();
+        for (ManHinh screen : screens) {
+            for (DeXuat deXuat : screen.cases()) {
+                if (deXuat.caseRow() != null && deXuat.caseRow().truongLoi() != null
+                        && !deXuat.caseRow().truongLoi().isBlank()) {
+                    generatedFields.add(deXuat.caseRow().truongLoi());
+                }
+            }
+        }
+        FieldCoverageCatalog.BaoCao coverage = fieldCatalog.baoCao(generatedFields);
+        String ghiChu = fieldCatalog.discoveryCsv().isBlank()
+                ? "Chưa có CSV discovery — dùng whitelist ∩ field override áp dụng được."
+                : "Ưu tiên field/thông báo discovery từ " + fieldCatalog.discoveryCsv() + ".";
+        if (!fieldCatalog.boQua().isEmpty()) {
+            ghiChu += " Bỏ qua " + fieldCatalog.boQua().size()
+                    + " field/ngữ cảnh không ép được.";
+        }
+        return new KetQua(screens, tong, fieldCatalog.discoveryCsv(), ghiChu, coverage);
     }
 
     private static ManHinh manLogin() {
@@ -166,7 +176,7 @@ public final class TestCaseGenerator {
 
     private static ManHinh manBuoc2(String loaiDon, String loaiViec, String toaAn,
                                     String chuTheCn, String chuTheTc,
-                                    Map<String, String> thongBao) {
+                                    FieldCoverageCatalog fieldCatalog) {
         List<DeXuat> cases = new ArrayList<>();
         cases.add(deXuat("b2-cn", "duong", "Nguyên đơn Cá nhân — điền đủ đến hết bước 2", true,
                 row(true, loaiDon, loaiViec, chuTheCn, "", toaAn, 1,
@@ -185,16 +195,15 @@ public final class TestCaseGenerator {
                                 "GEN_B2_PS_" + slug(tuCach), "", "", "", 2, false)));
             }
         }
-        themCaAm(cases, 2, loaiDon, loaiViec, toaAn, chuTheCn, chuTheTc, thongBao,
-                List.of("Số điện thoại", "Email", "CCCD", "Họ tên", "Ngày sinh", "Ngày cấp", "Mã số thuế"));
+        themCaAm(cases, fieldCatalog.fieldsForStep(2), toaAn);
         return new ManHinh("buoc2", 2,
                 "Bước 2 — " + TaoDonReportBuilder.tenBuocDayDu(2),
-                "Ca dương CN/TC (+ tư cách Phá sản) và ca âm field nguyên đơn.",
+                "Ca dương CN/TC (+ tư cách Phá sản); ca âm theo bản đồ field CN/TC.",
                 cases);
     }
 
     private static ManHinh manBuoc3(String loaiDon, String loaiViec, String toaAn, String chuTheCn,
-                                    Map<String, String> thongBao) {
+                                    FieldCoverageCatalog fieldCatalog) {
         List<DeXuat> cases = new ArrayList<>();
         cases.add(deXuat("b3-1bd", "duong", "1 bị đơn — dừng sau bước 3", true,
                 row(true, loaiDon, loaiViec, chuTheCn, "", toaAn, 1,
@@ -208,35 +217,41 @@ public final class TestCaseGenerator {
                 row(true, loaiDon, loaiViec, chuTheCn, "", toaAn, 1,
                         false, false, true, null,
                         "GEN_B3_NguoiLienQuan", "", "", "", 3, false)));
-        themCaAm(cases, 3, loaiDon, loaiViec, toaAn, chuTheCn, chonChuThe(true), thongBao,
-                List.of("Số điện thoại (Bị đơn)", "Email (Bị đơn)", "CCCD (Bị đơn)",
-                        "Họ tên (Bị đơn)", "Mã số thuế (Bị đơn)"));
+        if (containsLoaiDon("Phá sản")) {
+            cases.add(deXuat("b3-ps-tochuc", "duong",
+                    "Phá sản — bị đơn là Tổ chức/Doanh nghiệp theo UI", false,
+                    row(true, "Phá sản", "", chuTheCn, "", toaAn, 1,
+                            false, false, false, null,
+                            "GEN_B3_PS_BiDonToChuc", "", "", "", 3, false)));
+        }
+        themCaAm(cases, fieldCatalog.fieldsForStep(3), toaAn);
         return new ManHinh("buoc3", 3,
                 "Bước 3 — " + TaoDonReportBuilder.tenBuocDayDu(3),
-                "Số bị đơn, NLQ, và ca âm field bị đơn.",
+                "1/2 bị đơn, NLQ; ca âm tách đúng bị đơn Cá nhân và Tổ chức/Phá sản.",
                 cases);
     }
 
     private static ManHinh manBuoc4(String loaiDon, String loaiViec, String toaAn, String chuTheCn,
-                                    Map<String, String> thongBao) {
+                                    FieldCoverageCatalog fieldCatalog) {
         List<DeXuat> cases = new ArrayList<>();
-        // Eform Dân sự / Bồi thường — khớp smoke DataGenerator.
+        // Hai hình form được tách rõ: Bồi thường là eform đã biết; Hợp đồng là textarea legacy.
         String eformViec = firstLoaiViec("Dân sự", "Bồi thường thiệt hại ngoài hợp đồng");
+        String textareaViec = firstLoaiViecKhac("Dân sự", eformViec, "Hợp đồng dân sự");
         cases.add(deXuat("b4-eform", "duong",
                 "Nội dung eform (Dân sự / " + eformViec + ") — untilStep=4", true,
                 row(true, "Dân sự", eformViec, chuTheCn, "", toaAn, 1,
                         false, false, false, null,
                         "GEN_B4_Eform", "", "", "", 4, false)));
         cases.add(deXuat("b4-textarea", "duong",
-                "Loại việc khác — form textarea / upload tùy UI", false,
-                row(true, loaiDon, loaiViec, chuTheCn, "", toaAn, 1,
+                "Form textarea legacy (Dân sự / " + textareaViec + ")", true,
+                row(true, "Dân sự", textareaViec, chuTheCn, "", toaAn, 1,
                         false, false, false, null,
-                        "GEN_B4_NoiDung", "", "", "", 4, false)));
-        themCaAm(cases, 4, loaiDon, loaiViec, toaAn, chuTheCn, chuTheCn, thongBao,
-                List.of("Giá trị tranh chấp", "Tóm tắt quá trình", "Yêu cầu cụ thể", "Căn cứ pháp lý"));
+                        "GEN_B4_Textarea", "", "", "", 4, false)));
+        themCaAm(cases, fieldCatalog.fieldsForVariant(
+                FieldCoverageCatalog.Variant.B4_TEXTAREA), toaAn);
         return new ManHinh("buoc4", 4,
                 "Bước 4 — " + TaoDonReportBuilder.tenBuocDayDu(4),
-                "3 mode UI (eform / upload / textarea) — đề xuất eform smoke + ca âm nội dung.",
+                "Eform và textarea là 2 hình riêng; ca âm field cố định chỉ gắn textarea.",
                 cases);
     }
 
@@ -278,67 +293,25 @@ public final class TestCaseGenerator {
                 cases);
     }
 
-    private static void themCaAm(List<DeXuat> cases, int buoc, String loaiDon, String loaiViec,
-                                  String toaAn, String chuTheCn, String chuTheTc,
-                                  Map<String, String> thongBao, List<String> truongs) {
-        for (String truong : truongs) {
-            String tenHopLe = khopTruongLoi(truong);
-            if (tenHopLe == null) {
-                continue;
-            }
-            String lower = tenHopLe.toLowerCase(Locale.ROOT);
-            boolean mst = lower.contains("mã số thuế") || lower.contains("ma so thue");
-            boolean biDon = lower.contains("bị đơn") || lower.contains("bi don");
-            String chuThe = mst && !biDon ? chuTheTc : chuTheCn;
-            String ld = mst && biDon ? "Phá sản" : loaiDon;
-            String lv = "Phá sản".equals(ld) ? "" : loaiViec;
-            String giaTri = goiYGiaTriLoi(tenHopLe);
-            String tb = thongBao.getOrDefault(khoaDiscovery(tenHopLe, giaTri),
-                    thongBao.getOrDefault(tenHopLe, ""));
-            cases.add(deXuat("am-b" + buoc + "-" + slug(tenHopLe), "am",
-                    "Ca âm: ép «" + tenHopLe + "» = «" + (giaTri.isEmpty() ? "(trống)" : giaTri) + "»",
+    private static void themCaAm(List<DeXuat> cases,
+                                 List<FieldCoverageCatalog.FieldCandidate> candidates,
+                                 String toaAn) {
+        for (FieldCoverageCatalog.FieldCandidate candidate : candidates) {
+            FieldCoverageCatalog.Context context = candidate.context();
+            String marker = candidate.discoveryDaChan()
+                    ? " · discovery đã thấy hệ thống chặn" : "";
+            cases.add(deXuat("am-b" + candidate.buoc() + "-" + slug(candidate.field()), "am",
+                    "Ca âm [" + context.variant().moTa() + "]: ép «" + candidate.field()
+                            + "» = «" + (candidate.giaTriLoi().isEmpty()
+                            ? "(trống)" : candidate.giaTriLoi()) + "»" + marker,
                     false,
-                    row(false, ld, lv, chuThe, "", toaAn, 1,
+                    row(false, context.loaiDon(), context.loaiViec(), context.chuThe(),
+                            context.tuCachNopDon(), toaAn, 1,
                             false, false, false, null,
-                            "GEN_AM_B" + buoc + "_" + slug(tenHopLe),
-                            tenHopLe, giaTri, tb, buoc, false)));
+                            "GEN_AM_B" + candidate.buoc() + "_" + slug(candidate.field()),
+                            candidate.field(), candidate.giaTriLoi(),
+                            candidate.thongBaoMongDoi(), candidate.buoc(), false)));
         }
-    }
-
-    /** Khớp tên field với whitelist {@link DataGenerator#TRUONG_LOI_HOP_LE}; null nếu không có. */
-    private static String khopTruongLoi(String truong) {
-        for (String t : DataGenerator.TRUONG_LOI_HOP_LE) {
-            if (t.equalsIgnoreCase(truong)) {
-                return t;
-            }
-        }
-        return null;
-    }
-
-    private static String goiYGiaTriLoi(String truong) {
-        String n = truong.toLowerCase(Locale.ROOT);
-        if (n.contains("email")) {
-            return "khong-phai-email";
-        }
-        if (n.contains("điện thoại") || n.contains("dien thoai")) {
-            return "abc";
-        }
-        if (n.contains("cccd")) {
-            return "123";
-        }
-        if (n.contains("ngày") || n.contains("ngay")) {
-            return "31/13/2024";
-        }
-        if (n.contains("giá trị") || n.contains("gia tri")) {
-            return "-1000000";
-        }
-        if (n.contains("mã số") || n.contains("ma so")) {
-            return "abc";
-        }
-        if (n.contains("họ tên") || n.contains("ho ten")) {
-            return "";
-        }
-        return "";
     }
 
     private static DeXuat deXuat(String id, String loai, String lyDo, boolean chon, CaseRow row) {
@@ -410,6 +383,29 @@ public final class TestCaseGenerator {
         }
     }
 
+    private static String firstLoaiViecKhac(String loaiDon, String excluded, String preferred) {
+        try {
+            String[] ds = MasterDataCatalog.getLoaiViecByLoaiDon(loaiDon);
+            if (preferred != null && !preferred.isBlank()) {
+                for (String value : ds) {
+                    if (!value.equalsIgnoreCase(excluded)
+                            && value.toLowerCase(Locale.ROOT)
+                            .contains(preferred.toLowerCase(Locale.ROOT))) {
+                        return value;
+                    }
+                }
+            }
+            for (String value : ds) {
+                if (!value.equalsIgnoreCase(excluded)) {
+                    return value;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Catalog thiếu thì giữ preferred để generator vẫn trả đề xuất đọc được.
+        }
+        return preferred == null ? "" : preferred;
+    }
+
     private static String slug(String s) {
         String n = java.text.Normalizer.normalize(s == null ? "" : s, java.text.Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "")
@@ -422,102 +418,8 @@ public final class TestCaseGenerator {
         return v == null ? "" : v;
     }
 
-    /**
-     * Đọc CSV discovery mới nhất → map {@code trường|giá trị} hoặc {@code trường} → thông báo
-     * khi cột "Bị chặn"=Có.
-     */
-    static Map<String, String> docThongBaoTuDiscoveryMoiNhat() {
-        Map<String, String> out = new LinkedHashMap<>();
-        Optional<Path> newest = timCsvDiscoveryMoiNhat();
-        if (newest.isEmpty()) {
-            return out;
-        }
-        Path file = newest.get();
-        out.put("_file", file.toString().replace('\\', '/'));
-        try {
-            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-            if (lines.isEmpty()) {
-                return out;
-            }
-            // Bỏ BOM
-            String header = lines.get(0).replace("\uFEFF", "");
-            for (int i = 1; i < lines.size(); i++) {
-                List<String> cols = parseCsvLine(lines.get(i));
-                if (cols.size() < 7) {
-                    continue;
-                }
-                String truong = cols.get(0).trim();
-                String giaTri = cols.get(2).trim();
-                String biChan = cols.get(5).trim();
-                String thongBao = cols.get(6).trim();
-                if (!"Có".equalsIgnoreCase(biChan) || thongBao.isBlank()
-                        || thongBao.toUpperCase(Locale.ROOT).startsWith("LỖI HẠ TẦNG")) {
-                    continue;
-                }
-                out.putIfAbsent(khoaDiscovery(truong, giaTri), thongBao);
-                out.putIfAbsent(truong, thongBao);
-            }
-        } catch (IOException ignored) {
-            // Không có CSV / đọc lỗi — generator vẫn chạy, chỉ thiếu thongBaoMongDoi.
-        }
-        return out;
-    }
-
-    private static Optional<Path> timCsvDiscoveryMoiNhat() {
-        if (!Files.isDirectory(DISCOVERY_DIR)) {
-            return Optional.empty();
-        }
-        Path best = null;
-        long bestMtime = Long.MIN_VALUE;
-        try (DirectoryStream<Path> ds = Files.newDirectoryStream(DISCOVERY_DIR, "field-discovery_*.csv")) {
-            for (Path p : ds) {
-                long m = Files.getLastModifiedTime(p).toMillis();
-                if (m > bestMtime) {
-                    bestMtime = m;
-                    best = p;
-                }
-            }
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-        return Optional.ofNullable(best);
-    }
-
-    private static String khoaDiscovery(String truong, String giaTri) {
-        return nz(truong) + "|" + nz(giaTri);
-    }
-
-    /** Parser CSV tối giản (RFC 4180 đủ dùng cho discovery export). */
+    /** Giữ API parser cũ cho test/caller nội bộ; implementation thuộc catalog field. */
     static List<String> parseCsvLine(String line) {
-        List<String> out = new ArrayList<>();
-        if (line == null) {
-            return out;
-        }
-        StringBuilder cur = new StringBuilder();
-        boolean inQuotes = false;
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (inQuotes) {
-                if (c == '"') {
-                    if (i + 1 < line.length() && line.charAt(i + 1) == '"') {
-                        cur.append('"');
-                        i++;
-                    } else {
-                        inQuotes = false;
-                    }
-                } else {
-                    cur.append(c);
-                }
-            } else if (c == '"') {
-                inQuotes = true;
-            } else if (c == ',') {
-                out.add(cur.toString());
-                cur.setLength(0);
-            } else {
-                cur.append(c);
-            }
-        }
-        out.add(cur.toString());
-        return out;
+        return FieldCoverageCatalog.parseCsvLine(line);
     }
 }

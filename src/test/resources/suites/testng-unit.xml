@@ -15,6 +15,7 @@
             <class name="vn.tuphap.automation.report.BaoCaoTeeTest"/>
             <class name="vn.tuphap.automation.report.BaoCaoHtmlTest"/>
             <class name="vn.tuphap.automation.caseui.TestCaseGeneratorTest"/>
+            <class name="vn.tuphap.automation.caseui.FieldCoverageCatalogTest"/>
             <class name="vn.tuphap.automation.caseui.MavenResolverTest"/>
         </classes>
     </test>
