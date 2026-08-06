@@ -1,0 +1,7 @@
+Trường lỗi,Biến thể,Giá trị,Bước,Áp dụng,Bị chặn,Thông báo,Ghi chú
+Số điện thoại (Nguyên đơn),abc,abc,2,Có,Có,"Số điện thoại không hợp lệ, vui lòng nhập lại",
+Mã số thuế (Nguyên đơn),abc,abc,2,Có,Có,Mã số thuế không hợp lệ,
+CCCD (Bị đơn),123,123,3,Có,Không,,
+Mã số thuế (Bị đơn),abc,abc,3,Có,Có,Mã số thuế bị đơn không hợp lệ,
+Giá trị tranh chấp,-1000000,-1000000,4,Có,Có,Giá trị tranh chấp phải lớn hơn 0,
+Field ngoài whitelist,x,x,2,Có,Có,Không được nhận,
