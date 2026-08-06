@@ -172,19 +172,13 @@ if ($DryRun) {
     exit 0
 }
 
-if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
-    $jdk = 'C:\Users\ADMIN\.jdks\ms-17.0.19'
-    if (Test-Path $jdk) { $env:JAVA_HOME = $jdk }
+. "$PSScriptRoot\lib-maven.ps1"
+[void](Ensure-JavaHome)
+$mvnCmd = Get-MavenCmd -ConfigFile $cfgPath
+if (-not $mvnCmd) {
+    Write-MavenNotFound
+    exit 1
 }
-$mvn = Get-Command mvn -ErrorAction SilentlyContinue
-if (-not $mvn) {
-    $bundled = 'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3\bin\mvn.cmd'
-    if (Test-Path $bundled) { $mvnCmd = $bundled }
-    else {
-        Write-Host 'LỖI: Không tìm thấy mvn.' -ForegroundColor Red
-        exit 1
-    }
-} else { $mvnCmd = 'mvn' }
 
 $sysProps = @(
     "-Dtaodon.suite=$suite"

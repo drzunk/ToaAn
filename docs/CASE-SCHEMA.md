@@ -42,6 +42,11 @@ Validate nghiêm lúc **Lưu** / nạp file (`CaseFileSource`) — sai catalog h
 - Merge: tick → **Thêm vào danh sách** (bỏ trùng `ghiChu`) → **Lưu tất cả**; hoặc **Chạy riêng màn này** (ghi đè file bằng đúng nhóm đã tick).
 - Nếu có CSV `test-output/discovery-sweep/field-discovery_*.csv`, generator gắn `thongBaoMongDoi` khi discovery từng thấy hệ thống chặn.
 
+### Ca đăng nhập (màn Login trên tab Sinh test case)
+
+- **1 ca dương** (`GEN_Login_Smoke`, `untilStep=0`): có `CaseRow`, thêm vào `local-cases` và chạy qua master như case wizard.
+- **3 ca âm** (sai mật khẩu, sai captcha, bỏ trống mật khẩu): `engine=login` trên API — **không** có `CaseRow`, **không** dùng `truongLoi`; hiển thị trên Dashboard để tra cứu, chạy bằng **«Chạy suite login»** → `POST /api/run-login` → `mvn -Plogin test` (`LoginTest`).
+
 ## 4. Ví dụ
 
 **Positive** (đến Xem lại, không gửi):

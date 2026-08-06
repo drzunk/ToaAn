@@ -2,20 +2,16 @@
   {
     "chay": true,
     "loaiDon": "Dân sự",
-    "loaiViec": "Bồi thường thiệt hại ngoài hợp đồng",
-    "chuThe": "Tổ chức / Doanh nghiệp",
+    "loaiViec": "",
+    "chuThe": "Cá nhân",
     "tuCachNopDon": "",
-    "toaAn": "Tòa án nhân dân tỉnh Sơn La",
-    "soLuongBiDon": 2,
-    "coDongNguyenDon": true,
-    "coNguoiDaiDien": true,
-    "coNguoiLienQuan": true,
-    "coTaiLieuBoSung": true,
-    "ghiChu": "TC_Luong001",
+    "toaAn": "",
+    "soLuongBiDon": 0,
+    "ghiChu": "GEN_Login_Smoke",
     "truongLoi": "",
     "giaTriLoi": "",
     "thongBaoMongDoi": "",
-    "untilStep": 6,
-    "submit": true
+    "untilStep": 0,
+    "submit": false
   }
 ]

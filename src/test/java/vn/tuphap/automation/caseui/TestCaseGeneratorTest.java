@@ -27,6 +27,10 @@ public class TestCaseGeneratorTest {
             Assert.assertFalse(man.cases().isEmpty(), "Màn trống: " + man.id());
             for (TestCaseGenerator.DeXuat dx : man.cases()) {
                 Assert.assertTrue(ids.add(dx.id()), "Trùng id đề xuất: " + dx.id());
+                if ("login".equals(dx.engine())) {
+                    Assert.assertNull(dx.caseRow(), "Ca login suite không có CaseRow: " + dx.id());
+                    continue;
+                }
                 CaseFileSource.CaseRow row = dx.caseRow();
                 Assert.assertNotNull(row);
                 Assert.assertFalse(row.ghiChu().isBlank(), "Thiếu ghiChu: " + dx.id());
@@ -41,6 +45,19 @@ public class TestCaseGeneratorTest {
         List<String> idsMan = kq.screens().stream().map(TestCaseGenerator.ManHinh::id).toList();
         Assert.assertEquals(idsMan.get(0), "login");
         Assert.assertEquals(idsMan.get(idsMan.size() - 1), "buoc6");
+    }
+
+    @Test(groups = "unit", description = "Màn login: 1 dương master + 3 âm suite LoginTest")
+    public void manLoginCoDuongVaAm() {
+        TestCaseGenerator.ManHinh login = TestCaseGenerator.generate().screens().get(0);
+        Assert.assertEquals(login.id(), "login");
+        Assert.assertEquals(login.cases().size(), 4);
+        long duong = login.cases().stream().filter(c -> "duong".equals(c.loai())).count();
+        long am = login.cases().stream().filter(c -> "am".equals(c.loai())).count();
+        long loginEngine = login.cases().stream().filter(c -> "login".equals(c.engine())).count();
+        Assert.assertEquals(duong, 1L);
+        Assert.assertEquals(am, 3L);
+        Assert.assertEquals(loginEngine, 3L);
     }
 
     @Test(groups = "unit", description = "Parser CSV discovery giữ nguyên ô có dấu phẩy trong ngoặc kép")

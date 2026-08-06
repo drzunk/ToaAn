@@ -30,7 +30,18 @@ Không đoán trước khi có ảnh + bước trong report.
 | Parallel abort | `BrowserClosedException` → Skip; xem `ScenarioDispatch` / Chrome crash |
 | Discovery CSV | Không assert — CSV chỉ gợi ý ca âm; thông báo gắn vào generator có thể lệch UI mới |
 
-## 4. Sau khi phân loại
+## 4. Không chạy được Maven (ENV_DATA)
+
+| Thông báo | Nguyên nhân | Cách sửa |
+|---|---|---|
+| `Không tìm thấy Maven. Đã tìm ở: …` (nút Chạy) hoặc `LỖI: Không tìm thấy mvn.` (menu) | Máy không có `mvn` trên PATH và cũng không có Maven đi kèm IntelliJ ở nơi đã dò | Cài Maven, hoặc thêm `run.mavenCmd=C:/…/bin/mvn.cmd` vào `src/test/resources/run-flow.properties` (dùng được cả `-Drun.mavenCmd=…` và env `TOAAN_RUN_MAVENCMD`) |
+| `Maven thoát ngay với mã 1` kèm cuối log | Thường là `JAVA_HOME` sai/thiếu, hoặc lỗi biên dịch | Đọc đoạn log trả về; JAVA_HOME được tự điền từ JDK đang chạy Dashboard nên nếu vẫn lỗi thì xem dòng ERROR đầu tiên trong `test-output/last-run.log` |
+| `CreateProcess error=2` | Bản cũ hardcode đường dẫn IntelliJ theo phiên bản — không còn xảy ra sau khi dò qua `MavenResolver` | Nếu tái xuất hiện: kiểm tra `run.mavenCmd` có trỏ vào `mvn.cmd` (không phải file `mvn` không đuôi) |
+
+Cùng cách dò được dùng cho nút Chạy trên Dashboard (`MavenResolver`) và cho menu/`run-flow.ps1`
+(`scripts/lib-maven.ps1`), nên khai báo một lần là cả hai kênh cùng chạy.
+
+## 5. Sau khi phân loại
 
 - Cập nhật case / code đúng tầng ([`WORKFLOW.md`](WORKFLOW.md)).
 - Chạy lại: unit (nếu đụng matrix/parser/generator) → smoke hoặc đúng 1 case master.

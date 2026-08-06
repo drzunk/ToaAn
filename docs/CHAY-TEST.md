@@ -51,11 +51,27 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 
 1. `.\scripts\chay.cmd` → chọn **9**.
 2. Tab **Sinh test case** → «Sinh / làm mới đề xuất» (hoặc tự tải lần đầu vào tab).
-3. Chọn case theo từng màn (Login → Dashboard → Bước 1…6) → **Thêm case đã chọn vào danh sách**.
-4. Tab **Test case** → **Lưu tất cả xuống file** → **Chạy**.
+3. Màn **Đăng nhập** (đầu danh sách, viền xanh): **1 ca dương** + **3 ca âm** — ca âm chạy **«Chạy suite login (-Plogin)»** (4 test `LoginTest`), không thêm vào `local-cases`.
+4. Các màn khác: chọn case → **Thêm case đã chọn vào danh sách** hoặc **Chạy riêng màn này**.
+5. Tab **Test case** → **Lưu tất cả xuống file** → **Chạy** (wizard / ca dương login qua master).
 
 Đề xuất lấy từ `master-data.properties` + whitelist ca âm. Nếu đã chạy `mvn -Pdiscovery test`,
 thông báo mong đợi được gắn từ CSV mới nhất trong `test-output/discovery-sweep/`.
+
+---
+
+## Máy không tìm thấy Maven
+
+Menu và nút Chạy tự dò `mvn` theo thứ tự: khoá `run.mavenCmd` → `MAVEN_HOME`/`M2_HOME` → PATH →
+Maven đi kèm IntelliJ (tự lấy bản mới nhất, không cố định phiên bản). Máy cài Maven ở chỗ lạ thì
+thêm một dòng vào `src/test/resources/run-flow.properties`:
+
+```properties
+run.mavenCmd=C:/Program Files/apache-maven-3.9.9/bin/mvn.cmd
+```
+
+`JAVA_HOME` cũng được điền tự động (JDK đang chạy, `~/.jdks`, JBR của IntelliJ). Xem thêm mục 4
+trong [`TRIAGE.md`](TRIAGE.md).
 
 ---
 

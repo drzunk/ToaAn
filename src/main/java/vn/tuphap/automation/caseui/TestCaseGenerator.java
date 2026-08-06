@@ -35,14 +35,23 @@ public final class TestCaseGenerator {
     private TestCaseGenerator() {
     }
 
-    /** Một đề xuất gắn với 1 màn — {@code caseRow} sẵn sàng merge vào file case. */
+    /**
+     * Một đề xuất gắn với 1 màn. {@code caseRow} chỉ có khi {@code engine=master}; ca login âm dùng
+     * {@code engine=login} và chạy qua suite {@code -Plogin}, không merge vào {@code local-cases}.
+     */
     public record DeXuat(
             String id,
             String loai,
             String lyDo,
             boolean chonMacDinh,
-            CaseRow caseRow
+            CaseRow caseRow,
+            String engine
     ) {
+        public DeXuat {
+            if (engine == null || engine.isBlank()) {
+                engine = "master";
+            }
+        }
     }
 
     /** Nhóm đề xuất theo 1 màn hình (Login hoặc bước 1–6). */
@@ -99,14 +108,24 @@ public final class TestCaseGenerator {
 
     private static ManHinh manLogin() {
         List<DeXuat> cases = new ArrayList<>();
-        cases.add(deXuat("login-smoke", "duong",
-                "Chỉ đăng nhập (untilStep=0) — smoke session trước khi vào wizard",
+        cases.add(deXuat("login-duong", "duong",
+                "Đăng nhập thành công — thấy Dashboard (untilStep=0, chạy qua master / local-cases)",
                 true,
                 row(true, "Dân sự", "", chuTheCnFallback(), "", "", 0,
                         null, null, null, null,
                         "GEN_Login_Smoke", "", "", "", 0, false)));
+        cases.add(deXuat("login-am-mk", "am",
+                "Sai mật khẩu — không vào Dashboard, hệ thống phải báo lỗi rõ ràng",
+                false, null, "login"));
+        cases.add(deXuat("login-am-captcha", "am",
+                "Sai captcha — không vào Dashboard, hệ thống phải báo lỗi rõ ràng",
+                false, null, "login"));
+        cases.add(deXuat("login-am-trong-mk", "am",
+                "Bỏ trống mật khẩu — không vào Dashboard, hệ thống phải báo lỗi rõ ràng",
+                false, null, "login"));
         return new ManHinh("login", 0, "Đăng nhập",
-                "Kiểm tra vào được hệ thống. Ca âm sai mật khẩu / captcha nằm ở LoginTest (suite -Plogin), không đưa vào local-cases.",
+                "1 ca dương chạy qua master (untilStep=0). 3 ca âm chạy suite LoginTest riêng"
+                        + " — bấm «Chạy suite login» (mvn -Plogin).",
                 cases);
     }
 
@@ -323,7 +342,12 @@ public final class TestCaseGenerator {
     }
 
     private static DeXuat deXuat(String id, String loai, String lyDo, boolean chon, CaseRow row) {
-        return new DeXuat(id, loai, lyDo, chon, row);
+        return deXuat(id, loai, lyDo, chon, row, "master");
+    }
+
+    private static DeXuat deXuat(String id, String loai, String lyDo, boolean chon, CaseRow row,
+                                   String engine) {
+        return new DeXuat(id, loai, lyDo, chon, row, engine);
     }
 
     private static CaseRow row(boolean chay, String loaiDon, String loaiViec, String chuThe,

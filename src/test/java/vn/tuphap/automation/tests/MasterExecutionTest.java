@@ -31,10 +31,6 @@ public class MasterExecutionTest extends TaoDonBaseTest {
     @DataProvider(name = "DuLieuMaster", parallel = true)
     public Object[][] getData(ITestContext context) {
         ScenarioDispatch.reset();
-        if (RunFlowConfig.maxUntilStep() <= 0) {
-            System.out.println(" untilStep=login — không cần DataProvider scenario.");
-            return new Object[][]{ { null, null } };
-        }
         if (RunFlowConfig.hasCases()) {
             List<RunFlowConfig.CaseProfile> profiles = RunFlowConfig.cases();
             // Đã gồm sẵn 2 cột [scenario, CaseProfile] — ghép tại DataGenerator để dòng lỗi bị bỏ
@@ -45,6 +41,10 @@ public class MasterExecutionTest extends TaoDonBaseTest {
                     + RunFlowConfig.browsers() + " | maxUntilStep="
                     + RunFlowConfig.maxUntilStep());
             return custom;
+        }
+        if (RunFlowConfig.maxUntilStep() <= 0) {
+            System.out.println(" untilStep=login — không cần DataProvider scenario.");
+            return new Object[][]{ { null, null } };
         }
         if (RunFlowConfig.useSheet()) {
             // Sheet là nguồn case đang bật nhưng không lấy được dòng nào → dừng rõ ràng,
@@ -107,6 +107,11 @@ public class MasterExecutionTest extends TaoDonBaseTest {
             until = RunFlowConfig.untilStep();
             if (until <= 0) {
                 TestActionLog.ghiChu("Chạy an toàn: chỉ đăng nhập (run.untilStep=login).");
+                BaoCao.logPass("Session đăng nhập sẵn sàng — dừng theo run.untilStep.");
+                return;
+            }
+            if (s == null && caseProfile == null) {
+                TestActionLog.ghiChu("Chạy an toàn: chỉ đăng nhập (không có scenario).");
                 BaoCao.logPass("Session đăng nhập sẵn sàng — dừng theo run.untilStep.");
                 return;
             }

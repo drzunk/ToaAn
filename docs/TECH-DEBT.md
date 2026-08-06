@@ -9,7 +9,7 @@ Phạm vi: chấp nhận cho v1 / làm sau. Không dùng doc này để mở rew
 | TD-03 | Assert E2E mỏng — trước đây đến Xem lại chủ yếu `assertNotNull(review)` | P1 | Đã thêm tín hiệu ổn định trên màn Xem lại (marker + loại đơn) |
 | TD-04 | Mega XPath / synonym catalog dễ lệch UI | P2 | Chấp nhận — tab Config locator hỗ trợ tra; sync catalog khi UI đổi |
 | TD-05 | `TestCaseGenerator` rule-based, chưa pairwise full / chưa cover mọi nhánh eform | P3 | Chấp nhận — mid/full matrix lo độ phủ; generator lo case cấu hình theo màn |
-| TD-06 | Login ca âm nằm `LoginTest`, không vào `local-cases` | P3 | Cố ý — login khác hợp đồng CaseRow |
+| TD-06 | Login ca âm dùng `LoginTest` / `-Plogin`, không qua `truongLoi` wizard | P3 | Cố ý — hiển thị trên tab Sinh (màn Đăng nhập); chạy bằng `/api/run-login`; ca dương `untilStep=0` vẫn qua `local-cases` |
 | TD-07 | Parallel phụ thuộc session Chrome ổn định | P2 | Chấp nhận — theo dõi `ScenarioDispatch` |
 | TD-08 | Discovery chưa quét đủ địa chỉ lồng / CCCD người ĐD tổ chức | P2 | Làm sau khi mở rộng ca âm |
 | TD-09 | Sheet / quyền chia sẻ dễ nhầm “hỏng tool” | P3 | Checklist README + WORKFLOW |

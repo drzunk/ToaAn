@@ -65,6 +65,7 @@ public final class CaseEditorServer {
         server.createContext("/api/generate-cases", CaseEditorServer::handleGenerateCases);
         server.createContext("/api/import-sheet", CaseEditorServer::handleImportSheet);
         server.createContext("/api/run", CaseEditorServer::handleRun);
+        server.createContext("/api/run-login", CaseEditorServer::handleRunLogin);
         server.createContext("/report/", CaseEditorServer::handleReport);
         server.start();
         String url = "http://localhost:" + port + "/";
@@ -364,12 +365,21 @@ public final class CaseEditorServer {
                     + casesFile + " — không chạy gì cả. Thêm case hoặc tick \"Chạy\" rồi Lưu tất cả trước."));
             return;
         }
+        Path mvn = MavenResolver.timMaven().orElse(null);
+        if (mvn == null) {
+            sendJson(ex, 500, Map.of("error", "Không tìm thấy Maven. Đã tìm ở: "
+                    + MavenResolver.moTaNoiDaTim()
+                    + ". Cài Maven hoặc khai báo đường dẫn đầy đủ tới mvn.cmd bằng khóa"
+                    + " run.mavenCmd trong " + RUN_FLOW_PROPERTIES + "."));
+            return;
+        }
         Map<String, String> updates = new LinkedHashMap<>();
         updates.put("run.suite", "master");
         updates.put("run.caseSource", "file");
         updates.put("run.casesFile", casesFile.toString().replace('\\', '/'));
         setProperties(RUN_FLOW_PROPERTIES, updates);
 
+        Process p;
         try {
             Files.createDirectories(LOG_FILE.getParent());
             String casesFileArg = casesFile.toString().replace('\\', '/');
@@ -378,15 +388,26 @@ public final class CaseEditorServer {
             // -Drun.openReport=false CHỈ cho lượt này (không ghi xuống file): dashboard đã có tab
             // Dashboard nhúng sẵn báo cáo, khỏi cần bật thêm 1 tab trình duyệt riêng khi xong.
             ProcessBuilder pb = new ProcessBuilder(
-                    mavenCommand(), "-Pmaster", "test",
+                    mvn.toString(), "-Pmaster", "test",
                     "-Dtaodon.suite=master", "-Drun.suite=master",
                     "-Drun.caseSource=file", "-Drun.casesFile=" + casesFileArg,
                     "-Drun.openReport=false");
+            // mvn.cmd chết ngay nếu JAVA_HOME trỏ sai/không có. Máy chỉ cài JDK qua IDE thì biến này
+            // thường trống, và lỗi chỉ nằm trong log — trang web vẫn báo "đang chạy".
+            MavenResolver.timJavaHome()
+                    .ifPresent(jdk -> pb.environment().put("JAVA_HOME", jdk.toString()));
             pb.redirectOutput(LOG_FILE.toFile());
             pb.redirectErrorStream(true);
-            pb.start();
+            p = pb.start();
         } catch (IOException e) {
-            sendJson(ex, 500, Map.of("error", "Không khởi động được Maven: " + e.getMessage()));
+            sendJson(ex, 500, Map.of("error", "Không khởi động được Maven (" + mvn + "): "
+                    + e.getMessage()));
+            return;
+        }
+
+        String chetSom = loiKhiMavenChetSom(p);
+        if (chetSom != null) {
+            sendJson(ex, 500, Map.of("error", chetSom));
             return;
         }
 
@@ -397,28 +418,73 @@ public final class CaseEditorServer {
                 "report", REPORT_FILE.toString()));
     }
 
-    /**
-     * {@code mvn.cmd} trên PATH; máy chưa có thì dùng bản Maven đi kèm IntelliJ (giống scripts/run-flow.ps1).
-     * <p>
-     * PHẢI trả về đường dẫn đầy đủ tới {@code mvn.cmd} (đuôi {@code .cmd}), không phải chuỗi trần
-     * {@code "mvn"}: {@code ProcessBuilder} trên Windows gọi thẳng {@code CreateProcess}, không tự
-     * tra PATHEXT như {@code cmd.exe}/PowerShell — thư mục bin Maven có cả file {@code mvn} (script
-     * Unix, không đuôi) lẫn {@code mvn.cmd}; nếu trả về {@code "mvn"} thì Windows tìm đúng file đó,
-     * thấy không thực thi được và báo "CreateProcess error=2".
-     */
-    private static String mavenCommand() {
-        Path bundled = Paths.get("C:", "Program Files", "JetBrains", "IntelliJ IDEA 2026.1.4",
-                "plugins", "maven", "lib", "maven3", "bin", "mvn.cmd");
-        String path = System.getenv("PATH");
-        if (path != null) {
-            for (String dir : path.split(java.util.regex.Pattern.quote(java.io.File.pathSeparator))) {
-                Path mvnCmd = Paths.get(dir, "mvn.cmd");
-                if (Files.exists(mvnCmd)) {
-                    return mvnCmd.toString();
-                }
-            }
+    // ── /api/run-login — suite LoginTest (1 dương + 3 âm) ─────────────────
+
+    private static void handleRunLogin(HttpExchange ex) throws IOException {
+        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendText(ex, 405, "Chỉ hỗ trợ POST.");
+            return;
         }
-        return Files.exists(bundled) ? bundled.toString() : "mvn.cmd";
+        Path mvn = MavenResolver.timMaven().orElse(null);
+        if (mvn == null) {
+            sendJson(ex, 500, Map.of("error", "Không tìm thấy Maven. Đã tìm ở: "
+                    + MavenResolver.moTaNoiDaTim()
+                    + ". Cài Maven hoặc khai báo đường dẫn đầy đủ tới mvn.cmd bằng khóa"
+                    + " run.mavenCmd trong " + RUN_FLOW_PROPERTIES + "."));
+            return;
+        }
+        Process p;
+        try {
+            Files.createDirectories(LOG_FILE.getParent());
+            ProcessBuilder pb = new ProcessBuilder(
+                    mvn.toString(), "-Plogin", "test", "-Drun.openReport=false");
+            MavenResolver.timJavaHome()
+                    .ifPresent(jdk -> pb.environment().put("JAVA_HOME", jdk.toString()));
+            pb.redirectOutput(LOG_FILE.toFile());
+            pb.redirectErrorStream(true);
+            p = pb.start();
+        } catch (IOException e) {
+            sendJson(ex, 500, Map.of("error", "Không khởi động được Maven (" + mvn + "): "
+                    + e.getMessage()));
+            return;
+        }
+        String chetSom = loiKhiMavenChetSom(p);
+        if (chetSom != null) {
+            sendJson(ex, 500, Map.of("error", chetSom));
+            return;
+        }
+        sendJson(ex, 200, Map.of(
+                "message", "Đang chạy suite login (LoginTest: 1 dương + 3 âm) — theo dõi "
+                        + LOG_FILE + ". Xong thì mở lại tab Dashboard để xem báo cáo.",
+                "log", LOG_FILE.toString(),
+                "report", REPORT_FILE.toString()));
+    }
+
+    /**
+     * Maven hỏng cấu hình (thiếu JAVA_HOME, sai profile) thì thoát trong vòng 1–2 giây. Bắt sớm để
+     * trả lỗi thật kèm cuối log, thay vì báo "đang chạy" cho tiến trình đã chết.
+     * Trả {@code null} nếu tiến trình vẫn sống hoặc đã kết thúc bình thường.
+     */
+    private static String loiKhiMavenChetSom(Process p) {
+        try {
+            if (!p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS) || p.exitValue() == 0) {
+                return null;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        return "Maven thoát ngay với mã " + p.exitValue() + ". Cuối " + LOG_FILE + ":\n"
+                + docCuoiLog(15);
+    }
+
+    private static String docCuoiLog(int soDong) {
+        try {
+            List<String> dong = Files.readAllLines(LOG_FILE, StandardCharsets.UTF_8);
+            return String.join("\n", dong.subList(Math.max(0, dong.size() - soDong), dong.size()));
+        } catch (IOException | RuntimeException e) {
+            return "(không đọc được log)";
+        }
     }
 
     private static Path casesFileInUse() {

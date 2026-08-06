@@ -15,6 +15,8 @@ $cfgPath = Join-Path $root 'src\test\resources\run-flow.properties'
 $masterPath = Join-Path $root 'src\main\resources\master-data.properties'
 $runFlow = Join-Path $PSScriptRoot 'run-flow.ps1'
 
+. "$PSScriptRoot\lib-maven.ps1"
+
 function Test-HasRealConsole {
     try {
         if ([Console]::IsOutputRedirected) { return $false }
@@ -568,28 +570,10 @@ while ($true) {
         }
         'D' {
             Write-Host ''
-            if (-not $env:JAVA_HOME -or -not (Test-Path $env:JAVA_HOME)) {
-                foreach ($jdk in @(
-                    'C:\Users\ADMIN\.jdks\ms-17.0.19',
-                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3\jbr',
-                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\jbr'
-                )) {
-                    if (Test-Path $jdk) { $env:JAVA_HOME = $jdk; break }
-                }
-            }
-            $mvnFound = Get-Command mvn -ErrorAction SilentlyContinue
-            $mvnExe = if ($mvnFound) { 'mvn' } else {
-                $mvnExe = $null
-                foreach ($bundled in @(
-                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.4\plugins\maven\lib\maven3\bin\mvn.cmd',
-                    'C:\Program Files\JetBrains\IntelliJ IDEA 2026.1.3\plugins\maven\lib\maven3\bin\mvn.cmd'
-                )) {
-                    if (Test-Path $bundled) { $mvnExe = $bundled; break }
-                }
-                $mvnExe
-            }
+            [void](Ensure-JavaHome)
+            $mvnExe = Get-MavenCmd -ConfigFile $cfgPath
             if (-not $mvnExe) {
-                Write-Host 'LỖI: Không tìm thấy mvn.' -ForegroundColor Red
+                Write-MavenNotFound
             } else {
                 Write-Host 'Đang khởi động Dashboard (báo cáo / case / sinh TC / locator)...' -ForegroundColor Green
                 Start-Process -FilePath 'cmd.exe' -ArgumentList "/c `"$mvnExe`" exec:java" -WorkingDirectory $root
