@@ -1,5 +1,7 @@
 # Cách chạy test
 
+Tài liệu vận hành đầy đủ: [`WORKFLOW.md`](WORKFLOW.md) · triage fail: [`TRIAGE.md`](TRIAGE.md) · schema case: [`CASE-SCHEMA.md`](CASE-SCHEMA.md).
+
 ## Cách dễ nhất
 
 ```bat

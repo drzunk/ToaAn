@@ -1,4 +1,4 @@
-# ToaAn — Automation Test Cổng Dịch vụ Tư pháp
+﻿# ToaAn — Automation Test Cổng Dịch vụ Tư pháp
 
 Bộ kiểm thử tự động (UI automation) cho cổng nộp đơn trực tuyến của ngành Tòa án
 (`https://demo-dichvutuphap.gsfpt.com/`), tập trung vào nghiệp vụ **Tạo đơn / Nộp đơn trực tuyến**
@@ -21,15 +21,16 @@ gồm 6 bước.
 ## Mục lục
 
 1. [Bắt đầu nhanh](#1-bắt-đầu-nhanh)
-2. [Kiến trúc & luồng thực thi](#2-kiến-trúc--luồng-thực-thi)
-3. [Sơ đồ thư mục](#3-sơ-đồ-thư-mục)
-4. [Mô tả từng file theo package](#4-mô-tả-từng-file-theo-package)
-5. [Bộ test & suite XML](#5-bộ-test--suite-xml)
-6. [File cấu hình](#6-file-cấu-hình)
-7. [Báo cáo đầu ra](#7-báo-cáo-đầu-ra)
-8. [Scripts](#8-scripts)
-9. [Quy ước code](#9-quy-ước-code)
-10. [Xử lý sự cố](#10-xử-lý-sự-cố)
+2. [Vận hành v1](#2-vận-hành-v1)
+3. [Kiến trúc & luồng thực thi](#3-kiến-trúc--luồng-thực-thi)
+4. [Sơ đồ thư mục](#4-sơ-đồ-thư-mục)
+5. [Mô tả từng file theo package](#5-mô-tả-từng-file-theo-package)
+6. [Bộ test & suite XML](#6-bộ-test--suite-xml)
+7. [File cấu hình](#7-file-cấu-hình)
+8. [Báo cáo đầu ra](#8-báo-cáo-đầu-ra)
+9. [Scripts](#9-scripts)
+10. [Quy ước code](#10-quy-ước-code)
+11. [Xử lý sự cố](#11-xử-lý-sự-cố)
 
 ---
 
@@ -88,7 +89,31 @@ Xem thêm: [`docs/CHAY-TEST.md`](docs/CHAY-TEST.md).
 
 ---
 
-## 2. Kiến trúc & luồng thực thi
+## 2. Vận hành v1
+
+Cửa hàng ngày cho **case cấu hình + sinh đề xuất + xem report**:
+
+```bat
+.\scripts\chay.cmd
+```
+
+Chọn **mục 9 — Dashboard** (`http://localhost:8787`) → tab **Sinh test case** → thêm case → tab **Test case** → Lưu → Chạy.  
+Kênh song song: mục **1** (Google Sheet). Ma trận độ phủ: smoke / mid / full (menu 3–7).
+
+| Doc | Nội dung |
+|---|---|
+| [`docs/WORKFLOW.md`](docs/WORKFLOW.md) | Vòng đời, bảng suite, chọn kênh Dashboard/Sheet/matrix |
+| [`docs/TRIAGE.md`](docs/TRIAGE.md) | Phân loại fail BUG / TEST_SAI / FLAKE / ENV_DATA |
+| [`docs/CASE-SCHEMA.md`](docs/CASE-SCHEMA.md) | Field JSON·Sheet, `untilStep`, ca âm, prefix `GEN_…` |
+| [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) | Nợ chấp nhận v1 / làm sau |
+| [`docs/V1-CHECKLIST.md`](docs/V1-CHECKLIST.md) | Definition of Done v1 |
+| [`docs/test-spec.md`](docs/test-spec.md) | Đặc tả kiểm thử / AC |
+
+Verify tối thiểu trước merge: `mvn -B -Punit test` (CI: `.github/workflows/ci.yml`).
+
+---
+
+## 3. Kiến trúc & luồng thực thi
 
 ### Chuỗi gọi từ lúc bấm chạy
 
@@ -166,7 +191,7 @@ markStepStart → TestActionLog.buoc(n) → điền form → logValidationMessag
 
 ---
 
-## 3. Sơ đồ thư mục
+## 4. Sơ đồ thư mục
 
 ```
 ToaAn/
@@ -212,7 +237,7 @@ ToaAn/
 
 ---
 
-## 4. Mô tả từng file theo package
+## 5. Mô tả từng file theo package
 
 ### 4.1 `config/` — Đọc cấu hình
 
@@ -306,7 +331,7 @@ ToaAn/
 
 ---
 
-## 5. Bộ test & suite XML
+## 6. Bộ test & suite XML
 
 ### 5.1 Test class
 
@@ -350,7 +375,7 @@ ToaAn/
 
 ---
 
-## 6. File cấu hình
+## 7. File cấu hình
 
 ### 6.1 Thứ tự ưu tiên
 
@@ -645,7 +670,7 @@ profile và giữ `run.browsers`; Java tải sheet lúc chạy rồi tự kẹp 
 
 ---
 
-## 7. Báo cáo đầu ra
+## 8. Báo cáo đầu ra
 
 Toàn bộ nằm trong `test-output/` — thư mục này **đã có trong `.gitignore`**.
 
@@ -666,7 +691,7 @@ có file nào. Tắt hẳn việc chụp bằng `-Dtaodon.screenshot=false` nế
 
 ---
 
-## 8. Scripts
+## 9. Scripts
 
 Thư mục `scripts/` gồm 2 cặp `.cmd` + `.ps1`. File `.cmd` chỉ là wrapper: đặt `chcp 65001`
 (UTF-8 cho tiếng Việt trong console) và gọi PowerShell với `-ExecutionPolicy Bypass`
@@ -683,7 +708,7 @@ Hướng dẫn ngắn dành cho tester: [`docs/CHAY-TEST.md`](docs/CHAY-TEST.md)
 
 ---
 
-## 9. Quy ước code
+## 10. Quy ước code
 
 **Thứ tự ưu tiên locator** (theo javadoc `UiSynonyms`):
 
@@ -708,7 +733,7 @@ Các nguyên tắc khác:
 
 ---
 
-## 10. Xử lý sự cố
+## 11. Xử lý sự cố
 
 | Triệu chứng | Nguyên nhân & cách xử lý |
 |---|---|

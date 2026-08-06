@@ -44,6 +44,8 @@ Bộ automation UI cho cổng nộp đơn trực tuyến Tòa án (`demo-dichvut
 
 Ưu tiên chạy hàng ngày: **unit → smoke**. Mid/full theo lịch regression. Master khi có danh sách case nghiệp vụ.
 
+**Cửa case cấu hình v1:** Dashboard cục bộ (menu `chay.cmd` mục **9**) — tab **Sinh test case** đề xuất theo màn (`TestCaseGenerator`) → tab **Test case** lưu `local-cases.json` → Chạy master; hoặc Google Sheet (menu 1). Chi tiết quy trình / triage / schema: [`WORKFLOW.md`](WORKFLOW.md), [`TRIAGE.md`](TRIAGE.md), [`CASE-SCHEMA.md`](CASE-SCHEMA.md).
+
 ## 4. Ma trận AC coverage
 
 ### 4.1 Luồng chính (ca dương)
