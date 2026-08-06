@@ -226,6 +226,43 @@ public class BaoCaoTeeTest {
     }
 
     /**
+     * Kịch bản chưa mở bước nào — suite login — vẫn phải giữ được dữ liệu đã nhập. Trước đây thao
+     * tác ngoài bước bị bỏ hẳn, nên báo cáo lượt login không có phần dữ liệu nào.
+     */
+    @Test(groups = {"unit"})
+    public void thaoTacNgoaiBuocDuocGiuOThanCase() {
+        BaoCaoData.xoaHet();
+        TestActionLog.beginTest();
+        BaoCaoData.batDauCase("testDangNhapSaiMatKhau", "Ca âm — sai mật khẩu", "—");
+
+        TestActionLog.dien("Ô nhập [CCCD/Tên đăng nhập]", "0123456789");
+        TestActionLog.dien("Ô nhập [Captcha]", "abcd");
+
+        BaoCaoData.ketThucCase("Đạt", 20);
+
+        List<BaoCaoData.HanhDong> hd = BaoCaoData.cases().get(0).hanhDongNgoaiBuocAnToan();
+        assertEquals(hd.size(), 2, "Thao tác lúc chưa mở bước nào bị mất khỏi báo cáo");
+        assertEquals(hd.get(0).giaTri(), "0123456789");
+    }
+
+    /** Mật khẩu là bí mật môi trường — không được nằm trong báo cáo hay {@code bao-cao.json}. */
+    @Test(groups = {"unit"})
+    public void giaTriOMatKhauKhongLotVaoBaoCao() {
+        BaoCaoData.xoaHet();
+        TestActionLog.beginTest();
+        BaoCaoData.batDauCase("testDangNhapSaiMatKhau", "Ca âm — sai mật khẩu", "—");
+
+        TestActionLog.dien("Ô nhập [Mật khẩu]", "MatKhauThat_123");
+
+        BaoCaoData.ketThucCase("Đạt", 20);
+
+        List<BaoCaoData.HanhDong> hd = BaoCaoData.cases().get(0).hanhDongNgoaiBuocAnToan();
+        assertEquals(hd.size(), 1);
+        assertFalse(hd.get(0).giaTri().contains("MatKhauThat_123"),
+                "Mật khẩu thật bị ghi vào báo cáo");
+    }
+
+    /**
      * Bước đang chạy dở khi kịch bản hỏng phải hiện <b>"Không hoàn thành"</b>, không phải
      * "Chưa chạy tới".
      * <p>

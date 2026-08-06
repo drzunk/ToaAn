@@ -75,11 +75,26 @@ public final class BaoCaoData {
                              String trangThai, long thoiGianMs, List<BuocBaoCao> buoc,
                              List<SuKien> suKienDau, List<SuKien> suKienCuoi, String stackTrace,
                              List<TomTatBuoc> tomTatBuoc,
-                             String ketQuaMongDoi, String ketQuaThucTe, String ghiChuKetQua) {
+                             String ketQuaMongDoi, String ketQuaThucTe, String ghiChuKetQua,
+                             List<HanhDong> hanhDongNgoaiBuoc) {
+
+        /** Dạng gọn cho kịch bản không có thao tác nào ngoài bước. */
+        public CaseBaoCao(String maCase, String tieuDe, String moTa, List<String> nhan,
+                          String trangThai, long thoiGianMs, List<BuocBaoCao> buoc,
+                          List<SuKien> suKienDau, List<SuKien> suKienCuoi, String stackTrace,
+                          List<TomTatBuoc> tomTatBuoc,
+                          String ketQuaMongDoi, String ketQuaThucTe, String ghiChuKetQua) {
+            this(maCase, tieuDe, moTa, nhan, trangThai, thoiGianMs, buoc, suKienDau, suKienCuoi,
+                    stackTrace, tomTatBuoc, ketQuaMongDoi, ketQuaThucTe, ghiChuKetQua, List.of());
+        }
 
         /** Các lượt chạy cũ chưa có trường này — Gson trả {@code null}, đừng để nổ khi dựng lại trang. */
         public List<TomTatBuoc> tomTatBuocAnToan() {
             return tomTatBuoc == null ? List.of() : tomTatBuoc;
+        }
+
+        public List<HanhDong> hanhDongNgoaiBuocAnToan() {
+            return hanhDongNgoaiBuoc == null ? List.of() : hanhDongNgoaiBuoc;
         }
     }
 
@@ -138,6 +153,8 @@ public final class BaoCaoData {
         List<SuKien> suKienBuoc;
         /** Thao tác giao diện của bước đang mở. */
         List<HanhDong> hanhDongBuoc;
+        /** Thao tác xảy ra khi chưa mở bước nào — suite login nằm trọn trong nhóm này. */
+        final List<HanhDong> hanhDongNgoaiBuoc = new ArrayList<>();
         int soBuocHienTai;
         String tenBuocHienTai = "";
         /** Mốc mở bước đang chạy — để đóng hộ một bước dở dang vẫn có thời gian thật. */
@@ -232,20 +249,41 @@ public final class BaoCaoData {
         }
     }
 
+    static final String MAT_KHAU_AN = "•••••• (đã ẩn)";
+
     /**
-     * Ghi một thao tác giao diện vào bước đang mở. Bỏ qua nếu chưa mở bước nào — các thao tác
-     * ngoài bước (vd. lúc đăng nhập) không thuộc về đâu trên báo cáo.
+     * Ô này có phải ô mật khẩu không. Giá trị của nó không được rơi vào báo cáo hay
+     * {@code bao-cao.json}: báo cáo là thứ đem đi chia sẻ, còn mật khẩu là bí mật của môi trường.
+     */
+    private static boolean laOMatKhau(String truong) {
+        String t = truong.toLowerCase(java.util.Locale.ROOT);
+        return t.contains("mật khẩu") || t.contains("password");
+    }
+
+    /**
+     * Ghi một thao tác giao diện vào bước đang mở, hoặc vào phần thân case nếu chưa mở bước nào.
+     * <p>
+     * Trước đây thao tác ngoài bước bị bỏ hẳn, nên suite login — vốn không đi qua 6 bước nộp đơn —
+     * ra báo cáo trắng trơn phần "dữ liệu đã nhập", đúng lúc người đọc cần biết nó đã gõ tài khoản
+     * và captcha nào. Thao tác lúc đăng nhập chuẩn bị cho kịch bản khác vẫn không lẫn vào vì
+     * {@code TestActionLog.pause()} đã tắt ghi ở đó.
      */
     public static void hanhDong(String thaoTac, String truong, String giaTri, String ghiChu) {
         CaseDangGhi c = HIEN_TAI.get();
-        if (c == null || c.hanhDongBuoc == null) {
+        if (c == null) {
             return;
         }
-        c.hanhDongBuoc.add(new HanhDong(
+        String ten = truong == null ? "" : truong;
+        HanhDong hd = new HanhDong(
                 thaoTac == null ? "" : thaoTac,
-                truong == null ? "" : truong,
-                giaTri == null ? "" : giaTri,
-                ghiChu == null ? "" : ghiChu));
+                ten,
+                laOMatKhau(ten) ? MAT_KHAU_AN : giaTri == null ? "" : giaTri,
+                ghiChu == null ? "" : ghiChu);
+        if (c.hanhDongBuoc != null) {
+            c.hanhDongBuoc.add(hd);
+        } else {
+            c.hanhDongNgoaiBuoc.add(hd);
+        }
     }
 
     /**
@@ -309,7 +347,8 @@ public final class BaoCaoData {
                 trangThai == null ? "—" : trangThai, thoiGianMs,
                 List.copyOf(c.buoc), List.copyOf(c.suKienDau), List.copyOf(c.suKienCuoi),
                 c.stackTrace, List.copyOf(c.tomTat),
-                c.ketQuaMongDoi, c.ketQuaThucTe, c.ghiChuKetQua));
+                c.ketQuaMongDoi, c.ketQuaThucTe, c.ghiChuKetQua,
+                List.copyOf(c.hanhDongNgoaiBuoc)));
         HIEN_TAI.remove();
     }
 

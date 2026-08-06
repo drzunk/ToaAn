@@ -1,17 +1,21 @@
 [
   {
     "chay": true,
-    "loaiDon": "Dân sự",
-    "loaiViec": "",
-    "chuThe": "Cá nhân",
+    "loaiDon": "Lao động",
+    "loaiViec": "Sa thải – đơn phương chấm dứt HĐLĐ",
+    "chuThe": "Tổ chức / Doanh nghiệp",
     "tuCachNopDon": "",
-    "toaAn": "",
-    "soLuongBiDon": 0,
-    "ghiChu": "GEN_Login_Smoke",
+    "toaAn": "Tòa án nhân dân tỉnh Sơn La",
+    "soLuongBiDon": 2,
+    "coDongNguyenDon": true,
+    "coNguoiDaiDien": false,
+    "coNguoiLienQuan": true,
+    "coTaiLieuBoSung": true,
+    "ghiChu": "case đầy đủ",
     "truongLoi": "",
     "giaTriLoi": "",
     "thongBaoMongDoi": "",
-    "untilStep": 0,
+    "untilStep": 6,
     "submit": false
   }
 ]

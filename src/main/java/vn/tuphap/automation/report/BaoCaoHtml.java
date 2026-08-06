@@ -839,6 +839,9 @@ public final class BaoCaoHtml {
         }
         sb.append(bangKetLuan(c));
         sb.append(daiTienDo(c.tomTatBuocAnToan()));
+        // Kịch bản không đi qua 6 bước (suite login) chỉ có thao tác ngoài bước — không in ở đây
+        // thì phần "dữ liệu đã nhập" của cả lượt chạy trống trơn.
+        sb.append(bangHanhDong(c.hanhDongNgoaiBuocAnToan(), "trường đã nhập (ngoài bước)"));
         String dau = cacSuKien(c.suKienDau());
         if (!dau.isBlank()) {
             sb.append("<div class=\"skhop\">").append(dau).append("</div>");
@@ -1015,6 +1018,11 @@ public final class BaoCaoHtml {
      * nó đã nhập gì. Gập sẵn để không lấn át phần kết quả, nhưng ở ngay trong đúng bước.
      */
     private static String bangHanhDong(List<BaoCaoData.HanhDong> ds) {
+        return bangHanhDong(ds, "trường đã nhập");
+    }
+
+    /** @param nhan phần đuôi của tiêu đề bảng, sau số lượng trường */
+    private static String bangHanhDong(List<BaoCaoData.HanhDong> ds, String nhan) {
         if (ds == null || ds.isEmpty()) {
             return "";
         }
@@ -1022,7 +1030,7 @@ public final class BaoCaoHtml {
         // khung, và trước đây tổ tiên có overflow:hidden nên phần thừa bị CẮT MẤT, không có thanh
         // cuộn nào để kéo ra xem — dữ liệu biến mất im lặng.
         StringBuilder sb = new StringBuilder("<details class=\"dulieu\"><summary>")
-                .append(ds.size()).append(" trường đã nhập</summary><div class=\"cuon-ngang\">")
+                .append(ds.size()).append(' ').append(esc(nhan)).append("</summary><div class=\"cuon-ngang\">")
                 .append("<table class=\"bang-dl\">")
                 .append("<tr><th>Trường</th><th>Thao tác</th><th>Giá trị</th></tr>");
         for (BaoCaoData.HanhDong h : ds) {

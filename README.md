@@ -97,7 +97,9 @@ Cửa hàng ngày cho **case cấu hình + sinh đề xuất + xem report**:
 .\scripts\chay.cmd
 ```
 
-Chọn **mục 9 — Dashboard** (`http://localhost:8787`) → tab **Sinh test case** → thêm case → tab **Test case** → Lưu → Chạy.  
+Chọn **mục 9 — Dashboard** (`http://localhost:8787`) và đi theo một luồng:
+**1. Chọn case** → **2. Danh sách chạy** (Lưu rồi Chạy) → **3. Báo cáo**.
+Sheet, locator và tài liệu vận hành nằm trong **Nâng cao**.
 Kênh song song: mục **1** (Google Sheet). Ma trận độ phủ: smoke / mid / full (menu 3–7).
 
 | Doc | Nội dung |

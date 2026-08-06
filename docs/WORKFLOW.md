@@ -15,8 +15,10 @@ Nhu cầu (bug / regression / case mới)
 ```
 
 **Cửa chính case cấu hình:** `.\scripts\chay.cmd` → **mục 9** → Dashboard `http://localhost:8787`  
-Tab **Sinh test case** → chọn đề xuất → thêm vào danh sách → tab **Test case** → **Lưu tất cả** → **Chạy**.  
-Xem kết quả: tab **Dashboard** (nhúng `test-output/index.html`) hoặc mở file đó trực tiếp.
+**1. Chọn case** → chọn một màn, lọc ca âm/dương và thêm đề xuất →
+**2. Danh sách chạy** → **Lưu tất cả xuống file** → **Chạy case đã lưu** →
+**3. Báo cáo** → tải lại khi Maven chạy xong.
+Nhập Google Sheet, tra locator và tài liệu nằm trong **Nâng cao**.
 
 ## 2. Bảng suite / lệnh
 
@@ -40,8 +42,8 @@ CI tương đương unit: `.github/workflows/ci.yml` (`mvn -B -Punit test`). Ch�
 
 | Kênh | Dùng khi | Không dùng khi |
 |---|---|---|
-| **Dashboard · Sinh test case** (menu 9) | Cần đề xuất theo màn, ca âm whitelist, merge nhanh vào `local-cases.json` | Cần ma trận độ phủ đầy đủ (dùng mid/full) |
-| **Dashboard · Test case** / `local-cases.json` | Chỉnh case cấu hình, chạy master có kiểm soát | Case “framework” (login âm, discovery, unit) |
+| **Dashboard · 1. Chọn case** (menu 9) | Cần đề xuất theo màn, ca âm whitelist, merge nhanh vào danh sách chạy | Cần ma trận độ phủ đầy đủ (dùng mid/full) |
+| **Dashboard · 2. Danh sách chạy** / `local-cases.json` | Chỉnh case cấu hình, lưu file và chạy master có kiểm soát | Case “framework” (login âm, discovery, unit) |
 | **Google Sheet** (menu 1) | BA/QA giữ danh sách ngoài repo, nhiều người cùng sửa | Mạng/sheet lỗi quyền — fallback file + cache |
 | **Matrix smoke/mid/full** | Độ phủ catalog / pairwise, không cần viết từng dòng | Case nghiệp vụ một-off (đưa vào Sheet/JSON) |
 

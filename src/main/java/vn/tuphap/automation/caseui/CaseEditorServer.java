@@ -30,15 +30,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Dashboard cục bộ — 1 trang, 4 tab: <b>Dashboard</b> (nhúng {@code test-output/index.html}),
- * <b>Test case</b> (form web sửa {@code local-cases.json} — thay Google Sheet, validate nghiêm qua
- * {@link CaseFileSource} — và nút "Chạy" gọi thẳng {@code mvn test -Pmaster}), <b>Sinh test case</b>
- * (đề xuất theo từng màn từ {@link TestCaseGenerator} + CSV discovery nếu có), <b>Config locator</b>
- * (xem — không sửa — mọi {@code By.*} quét từ Page Object + catalog UI).
+ * Dashboard cục bộ — 1 trang theo luồng <b>1. Chọn case</b> (đề xuất theo từng màn từ
+ * {@link TestCaseGenerator} + CSV discovery nếu có) → <b>2. Danh sách chạy</b> (sửa
+ * {@code local-cases.json}, validate nghiêm qua {@link CaseFileSource}, chạy {@code mvn -Pmaster})
+ * → <b>3. Báo cáo</b> (nhúng {@code test-output/index.html}). Nhập Sheet, locator và tài liệu
+ * vận hành được gom vào <b>Nâng cao</b>.
  * <p>
  * Không stream log Maven lên trang (quyết định có chủ đích — bản đầu giữ đơn giản): nút Chạy kích
  * hoạt tiến trình rồi trả lời ngay; xem tiến độ ở {@code test-output/last-run.log}, xem kết quả ở
- * lại tab Dashboard khi xong.
+ * lại bước Báo cáo khi xong.
  * <p>
  * Khởi động: {@code mvn exec:java -Dexec.mainClass=vn.tuphap.automation.caseui.CaseEditorServer}
  * (hoặc mục menu "Mở trình khai báo case (web)" trong {@code scripts/chay.cmd}).
@@ -98,7 +98,7 @@ public final class CaseEditorServer {
         }
     }
 
-    // ── /report/* — phục vụ tĩnh test-output/ để tab Dashboard nhúng iframe được ─
+    // ── /report/* — phục vụ tĩnh test-output/ để bước Báo cáo nhúng trực tiếp ─
 
     private static void handleReport(HttpExchange ex) throws IOException {
         String rel = ex.getRequestURI().getPath().substring("/report".length());
@@ -385,8 +385,8 @@ public final class CaseEditorServer {
             String casesFileArg = casesFile.toString().replace('\\', '/');
             // Profile Maven "master" (pom.xml) có sẵn <taodon.suite>smoke</taodon.suite> làm mặc
             // định — không truyền -D đè lại thì báo cáo gắn nhầm tag SMOKE dù case đến từ file JSON.
-            // -Drun.openReport=false CHỈ cho lượt này (không ghi xuống file): dashboard đã có tab
-            // Dashboard nhúng sẵn báo cáo, khỏi cần bật thêm 1 tab trình duyệt riêng khi xong.
+            // -Drun.openReport=false CHỈ cho lượt này (không ghi xuống file): Dashboard đã có bước
+            // Báo cáo nhúng sẵn, khỏi cần bật thêm một tab trình duyệt riêng khi xong.
             ProcessBuilder pb = new ProcessBuilder(
                     mvn.toString(), "-Pmaster", "test",
                     "-Dtaodon.suite=master", "-Drun.suite=master",
@@ -412,8 +412,8 @@ public final class CaseEditorServer {
         }
 
         sendJson(ex, 200, Map.of(
-                "message", "Đang chạy — theo dõi " + LOG_FILE + ". Xong thì mở lại tab Dashboard để"
-                        + " xem báo cáo cập nhật.",
+                "message", "Đang chạy — theo dõi " + LOG_FILE + ". Xong thì mở bước 3. Báo cáo để"
+                        + " xem kết quả cập nhật.",
                 "log", LOG_FILE.toString(),
                 "report", REPORT_FILE.toString()));
     }
@@ -455,7 +455,7 @@ public final class CaseEditorServer {
         }
         sendJson(ex, 200, Map.of(
                 "message", "Đang chạy suite login (LoginTest: 1 dương + 3 âm) — theo dõi "
-                        + LOG_FILE + ". Xong thì mở lại tab Dashboard để xem báo cáo.",
+                        + LOG_FILE + ". Xong thì mở bước 3. Báo cáo để xem kết quả.",
                 "log", LOG_FILE.toString(),
                 "report", REPORT_FILE.toString()));
     }

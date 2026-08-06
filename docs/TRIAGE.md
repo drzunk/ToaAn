@@ -2,8 +2,10 @@
 
 ## 1. Fail → thu thập bằng chứng
 
-1. Mở báo cáo: Dashboard tab **Dashboard** (menu 9) hoặc `test-output/index.html`.
-2. Mở case đỏ: bước dừng, message, screenshot trong `test-output/runs/<mốc>/`.
+1. Mở báo cáo: Dashboard bước **3. Báo cáo** (menu 9) hoặc `test-output/index.html`.
+2. Mở case đỏ: bước dừng, message, ảnh chụp (bấm để phóng to) và bảng **trường đã nhập** trong
+   từng bước. Kịch bản không đi qua 6 bước (suite login) có bảng **trường đã nhập (ngoài bước)**
+   ngay dưới dải tiến độ. Giá trị ô mật khẩu luôn bị ẩn. File ảnh gốc: `test-output/runs/<mốc>/`.
 3. Đọc `test-output/last-run.log` (lượt chạy từ Dashboard / `run-flow`).
 4. Ghi lại: suite, `untilStep`, loại đơn/việc, ca dương hay âm (`truongLoi`).
 

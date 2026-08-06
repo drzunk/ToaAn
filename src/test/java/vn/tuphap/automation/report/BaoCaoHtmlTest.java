@@ -52,6 +52,42 @@ public class BaoCaoHtmlTest {
     }
 
     /**
+     * Kịch bản không đi qua 6 bước — suite login — vẫn phải in được dữ liệu đã nhập. Trước đây
+     * thao tác ngoài bước bị bỏ hẳn, nên báo cáo lượt login trống phần này đúng lúc người đọc cần
+     * biết nó đã gõ tài khoản và captcha nào.
+     */
+    @Test(groups = {"unit"})
+    public void hienDuLieuDaNhapKhiCaseKhongCoBuocNao() {
+        BaoCaoData.CaseBaoCao login = new BaoCaoData.CaseBaoCao(
+                "testDangNhapSaiMatKhau", "Ca âm — sai mật khẩu", "—", List.of("Đăng nhập"),
+                TrangThai.DAT, 12_000, List.of(), List.of(), List.of(), null, List.of(),
+                "Phải bị từ chối", "Không vào được Dashboard", "",
+                List.of(new BaoCaoData.HanhDong("Điền", "Tên đăng nhập", "0123456789", ""),
+                        new BaoCaoData.HanhDong("Điền", "Mật khẩu", "SaiMatKhau_42", "")));
+
+        String html = BaoCaoHtml.dungTrangDeKiemTra(
+                List.of(luot("20260806_155019", "LOGIN", login)));
+
+        assertTrue(html.contains("2 trường đã nhập (ngoài bước)"),
+                "Không thấy bảng dữ liệu đã nhập cho case không có bước nào");
+        assertTrue(html.contains("SaiMatKhau_42"), "Không thấy giá trị đã nhập trong bảng");
+    }
+
+    /** Lượt chạy cũ lưu bằng record thiếu trường thao tác ngoài bước vẫn phải dựng được trang. */
+    @Test(groups = {"unit"})
+    public void luotChayCuThieuTruongThaoTacNgoaiBuocVanDungDuocTrang() {
+        BaoCaoData.CaseBaoCao cu = new BaoCaoData.CaseBaoCao(
+                "TC_CU_001", "Kịch bản cũ", "—", List.of(), TrangThai.DAT, 1_000,
+                List.of(), List.of(), List.of(), null, List.of(), "", "", "", null);
+
+        String html = BaoCaoHtml.dungTrangDeKiemTra(List.of(luot("20260101_000000", "MID", cu)));
+
+        assertTrue(html.contains("TC_CU_001"), "Case của lượt chạy cũ biến mất khỏi trang");
+        assertFalse(html.contains("trường đã nhập (ngoài bước)"),
+                "Không có thao tác nào mà vẫn in bảng rỗng");
+    }
+
+    /**
      * Nội dung do hệ thống trả về phải được escape. Thông báo lỗi của ứng dụng đã từng chứa
      * {@code <} và làm vỡ bố cục; và bộ ca âm có sẵn hai dòng {@code <script>alert(1)</script>}.
      */

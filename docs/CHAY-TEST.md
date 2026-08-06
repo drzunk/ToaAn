@@ -20,7 +20,7 @@ Dùng **↑ / ↓** để chọn, **Enter** để vào (hoặc bấm phím số 
 | 6 | Mid regression — 3 Chrome |
 | 7 | Full coverage — 3 Chrome (lâu) |
 | 8 | Xem cấu hình (không chạy) |
-| **9** | **Mở Dashboard web** (`http://localhost:8787`) — báo cáo / Test case / **Sinh test case theo màn** / locator |
+| **9** | **Mở Dashboard web** (`http://localhost:8787`) — **1. Chọn case → 2. Danh sách chạy → 3. Báo cáo** |
 
 ### Menu 1 — chạy theo Google Sheet
 
@@ -47,13 +47,21 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 
 → ghi `run.cases=...`, mở đúng số Chrome đã chọn.
 
-### Menu 9 — Dashboard web + Sinh test case
+### Menu 9 — Dashboard web theo 3 bước
 
 1. `.\scripts\chay.cmd` → chọn **9**.
-2. Tab **Sinh test case** → «Sinh / làm mới đề xuất» (hoặc tự tải lần đầu vào tab).
-3. Màn **Đăng nhập** (đầu danh sách, viền xanh): **1 ca dương** + **3 ca âm** — ca âm chạy **«Chạy suite login (-Plogin)»** (4 test `LoginTest`), không thêm vào `local-cases`.
-4. Các màn khác: chọn case → **Thêm case đã chọn vào danh sách** hoặc **Chạy riêng màn này**.
-5. Tab **Test case** → **Lưu tất cả xuống file** → **Chạy** (wizard / ca dương login qua master).
+2. **1. Chọn case** → chọn một màn ở cột trái → lọc **Ca âm** (mặc định), Ca dương hoặc Tất cả → tick case → **Thêm N case vào danh sách chạy**.
+3. Màn **Đăng nhập** tách riêng: ca dương có thể thêm vào danh sách; 3 ca âm chạy bằng
+   **Chạy kiểm tra đăng nhập**, không thêm vào `local-cases`.
+4. **2. Danh sách chạy** → **tick cột «Chạy» cho ca âm** (đề xuất ca âm được thêm ở trạng thái tắt)
+   → **Lưu tất cả xuống file** → **Chạy case đã lưu**.
+   Nút Chạy bị khóa khi còn thay đổi chưa lưu hoặc chưa bật case nào — dòng trạng thái bên phải
+   thanh hành động nói rõ đang thiếu bước nào.
+5. Maven chạy nền; khi xong vào **3. Báo cáo** → **Tải lại báo cáo**.
+6. **Nâng cao** chứa Nhập Google Sheet (ghi đè), tra locator và đường dẫn tài liệu.
+
+Dashboard không còn nút **Chạy riêng màn** vì thao tác cũ ghi đè toàn bộ file case trước khi chạy.
+Muốn chạy một màn: chọn case của màn đó → thêm → sang Danh sách chạy → lưu → chạy.
 
 Đề xuất lấy từ `master-data.properties` + bản đồ field ca âm (`FieldCoverageCatalog`: whitelist
 `TRUONG_LOI_HOP_LE` ∩ field `tryFieldOverride` ép được, gắn theo biến thể CN/TC/Phá sản và
