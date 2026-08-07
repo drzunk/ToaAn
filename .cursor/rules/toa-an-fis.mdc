@@ -1,13 +1,14 @@
 ---
-description: "ToaAn + FIS: khi làm feature mới, sửa framework automation, lộ ca biên, hoặc chạy Tester sau craft — đọc docs/FIS-WORKFLOW.md trước (hai đường vận hành vs phát triển; scenario lọc chiều; Maven diff-aware). Không dùng /fis-bootstrap trên repo này."
+description: "ToaAn + FIS: khi làm feature mới, sửa framework automation, lộ ca biên, hoặc chạy Tester sau craft — đọc docs/README.md (bản đồ) rồi docs/FIS-WORKFLOW.md. Không dùng /fis-bootstrap trên repo này."
 alwaysApply: false
 ---
 
 # ToaAn — FIS integration
 
-Trước khi plan/craft/test lớn trên repo này, đọc **`docs/FIS-WORKFLOW.md`**.
+Trước khi plan/craft/test lớn: **`docs/README.md`** (bản đồ) → **`docs/FIS-WORKFLOW.md`**.
 
 - Vận hành case/report/triage → `docs/WORKFLOW.md` + Dashboard menu 9 — **không** thay bằng chuỗi FIS.
 - Sửa code automation → plan → scenario (lọc chiều ToaAn) → scout? → craft → `/fis:test` map Maven → ship.
 - **Không** `/fis-bootstrap`. **Không** mặc định `-Psmoke`/`-Pmid`/`-Pfull`; UAT = người + Dashboard.
 - Unit gate: `mvn -B -Punit test`. Không commit `config.properties` / secret.
+- `.cursor/skills/**` và `plans/**` không phải tài liệu vận hành hàng ngày.

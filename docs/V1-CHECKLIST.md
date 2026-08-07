@@ -11,6 +11,7 @@
 - [x] README có mục **Vận hành v1** + link docs; nêu menu **9** / Sinh test case
 - [x] `docs/CHAY-TEST.md` link WORKFLOW + TRIAGE + CASE-SCHEMA
 - [x] `docs/FIS-WORKFLOW.md` — tích hợp FIS (scenario + Tester Maven + plan→ship); link từ README / WORKFLOW / CHAY-TEST
+- [x] `docs/README.md` — bản đồ tài liệu (cửa vào duy nhất: tầng hàng ngày / FIS / tham chiếu)
 - [x] `docs/test-spec.md` có đoạn chiến lược trỏ workflow/dashboard
 
 ## Tool đã ship (không viết lại)

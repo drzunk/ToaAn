@@ -33,6 +33,8 @@ gồm 6 bước.
 11. [Xử lý sự cố](#11-xử-lý-sự-cố)
 12. [FIS workflow](#12-fis-workflow)
 
+**Tài liệu ngắn theo việc:** [`docs/README.md`](docs/README.md) (bản đồ: chạy test / triage / FIS / tham chiếu).
+
 ---
 
 ## 1. Bắt đầu nhanh
@@ -92,6 +94,8 @@ Xem thêm: [`docs/CHAY-TEST.md`](docs/CHAY-TEST.md).
 
 ## 2. Vận hành v1
 
+**Bản đồ tài liệu (mở trước):** [`docs/README.md`](docs/README.md) — biết file nào dùng khi nào.
+
 Cửa hàng ngày cho **case cấu hình + sinh đề xuất + xem report**:
 
 ```bat
@@ -103,15 +107,12 @@ Chọn **mục 9 — Dashboard** (`http://localhost:8787`) và đi theo một lu
 Sheet, locator và tài liệu vận hành nằm trong **Nâng cao**.
 Kênh song song: mục **1** (Google Sheet). Ma trận độ phủ: smoke / mid / full (menu 3–7).
 
-| Doc | Nội dung |
-|---|---|
-| [`docs/WORKFLOW.md`](docs/WORKFLOW.md) | Vòng đời, bảng suite, chọn kênh Dashboard/Sheet/matrix |
-| [`docs/TRIAGE.md`](docs/TRIAGE.md) | Phân loại fail BUG / TEST_SAI / FLAKE / ENV_DATA |
-| [`docs/CASE-SCHEMA.md`](docs/CASE-SCHEMA.md) | Field JSON·Sheet, `untilStep`, ca âm, prefix `GEN_…` |
-| [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) | Nợ chấp nhận v1 / làm sau |
-| [`docs/V1-CHECKLIST.md`](docs/V1-CHECKLIST.md) | Definition of Done v1 |
-| [`docs/test-spec.md`](docs/test-spec.md) | Đặc tả kiểm thử / AC |
-| [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md) | FIS: scenario + Tester Maven + plan→ship (tách với vận hành Dashboard) — [mục 12](#12-fis-workflow) |
+| Ưu tiên | Doc | Nội dung |
+|---|---|---|
+| Hàng ngày | [`docs/CHAY-TEST.md`](docs/CHAY-TEST.md) · [`docs/WORKFLOW.md`](docs/WORKFLOW.md) | Menu, vòng đời, kênh case |
+| Hàng ngày | [`docs/TRIAGE.md`](docs/TRIAGE.md) · [`docs/CASE-SCHEMA.md`](docs/CASE-SCHEMA.md) | Fail · schema case |
+| Sửa code | [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md) | FIS plan→ship — [mục 12](#12-fis-workflow) |
+| Khi cần | [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) · [`docs/V1-CHECKLIST.md`](docs/V1-CHECKLIST.md) · [`docs/test-spec.md`](docs/test-spec.md) | Nợ · DoD · AC |
 
 Verify tối thiểu trước merge: `mvn -B -Punit test` (CI: `.github/workflows/ci.yml`).
 
@@ -762,20 +763,14 @@ Các nguyên tắc khác:
 
 ## 12. FIS workflow
 
-Repo này dùng FIS AI Kit cho việc **sửa framework / lộ ca biên** — tách với vận hành Dashboard.
-Chi tiết duy nhất: [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md).
+**Bản đồ docs trước:** [`docs/README.md`](docs/README.md) · chi tiết chuỗi FIS: [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md).
 
 | Đường | Việc | Đi đâu |
 |---|---|---|
-| **Vận hành test** | Chọn → Lưu → Chạy → Báo cáo → Triage | [mục 2](#2-vận-hành-v1), [`docs/WORKFLOW.md`](docs/WORKFLOW.md) |
-| **Phát triển** | Feature / fix code | plan → scenario → scout? → craft → test → ship |
+| **Vận hành test** | Chọn → Lưu → Chạy → Báo cáo → Triage | [mục 2](#2-vận-hành-v1), tầng 1 trong `docs/README.md` |
+| **Phát triển** | Feature / fix code | `FIS-WORKFLOW.md` — plan → scenario → craft → test → ship |
 
 - **Full chuỗi** khi tính năng mới / nhiều trạng thái; **rút** (`/fis:craft` + Tester) khi sửa nhỏ.
-- **`/fis:scenario`**: ưu tiên Business Logic, Input Extremes, State Transitions, Timing, Error Cascades.
-- **`/fis:test`**: map Maven diff-aware (`Foo.java` → `FooTest`, hoặc `-Punit`); **không** mặc định smoke Chrome.
-- **Không** `/fis-bootstrap` trên repo này.
+- **Không** `/fis-bootstrap`. Gate: `mvn -B -Punit test`. Không secret trong diff.
 
-Hai điều luôn đúng: `mvn -B -Punit test` xanh, và không có secret trong diff
-(`config.properties` gitignore; credential qua `TOAAN_*`).
-
-Bộ docs FIS đầy đủ (overview, architecture…) là optional — xem các file `docs/project-*.md` nếu đã có.
+Overview / architecture / roadmap = tầng 3 (đọc khi cần) — liệt kê trong [`docs/README.md`](docs/README.md).

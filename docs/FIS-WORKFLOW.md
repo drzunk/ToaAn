@@ -1,5 +1,7 @@
 # FIS workflow cho ToaAn
 
+> Bản đồ toàn bộ docs: [`README.md`](README.md) (trong `docs/`). Tầng 1 vận hành: [`WORKFLOW.md`](WORKFLOW.md).
+
 Tài liệu tích hợp duy nhất: gom skill FIS (plan → scenario → scout → craft → test → ship)
 cho đúng dự án Selenium/TestNG này. **Không** `/fis-bootstrap` trên repo đã có.
 
