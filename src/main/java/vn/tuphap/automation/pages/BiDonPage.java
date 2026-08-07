@@ -359,7 +359,10 @@ public class BiDonPage {
     }
 
     private static String ngaySinhTuNamSinh(String namSinh) {
-        if (namSinh != null && namSinh.trim().matches("\\d{4}")) {
+        if (namSinh == null || namSinh.isBlank()) {
+            return "";
+        }
+        if (namSinh.trim().matches("\\d{4}")) {
             return "01/01/" + namSinh.trim();
         }
         return "01/01/1990";
@@ -369,12 +372,13 @@ public class BiDonPage {
         By txtNamSinh = getTxtNamSinh(index, loaiDon);
         By txtNgaySinh = getTxtNgaySinh(index, loaiDon);
         if (webUI.existsNow(txtNamSinh)) {
-            webUI.setTextWithCheck(txtNamSinh, namSinh, "Ô nhập [Năm sinh] (" + who + ")");
+            webUI.setTextRequired(txtNamSinh, namSinh, "Ô nhập [Năm sinh] (" + who + ")");
         } else if (webUI.existsNow(txtNgaySinh)) {
-            webUI.setTextForMaskedInput(txtNgaySinh, ngaySinhTuNamSinh(namSinh),
+            webUI.setTextForMaskedInputRequired(txtNgaySinh, ngaySinhTuNamSinh(namSinh),
                     "Ô nhập [Ngày sinh] (" + who + ")");
         } else {
-            System.out.println(" ⏩ Bỏ qua [Năm/Ngày sinh] (" + who + ") — không có trên biểu mẫu.");
+            webUI.setTextForMaskedInputRequired(txtNgaySinh, ngaySinhTuNamSinh(namSinh),
+                    "Ô nhập [Ngày sinh] (" + who + ")");
         }
     }
 
@@ -864,7 +868,7 @@ public class BiDonPage {
             waitBiDonFormReady(index, loaiDon, "Cá nhân");
         }
         webUI.waitUntilVisible(getTxtHoTen(index, loaiDon), WaitConfig.FIELD, "Ô [Họ và tên] (" + who + ")");
-        webUI.setText(getTxtHoTen(index, loaiDon), hoTen, "Ô nhập [Họ và tên] (" + who + ")");
+        webUI.setTextRequired(getTxtHoTen(index, loaiDon), hoTen, "Ô nhập [Họ và tên] (" + who + ")");
         // UI: Họ tên → Ngày/Năm sinh → Giới tính → CCCD → Địa chỉ nơi cư trú → Nơi ở hiện tại → Nghề nghiệp → SĐT → Email
         dienSinhBiDonCaNhan(index, loaiDon, namSinh, who);
         chonGioiTinhBiDon(index, loaiDon, gioiTinh, who);
@@ -892,7 +896,7 @@ public class BiDonPage {
         }
         By txt = getTxtNoiOHienTai(index, loaiDon);
         if (webUI.existsNow(txt)) {
-            webUI.setTextWithCheck(txt, WebUI.toAddressStreetDetail(noiO) != null
+            webUI.setTextRequired(txt, WebUI.toAddressStreetDetail(noiO) != null
                             ? WebUI.toAddressStreetDetail(noiO) : noiO,
                     "Ô nhập [Nơi ở hiện tại] (" + who + ")");
         }
@@ -914,7 +918,7 @@ public class BiDonPage {
             waitBiDonFormReady(index, loaiDon, "Tổ chức");
         }
         webUI.waitUntilVisible(getTxtTenToChuc(index, loaiDon), WaitConfig.FIELD, "Ô [Tên tổ chức] (" + who + ")");
-        webUI.setText(getTxtTenToChuc(index, loaiDon), tenToChuc, "Ô nhập [Tên tổ chức] (" + who + ")");
+        webUI.setTextRequired(getTxtTenToChuc(index, loaiDon), tenToChuc, "Ô nhập [Tên tổ chức] (" + who + ")");
         if (loaiHinh != null && !loaiHinh.isBlank() && webUI.existsNow(getBtnLoaiHinhToChuc(index, loaiDon))) {
             webUI.selectDropdownWithCheck(getBtnLoaiHinhToChuc(index, loaiDon), LIST_OPTIONS_LOAI_HINH, loaiHinh,
                     "Dropdown [Loại hình] (" + who + ")");
@@ -972,12 +976,12 @@ public class BiDonPage {
                             + who + ") sau " + WaitConfig.STEP + "s.");
         }
         webUI.waitUntilVisible(getTxtTenCoQuan(index), WaitConfig.FIELD, "Ô [Tên cơ quan] (" + who + ")");
-        webUI.setText(getTxtTenCoQuan(index), tenCoQuan, "Ô nhập [Tên cơ quan] (" + who + ")");
+        webUI.setTextRequired(getTxtTenCoQuan(index), tenCoQuan, "Ô nhập [Tên cơ quan] (" + who + ")");
         dienDiaChiBiDon(loaiDon, index, diaChi, true, who);
-        webUI.setTextWithCheck(getTxtChucDanh(index), chucDanh, "Ô nhập [Chức danh] (" + who + ")");
-        webUI.setTextWithCheck(getTxtNguoiCoThamQuyen(index), nguoiThamQuyen,
+        webUI.setTextRequired(getTxtChucDanh(index), chucDanh, "Ô nhập [Chức danh] (" + who + ")");
+        webUI.setTextRequired(getTxtNguoiCoThamQuyen(index), nguoiThamQuyen,
                 "Ô nhập [Người có thẩm quyền] (" + who + ")");
-        webUI.setTextWithCheck(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại] (" + who + ")");
+        webUI.setTextRequired(getTxtSoDienThoai(index, loaiDon), sdt, "Ô nhập [Số điện thoại] (" + who + ")");
     }
 
     public void dienNguoiLienQuan(String loaiDon, String luaChon, String hoTen, String lyDo, String lienLac) {
@@ -998,7 +1002,7 @@ public class BiDonPage {
         }
         if (luaChon.trim().toLowerCase().equals("có")) {
             webUI.waitUntilVisible(getTxtHoTenNguoiLienQuan(loaiDon), WaitConfig.FIELD, "Ô [Họ tên người liên quan]");
-            webUI.setTextWithCheck(getTxtHoTenNguoiLienQuan(loaiDon), hoTen, "Ô nhập [Họ tên người liên quan]");
+            webUI.setTextRequired(getTxtHoTenNguoiLienQuan(loaiDon), hoTen, "Ô nhập [Họ tên người liên quan]");
             webUI.waitUntilVisible(getTxtLyDoLienQuan(loaiDon), WaitConfig.FIELD, "Ô [Mối quan hệ / Lý do liên quan]");
             webUI.setText(getTxtLyDoLienQuan(loaiDon), lyDo, "Ô nhập [Mối quan hệ / Lý do liên quan]");
             webUI.setTextWithCheck(getTxtLienLacNguoiLienQuan(loaiDon), lienLac, "Ô nhập [Thông tin liên lạc người LQ]");

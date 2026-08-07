@@ -336,7 +336,7 @@ public class NguyenDonPage {
 
         webUI.setTextRequired(txtCCCD, cccd, "Ô nhập [Số CCCD / CMND]");
         webUI.setTextForMaskedInputRequired(txtNgayCapCCCD, ngayCap, "Ô nhập [Ngày cấp CCCD]");
-        webUI.setTextWithCheck(txtNoiCapCCCD, noiCap, "Ô nhập [Nơi cấp CCCD]");
+        webUI.setTextRequired(txtNoiCapCCCD, noiCap, "Ô nhập [Nơi cấp CCCD]");
     }
 
     public void dienThongTinLienHe(String thuongTru, String lienLac, String sdt, String email) {
@@ -552,29 +552,31 @@ public class NguyenDonPage {
                                         String diaChiCuTru, String email) {
         By txtHoTenRep = fieldInMain("contains(., 'Họ và tên người đại diện')");
         if (webUI.isElementVisible(txtHoTenRep)) {
-            webUI.setTextWithCheck(txtHoTenRep, hoTen, "Ô nhập [Họ và tên người đại diện]");
+            webUI.setTextRequired(txtHoTenRep, hoTen, "Ô nhập [Họ và tên người đại diện]");
             // Từ đây trở xuống đều nằm trong khối người đại diện đã xác nhận hiển thị ở trên,
             // không có re-render xen giữa → kiểm tra không chờ.
             By txtNgaySinhRep = fieldInMain("contains(., 'Ngày, tháng, năm sinh')");
             if (webUI.isElementVisible(txtNgaySinhRep)) {
-                webUI.setTextForMaskedInput(txtNgaySinhRep, ngaySinh, "Ô nhập [Ngày, tháng, năm sinh người đại diện]");
+                webUI.setTextForMaskedInputRequired(
+                        txtNgaySinhRep, ngaySinh, "Ô nhập [Ngày, tháng, năm sinh người đại diện]");
             }
             chonGioiTinhNguoiDaiDien(gioiTinh);
             By txtCccdRep = fieldInMain("contains(., 'Số CCCD') or contains(., 'Hộ chiếu')");
             if (webUI.isElementVisible(txtCccdRep)) {
-                webUI.setTextWithCheck(txtCccdRep, cccd, "Ô nhập [Số CCCD / Hộ chiếu người đại diện]");
+                webUI.setTextRequired(txtCccdRep, cccd, "Ô nhập [Số CCCD / Hộ chiếu người đại diện]");
             }
             By txtCapNgay = fieldInMain("contains(., 'Cấp ngày')");
             if (webUI.isElementVisible(txtCapNgay)) {
-                webUI.setTextForMaskedInput(txtCapNgay, ngayCap, "Ô nhập [Cấp ngày CCCD người đại diện]");
+                webUI.setTextForMaskedInputRequired(
+                        txtCapNgay, ngayCap, "Ô nhập [Cấp ngày CCCD người đại diện]");
             }
             By txtNoiCapRep = fieldInMain("contains(., 'Nơi cấp')");
             if (webUI.isElementVisible(txtNoiCapRep) && noiCap != null && !noiCap.isBlank()) {
-                webUI.setTextWithCheck(txtNoiCapRep, noiCap, "Ô nhập [Nơi cấp người đại diện]");
+                webUI.setTextRequired(txtNoiCapRep, noiCap, "Ô nhập [Nơi cấp người đại diện]");
             }
             dienDiaChiNguoiDaiDienToChuc(diaChiCuTru);
         } else if (webUI.isElementVisible(txtNguoiDaiDienPL)) {
-            webUI.setTextWithCheck(txtNguoiDaiDienPL, hoTen, "Ô nhập [Người đại diện pháp luật]");
+            webUI.setTextRequired(txtNguoiDaiDienPL, hoTen, "Ô nhập [Người đại diện pháp luật]");
         } else {
             TestActionLog.boQua("Người đại diện tổ chức", "Không có trên biểu mẫu");
         }
@@ -619,7 +621,7 @@ public class NguyenDonPage {
                 System.out.println(" ⏩ [Người đại diện pháp lý] đã mở sẵn — không click lại checkbox.");
             }
             webUI.waitUntilVisible(txtTenNguoiDaiDien, WaitConfig.FIELD, "Ô [Người đại diện pháp lý]");
-            webUI.setTextWithCheck(txtTenNguoiDaiDien, tenNguoiDaiDien, "Ô nhập [Người đại diện pháp lý]");
+            webUI.setTextRequired(txtTenNguoiDaiDien, tenNguoiDaiDien, "Ô nhập [Người đại diện pháp lý]");
             if (webUI.existsNow(btnDropdownQuanHe)) {
                 webUI.selectDropdownWithCheck(btnDropdownQuanHe, listOptionsQuanHe, quanHe, "Dropdown [Quan hệ đại diện]");
             }
@@ -821,12 +823,12 @@ public class NguyenDonPage {
         By txtDiaChi = resolveDongAddressTextarea(scope, labelDiaChi);
         webUI.waitUntilVisible(txtDiaChi, WaitConfig.FIELD, "Đồng ND — ô địa chỉ");
         webUI.scrollToElement(txtDiaChi);
-        webUI.setTextWithCheck(txtDiaChi, diaChiChiTiet, "Đồng ND — [Địa chỉ chi tiết]");
+        webUI.setTextRequired(txtDiaChi, diaChiChiTiet, "Đồng ND — [Địa chỉ chi tiết]");
         String noiO = (noiOHienTai == null || noiOHienTai.isBlank()) ? diaChiChiTiet : noiOHienTai;
         By txtNoiO = fieldInDongScope("contains(., 'Nơi ở hiện tại')");
-        // Thẻ đồng ND vừa được setTextWithCheck ngay trên → chắc chắn đã render.
+        // Thẻ đồng ND vừa được điền địa chỉ ngay trên → chắc chắn đã render.
         if (webUI.isElementVisible(txtNoiO)) {
-            webUI.setTextWithCheck(txtNoiO, noiO, "Đồng ND — [Nơi ở hiện tại]");
+            webUI.setTextRequired(txtNoiO, noiO, "Đồng ND — [Nơi ở hiện tại]");
         }
     }
 
@@ -881,7 +883,7 @@ public class NguyenDonPage {
 
     private static String namSinhTuNgay(String ngaySinh) {
         if (ngaySinh == null || ngaySinh.isBlank()) {
-            return "1990";
+            return "";
         }
         String[] parts = ngaySinh.trim().split("[/.\\-]");
         if (parts.length >= 3) {
@@ -895,26 +897,26 @@ public class NguyenDonPage {
 
     private void dienDongNguyenDonCaNhan(DongNguyenDonData data) {
         By txtHoTen = fieldInDongScope("contains(., 'Họ và tên')");
-        if (data.hoTen() != null && !data.hoTen().isBlank()) {
-            webUI.setTextWithCheck(txtHoTen, data.hoTen(), "Đồng ND — [Họ và tên]");
-        }
+        webUI.setTextRequired(txtHoTen, data.hoTen(), "Đồng ND — [Họ và tên]");
         By txtNgaySinh = fieldInDongScope("contains(., 'Ngày, tháng, năm sinh') or contains(., 'Ngày sinh')");
         By txtNamSinh = fieldInDongScope("contains(., 'Năm sinh')");
         // Biểu mẫu chỉ có một trong hai ô → luôn có đúng 1 lần trượt. Với isElementVisible thì
         // lần trượt đó đốt trọn PROBE_MS (1.2s) cho mỗi đồng nguyên đơn.
         if (webUI.isElementVisible(txtNgaySinh)) {
-            webUI.setTextForMaskedInput(txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
+            webUI.setTextForMaskedInputRequired(
+                    txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
         } else if (webUI.isElementVisible(txtNamSinh)) {
-            webUI.setTextWithCheck(txtNamSinh, namSinhTuNgay(data.ngaySinh()), "Đồng ND — [Năm sinh]");
+            webUI.setTextRequired(txtNamSinh, namSinhTuNgay(data.ngaySinh()), "Đồng ND — [Năm sinh]");
         } else {
-            webUI.setTextForMaskedInput(txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
+            webUI.setTextForMaskedInputRequired(
+                    txtNgaySinh, data.ngaySinh(), "Đồng ND — [Ngày, tháng, năm sinh]");
         }
         String gt = (data.gioiTinh() == null || data.gioiTinh().isBlank()) ? "Nam" : data.gioiTinh();
         By gioiTinhDong = getGioiTinhTrongDong(gt);
         if (webUI.isElementVisible(gioiTinhDong)) {
             webUI.clickElement(gioiTinhDong, "Đồng ND — Giới tính: [" + gt + "]");
         }
-        webUI.setTextWithCheck(
+        webUI.setTextRequired(
                 fieldInDongScope("contains(., 'Số CCCD') or contains(., 'Hộ chiếu')"),
                 data.cccd(), "Đồng ND — [Số CCCD / Hộ chiếu]");
         dienDiaChiDong(data.diaChiCuTru(), data.noiOHienTai(), "contains(., 'Địa chỉ nơi cư trú')");
@@ -923,7 +925,7 @@ public class NguyenDonPage {
                     fieldInDongScope("contains(., 'Nghề nghiệp') or contains(., 'nơi làm việc')"),
                     data.ngheNghiep(), "Đồng ND — [Nghề nghiệp, nơi làm việc]");
         }
-        webUI.setTextWithCheck(
+        webUI.setTextRequired(
                 fieldInDongScope("contains(., 'Số điện thoại')"),
                 data.sdt(), "Đồng ND — [Số điện thoại]");
         webUI.setTextWithCheck(
@@ -932,7 +934,7 @@ public class NguyenDonPage {
     }
 
     private void dienDongNguyenDonToChuc(DongNguyenDonData data) {
-        webUI.setTextWithCheck(
+        webUI.setTextRequired(
                 fieldInDongScope("contains(., 'Tên tổ chức')"),
                 data.tenToChuc(), "Đồng ND — [Tên tổ chức]");
         String scope = dongFormScope();
@@ -942,7 +944,7 @@ public class NguyenDonPage {
         if (webUI.existsNow(btnLoaiHinh) && data.loaiHinh() != null && !data.loaiHinh().isBlank()) {
             webUI.selectDropdownWithCheck(btnLoaiHinh, listOptions, data.loaiHinh(), "Đồng ND — [Loại hình tổ chức]");
         }
-        webUI.setTextWithCheck(
+        webUI.setTextRequired(
                 fieldInDongScope("contains(., 'Mã số thuế') or contains(., 'MSDN')"),
                 data.mst(), "Đồng ND — [Mã số thuế]");
         dienDiaChiDong(data.diaChiTruSo(), data.diaChiTruSo(),
@@ -957,7 +959,7 @@ public class NguyenDonPage {
                     fieldInDongScope("contains(., 'Chức vụ')"),
                     data.chucVu(), "Đồng ND — [Chức vụ]");
         }
-        webUI.setTextWithCheck(
+        webUI.setTextRequired(
                 fieldInDongScope("contains(., 'Số điện thoại')"),
                 data.sdt(), "Đồng ND — [Số điện thoại]");
         webUI.setTextWithCheck(
@@ -1065,7 +1067,7 @@ public class NguyenDonPage {
         System.out.println(" ℹ Bước 2 — kiểm tra lại sau VNeID (chỉ sửa ô lệch/thiếu)...");
         dienThongTinCaNhan(hoTen, ngaySinh, gioiTinh, cccd, ngayCap, noiCap);
         chuanBiDiaChiTruocTiepTheo(thuongTru, lienLac);
-        webUI.setTextWithCheck(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
+        webUI.setTextRequired(txtSoDienThoai, sdt, "Ô nhập [Số điện thoại]");
         webUI.setTextWithCheck(txtEmail, email, "Ô nhập [Email]");
     }
 

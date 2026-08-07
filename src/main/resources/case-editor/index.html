@@ -1226,48 +1226,6 @@
     capNhatSoChon();
   }
 
-  /**
-   * Chạy đúng các case của MỘT màn: ghi đè file case bằng đúng nhóm đó rồi gọi /api/run.
-   * Ép chay=true cho cả ca âm (mặc định ca âm tắt tick) — người dùng đã chủ động chọn màn để chạy.
-   */
-  function chayRiengMan(mi){
-    if (!state.gen) return;
-    var man = state.gen.screens[mi];
-    var chon = [];
-    document.querySelectorAll('.chk-gen[data-mi="' + mi + '"]:checked').forEach(function(cb){
-      var c = man.cases[+cb.dataset.ci];
-      if (c && c.caseRow) chon.push(Object.assign({}, c.caseRow, {chay: true}));
-    });
-    if (!chon.length) {
-      baoTinSinh('loi', 'Chưa tick case nào trong màn «' + man.ten + '».');
-      return;
-    }
-    if (!confirm('Chạy riêng «' + man.ten + '» với ' + chon.length + ' case.\n\n'
-        + 'Danh sách case trong file sẽ bị GHI ĐÈ bằng đúng ' + chon.length + ' case này.\n'
-        + 'Mỗi case vẫn đi từ đăng nhập qua các bước trước rồi DỪNG ở màn này.')) {
-      return;
-    }
-    baoTinSinh('info', 'Đang lưu ' + chon.length + ' case và khởi động Maven…');
-    fetch('/api/cases', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(chon)
-    }).then(function(r){ return r.json().then(function(b){ return {ok: r.ok, body: b}; }); })
-      .then(function(res){
-        if (!res.ok) { throw new Error(res.body.error || 'Lưu thất bại.'); }
-        state.rows = chon;
-        veBang();
-        return fetch('/api/run', {method: 'POST'})
-          .then(function(r){ return r.json().then(function(b){ return {ok: r.ok, body: b}; }); });
-      })
-      .then(function(res){
-        if (!res.ok) { throw new Error(res.body.error || 'Không chạy được.'); }
-        baoTinSinh('ok', 'Đang chạy màn «' + man.ten + '» (' + chon.length + ' case). '
-          + res.body.message);
-      })
-      .catch(function(e){ baoTinSinh('loi', String(e.message || e)); });
-  }
-
   el('btn-sinh-dexuat').addEventListener('click', function(){ napDeXuat(); });
   document.querySelectorAll('[data-gen-filter]').forEach(function(btn){
     btn.addEventListener('click', function(){

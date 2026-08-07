@@ -60,8 +60,7 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 5. Maven chạy nền; khi xong vào **3. Báo cáo** → **Tải lại báo cáo**.
 6. **Nâng cao** chứa Nhập Google Sheet (ghi đè), tra locator và đường dẫn tài liệu.
 
-Dashboard không còn nút **Chạy riêng màn** vì thao tác cũ ghi đè toàn bộ file case trước khi chạy.
-Muốn chạy một màn: chọn case của màn đó → thêm → sang Danh sách chạy → lưu → chạy.
+Muốn chạy case của một màn: chọn các case ở màn đó → thêm → sang Danh sách chạy → lưu → chạy.
 
 Đề xuất lấy từ `master-data.properties` + bản đồ field ca âm (`FieldCoverageCatalog`: whitelist
 `TRUONG_LOI_HOP_LE` ∩ field `tryFieldOverride` ép được, gắn theo biến thể CN/TC/Phá sản và

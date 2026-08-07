@@ -39,7 +39,7 @@ Validate nghiêm lúc **Lưu** / nạp file (`CaseFileSource`) — sai catalog h
 - API: `GET /api/generate-cases` (tab **Sinh test case**).
 - `ghiChu` dạng `GEN_Login_Smoke`, `GEN_B2_CaNhan`, `GEN_AM_B2_…`.
 - `untilStep` theo màn đề xuất; ca âm mặc định `chay = false` (tránh chạy ồ ạt).
-- Merge: tick → **Thêm vào danh sách** (bỏ trùng `ghiChu`) → **Lưu tất cả**; hoặc **Chạy riêng màn này** (ghi đè file bằng đúng nhóm đã tick).
+- Merge: tick → **Thêm vào danh sách** (bỏ trùng `ghiChu`) → **Lưu tất cả** → **Chạy case đã lưu**.
 - Nếu có CSV `test-output/discovery-sweep/field-discovery_*.csv`, generator gắn `thongBaoMongDoi` khi discovery từng thấy hệ thống chặn.
 
 ### Field ca âm lấy từ đâu (`FieldCoverageCatalog`)
