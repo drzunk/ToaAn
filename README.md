@@ -31,6 +31,7 @@ gồm 6 bước.
 9. [Scripts](#9-scripts)
 10. [Quy ước code](#10-quy-ước-code)
 11. [Xử lý sự cố](#11-xử-lý-sự-cố)
+12. [FIS workflow](#12-fis-workflow)
 
 ---
 
@@ -110,6 +111,7 @@ Kênh song song: mục **1** (Google Sheet). Ma trận độ phủ: smoke / mid 
 | [`docs/TECH-DEBT.md`](docs/TECH-DEBT.md) | Nợ chấp nhận v1 / làm sau |
 | [`docs/V1-CHECKLIST.md`](docs/V1-CHECKLIST.md) | Definition of Done v1 |
 | [`docs/test-spec.md`](docs/test-spec.md) | Đặc tả kiểm thử / AC |
+| [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md) | FIS: scenario + Tester Maven + plan→ship (tách với vận hành Dashboard) — [mục 12](#12-fis-workflow) |
 
 Verify tối thiểu trước merge: `mvn -B -Punit test` (CI: `.github/workflows/ci.yml`).
 
@@ -755,3 +757,25 @@ Các nguyên tắc khác:
 | Mất mạng vẫn muốn chạy theo sheet | Lần chạy trước đã lưu `test-output/cases-sheet-cache.csv` — automation tự dùng cache và in cảnh báo kèm thời điểm tải. |
 | Danh sách loại đơn / tòa án lệch với UI thật | Chạy `mvn test -Dtest=MasterDataSyncTest` để quét lại `master-data.properties` từ UI. |
 | Chạy chậm, muốn kiểm tra logic ma trận thôi | `mvn -Punit test` — unit test ma trận + bộ đọc sheet, không mở trình duyệt, không gọi mạng. |
+
+---
+
+## 12. FIS workflow
+
+Repo này dùng FIS AI Kit cho việc **sửa framework / lộ ca biên** — tách với vận hành Dashboard.
+Chi tiết duy nhất: [`docs/FIS-WORKFLOW.md`](docs/FIS-WORKFLOW.md).
+
+| Đường | Việc | Đi đâu |
+|---|---|---|
+| **Vận hành test** | Chọn → Lưu → Chạy → Báo cáo → Triage | [mục 2](#2-vận-hành-v1), [`docs/WORKFLOW.md`](docs/WORKFLOW.md) |
+| **Phát triển** | Feature / fix code | plan → scenario → scout? → craft → test → ship |
+
+- **Full chuỗi** khi tính năng mới / nhiều trạng thái; **rút** (`/fis:craft` + Tester) khi sửa nhỏ.
+- **`/fis:scenario`**: ưu tiên Business Logic, Input Extremes, State Transitions, Timing, Error Cascades.
+- **`/fis:test`**: map Maven diff-aware (`Foo.java` → `FooTest`, hoặc `-Punit`); **không** mặc định smoke Chrome.
+- **Không** `/fis-bootstrap` trên repo này.
+
+Hai điều luôn đúng: `mvn -B -Punit test` xanh, và không có secret trong diff
+(`config.properties` gitignore; credential qua `TOAAN_*`).
+
+Bộ docs FIS đầy đủ (overview, architecture…) là optional — xem các file `docs/project-*.md` nếu đã có.

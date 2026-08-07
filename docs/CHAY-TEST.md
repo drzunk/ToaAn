@@ -1,6 +1,6 @@
 # Cách chạy test
 
-Tài liệu vận hành đầy đủ: [`WORKFLOW.md`](WORKFLOW.md) · triage fail: [`TRIAGE.md`](TRIAGE.md) · schema case: [`CASE-SCHEMA.md`](CASE-SCHEMA.md).
+Tài liệu vận hành đầy đủ: [`WORKFLOW.md`](WORKFLOW.md) · triage fail: [`TRIAGE.md`](TRIAGE.md) · schema case: [`CASE-SCHEMA.md`](CASE-SCHEMA.md). Sửa code / lộ ca biên bằng FIS: [`FIS-WORKFLOW.md`](FIS-WORKFLOW.md).
 
 ## Cách dễ nhất
 

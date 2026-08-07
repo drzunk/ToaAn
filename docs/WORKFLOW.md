@@ -2,6 +2,8 @@
 
 Tài liệu ngắn cho người chạy / sửa automation hàng ngày. Chi tiết lệnh menu: [`CHAY-TEST.md`](CHAY-TEST.md). Schema case: [`CASE-SCHEMA.md`](CASE-SCHEMA.md). Fail: [`TRIAGE.md`](TRIAGE.md). DoD: [`V1-CHECKLIST.md`](V1-CHECKLIST.md).
 
+**Hai đường:** tài liệu này = **vận hành test** (Dashboard / Sheet / matrix). Khi **sửa framework** (feature, locator, flow, generator) dùng chuỗi FIS plan→scenario→craft→test→ship — xem [`FIS-WORKFLOW.md`](FIS-WORKFLOW.md).
+
 ## 1. Vòng đời một nhu cầu kiểm thử
 
 ```text
