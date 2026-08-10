@@ -47,7 +47,7 @@ Scout chèn khi chưa quen vùng code; bỏ qua nếu vừa làm đúng các fil
 
 ## C. `/fis:scenario` — lọc chiều cho ToaAn
 
-Dùng **trước craft** hoặc **trước bổ sung ca âm**. Không cần đủ 12 chiều mọi lần.
+Dùng **trước craft** hoặc **trước bổ sung Negative** (Dashboard filter **Negative**). Không cần đủ 12 chiều mọi lần.
 
 ### Ưu tiên
 

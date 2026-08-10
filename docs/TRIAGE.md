@@ -7,7 +7,7 @@
    từng bước. Kịch bản không đi qua 6 bước (suite login) có bảng **trường đã nhập (ngoài bước)**
    ngay dưới dải tiến độ. Giá trị ô mật khẩu luôn bị ẩn. File ảnh gốc: `test-output/runs/<mốc>/`.
 3. Đọc `test-output/last-run.log` (lượt chạy từ Dashboard / `run-flow`).
-4. Ghi lại: suite, `untilStep`, loại đơn/việc, ca dương hay âm (`truongLoi`).
+4. Ghi lại: suite, `untilStep`, loại đơn/việc, Positive hay Negative (`truongLoi`).
 
 Không đoán trước khi có ảnh + bước trong report.
 
@@ -15,8 +15,8 @@ Không đoán trước khi có ảnh + bước trong report.
 
 | Loại | Dấu hiệu | Việc làm |
 |---|---|---|
-| **BUG** | UI/API sai thật: validation không chặn khi ca âm kỳ vọng chặn; toast lỗi hệ thống sau Gửi đơn; dữ liệu đúng mà không sang bước | Mở ticket sản phẩm; giữ case FAIL; không “sửa test cho xanh” |
-| **TEST_SAI** | Locator/nhãn lệch catalog; `untilStep`/ca âm khai báo sai; ghi chú `GEN_…` trùng ý nhưng field whitelist sai | Sửa `pages` / case JSON·Sheet / generator whitelist; chạy lại hẹp |
+| **BUG** | UI/API sai thật: validation không chặn khi Negative kỳ vọng chặn; toast lỗi hệ thống sau Gửi đơn; dữ liệu đúng mà không sang bước | Mở ticket sản phẩm; giữ case FAIL; không “sửa test cho xanh” |
+| **TEST_SAI** | Locator/nhãn lệch catalog; `untilStep`/Negative khai báo sai; ghi chú `GEN_…` trùng ý nhưng field whitelist sai | Sửa `pages` / case JSON·Sheet / generator whitelist; chạy lại hẹp |
 | **FLAKE** | Chạy lại cùng case pass/fail không ổn định; race SPA, captcha, eform iframe | Xem mục 3; siết wait có sẵn (`WaitConfig`), không thêm sleep mù; nếu vẫn flake → ghi [`TECH-DEBT.md`](TECH-DEBT.md) |
 | **ENV_DATA** | Sai URL/user; sheet mất quyền; catalog UAT đổi chưa sync; thiếu file upload mẫu | Sửa `config.properties`/env (không commit secret); `MasterDataSyncTest`; kiểm tra `testdata/` |
 

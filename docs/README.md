@@ -27,7 +27,7 @@ Cửa vào duy nhất. Mở file đúng việc; đừng đọc hết một lần
 | [`CHAY-TEST.md`](CHAY-TEST.md) | Menu `chay.cmd`, Dashboard 3 bước |
 | [`WORKFLOW.md`](WORKFLOW.md) | Vòng đời vận hành, suite, kênh case |
 | [`TRIAGE.md`](TRIAGE.md) | BUG / TEST_SAI / FLAKE / ENV_DATA |
-| [`CASE-SCHEMA.md`](CASE-SCHEMA.md) | Field JSON·Sheet, ca âm, `GEN_…` |
+| [`CASE-SCHEMA.md`](CASE-SCHEMA.md) | Field JSON·Sheet, Negative (= ca âm), `GEN_…` |
 
 Hai đường đừng lẫn: **vận hành** = tầng 1 · **sửa framework** = tầng 2.
 

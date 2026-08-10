@@ -50,10 +50,10 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 ### Menu 9 — Dashboard web theo 3 bước
 
 1. `.\scripts\chay.cmd` → chọn **9**.
-2. **1. Chọn case** → chọn một màn ở cột trái → lọc **Ca âm** (mặc định), Ca dương hoặc Tất cả → tick case → **Thêm N case vào danh sách chạy**.
-3. Màn **Đăng nhập** tách riêng: ca dương có thể thêm vào danh sách; 3 ca âm chạy bằng
-   **Chạy kiểm tra đăng nhập**, không thêm vào `local-cases`.
-4. **2. Danh sách chạy** → **tick cột «Chạy» cho ca âm** (đề xuất ca âm được thêm ở trạng thái tắt)
+2. **1. Chọn case** → chọn một màn ở cột trái → lọc **Negative** (mặc định), **Positive** hoặc **All** → tick case → **Thêm N case vào danh sách chạy**.
+3. Màn **Đăng nhập** tách riêng: Positive có thể thêm vào danh sách; 3 Negative login chạy bằng
+   **Chạy Login suite**, không thêm vào `local-cases`.
+4. **2. Danh sách chạy** → **tick cột «Chạy» cho Negative** (Negative đề xuất được thêm unchecked by default — safe)
    → **Lưu tất cả xuống file** → **Chạy case đã lưu**.
    Nút Chạy bị khóa khi còn thay đổi chưa lưu hoặc chưa bật case nào — dòng trạng thái bên phải
    thanh hành động nói rõ đang thiếu bước nào.
@@ -62,14 +62,14 @@ Số case trên sheet có thể nhiều hơn số Chrome — các case còn lạ
 
 Muốn chạy case của một màn: chọn các case ở màn đó → thêm → sang Danh sách chạy → lưu → chạy.
 
-Đề xuất lấy từ `master-data.properties` + bản đồ field ca âm (`FieldCoverageCatalog`: whitelist
+Test case đề xuất lấy từ `master-data.properties` + bản đồ field Negative (`FieldCoverageCatalog`: whitelist
 `TRUONG_LOI_HOP_LE` ∩ field `tryFieldOverride` ép được, gắn theo biến thể CN/TC/Phá sản và
 textarea/eform — xem `docs/CASE-SCHEMA.md`).
 
 **Muốn phủ field tốt hơn thì chạy `mvn -Pdiscovery test` trước khi Sinh:** discovery ghi CSV vào
 `test-output/discovery-sweep/`, generator đọc CSV mới nhất để gắn `thongBaoMongDoi` thật (thay vì
-để trống) và đánh dấu field từng bị hệ thống chặn. Dòng meta trên tab hiện `phủ field ca âm: x/y (z%)`
-kèm danh sách field chưa có ca âm.
+để trống) và đánh dấu field từng bị hệ thống chặn. Dòng meta trên tab hiện `phủ field Negative: x/y (z%)`
+kèm danh sách field chưa có Negative.
 
 ---
 

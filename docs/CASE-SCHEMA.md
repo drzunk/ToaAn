@@ -19,7 +19,7 @@ Hợp đồng Java: `CaseFileSource.CaseRow` → `RunFlowConfig.CaseProfile` →
 | `coNguoiLienQuan` | Liên quan | `null` = tự chọn |
 | `coTaiLieuBoSung` | TL bổ sung | `null` = tự chọn |
 | `ghiChu` | Ghi chú | Id dễ nhớ; generator dùng prefix `GEN_…` |
-| `truongLoi` | Trường lỗi | Ca âm — whitelist `DataGenerator.TRUONG_LOI_HOP_LE` |
+| `truongLoi` | Trường lỗi | **Negative** — whitelist `DataGenerator.TRUONG_LOI_HOP_LE` |
 | `giaTriLoi` | Giá trị lỗi | Giá trị ép vào field (rỗng = để trống) |
 | `thongBaoMongDoi` | Thông báo mong đợi | Chuỗi con trong message chặn; rỗng = mọi thông báo |
 | `untilStep` | Đến bước | `0` = chỉ login; `1`…`6` = dừng sau bước đó |
@@ -32,19 +32,19 @@ Validate nghiêm lúc **Lưu** / nạp file (`CaseFileSource`) — sai catalog h
 - Wizard không nhảy bước: case bước N vẫn login → điền hợp lệ 1…N−1 → dừng ở N.
 - `untilStep = 6` + `submit = false` → dừng Xem lại (an toàn).
 - `untilStep = 6` + `submit = true` → bấm Gửi đơn (tạo đơn trên UAT).
-- Ca âm thường đặt `untilStep` = bước chứa field; `submit = false`.
+- **Negative** thường đặt `untilStep` = bước chứa field; `submit = false`.
 
 ## 3. Case từ `TestCaseGenerator`
 
-- API: `GET /api/generate-cases` (tab **Sinh test case**).
+- API: `GET /api/generate-cases` (tab **1. Chọn case** — filter UI: **Negative / Positive / All**).
 - `ghiChu` dạng `GEN_Login_Smoke`, `GEN_B2_CaNhan`, `GEN_AM_B2_…`.
-- `untilStep` theo màn đề xuất; ca âm mặc định `chay = false` (tránh chạy ồ ạt).
+- `untilStep` theo màn đề xuất; Negative mặc định `chay = false` (unchecked by default — safe).
 - Merge: tick → **Thêm vào danh sách** (bỏ trùng `ghiChu`) → **Lưu tất cả** → **Chạy case đã lưu**.
 - Nếu có CSV `test-output/discovery-sweep/field-discovery_*.csv`, generator gắn `thongBaoMongDoi` khi discovery từng thấy hệ thống chặn.
 
-### Field ca âm lấy từ đâu (`FieldCoverageCatalog`)
+### Field Negative lấy từ đâu (`FieldCoverageCatalog`)
 
-Generator không còn giữ danh sách field cứng trong từng màn. Field ca âm là giao của ba nguồn:
+Generator không còn giữ danh sách field cứng trong từng màn. Field Negative (= ca âm kỹ thuật) là giao của ba nguồn:
 
 1. whitelist `DataGenerator.TRUONG_LOI_HOP_LE` — tên field hợp lệ của schema `CaseRow`;
 2. `DataGenerator.tryFieldOverride` — framework thật sự ép được giá trị lỗi vào kịch bản (ép không được thì field bị bỏ, nêu trong `boQua`);
@@ -61,14 +61,14 @@ Mỗi field gắn một biến thể form để case sinh ra đúng ngữ cảnh
 | 4 | `B4_TEXTAREA` | Thời điểm phát sinh, Giá trị tranh chấp, Tóm tắt quá trình, Yêu cầu cụ thể, Căn cứ pháp lý |
 | 4 | `B4_EFORM` | (trống) — eform có schema động trong iframe, không gắn override Java |
 
-Vì vậy ca âm bước 4 chỉ sinh cho loại việc dùng textarea; loại việc eform chỉ có ca dương.
+Vì vậy Negative bước 4 chỉ sinh cho loại việc dùng textarea; loại việc eform chỉ có Positive.
 
-`GET /api/generate-cases` trả thêm `fieldCoverage` (`tongFieldUngVien`, `fieldDaCoCaAm`, `phanTramPhu`, `fieldDiscoveryDaThay`, `fieldChuaPhu`); tab Sinh test case hiện dòng `phủ field ca âm: x/y (z%)`. Muốn có `thongBaoMongDoi` thật thì chạy `mvn -Pdiscovery test` trước khi Sinh.
+`GET /api/generate-cases` trả thêm `fieldCoverage` (`tongFieldUngVien`, `fieldDaCoCaAm`, `phanTramPhu`, `fieldDiscoveryDaThay`, `fieldChuaPhu`); tab Chọn case hiện dòng `phủ field Negative: x/y (z%)`. Muốn có `thongBaoMongDoi` thật thì chạy `mvn -Pdiscovery test` trước khi Sinh.
 
-### Ca đăng nhập (màn Login trên tab Sinh test case)
+### Login suite (màn Đăng nhập trên tab Chọn case)
 
-- **1 ca dương** (`GEN_Login_Smoke`, `untilStep=0`): có `CaseRow`, thêm vào `local-cases` và chạy qua master như case wizard.
-- **3 ca âm** (sai mật khẩu, sai captcha, bỏ trống mật khẩu): `engine=login` trên API — **không** có `CaseRow`, **không** dùng `truongLoi`; hiển thị trên Dashboard để tra cứu, chạy bằng **«Chạy suite login»** → `POST /api/run-login` → `mvn -Plogin test` (`LoginTest`).
+- **1 Positive** (`GEN_Login_Smoke`, `untilStep=0`): có `CaseRow`, thêm vào `local-cases` và chạy qua master như case wizard.
+- **3 Negative login** (sai mật khẩu, sai captcha, bỏ trống mật khẩu): `engine=login` trên API — **không** có `CaseRow`, **không** dùng `truongLoi`; hiển thị trên Dashboard để tra cứu, chạy bằng **«Chạy Login suite»** → `POST /api/run-login` → `mvn -Plogin test` (`LoginTest`).
 
 ## 4. Ví dụ
 
@@ -120,4 +120,6 @@ Vì vậy ca âm bước 4 chỉ sinh cho loại việc dùng textarea; loại v
 }
 ```
 
-PASS ca âm khi `StepBlockedException` và (nếu có) message chứa `thongBaoMongDoi`. Không bị chặn → FAIL (nghi lỗ hổng validation).
+PASS Negative khi `StepBlockedException` và (nếu có) message chứa `thongBaoMongDoi`. Không bị chặn → FAIL (nghi lỗ hổng validation).
+
+> Thuật ngữ UI Dashboard: **Positive** / **Negative** / **All**. Trong JSON/API vẫn dùng `loai: "duong"|"am"` và field `truongLoi`.

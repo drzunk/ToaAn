@@ -134,8 +134,8 @@ public final class TestCaseGenerator {
                 "Bỏ trống mật khẩu — không vào Dashboard, hệ thống phải báo lỗi rõ ràng",
                 false, null, "login"));
         return new ManHinh("login", 0, "Đăng nhập",
-                "1 ca dương chạy qua master (untilStep=0). 3 ca âm chạy suite LoginTest riêng"
-                        + " — bấm «Chạy suite login» (mvn -Plogin).",
+                "1 Positive chạy qua master (untilStep=0). 3 Negative chạy suite LoginTest riêng"
+                        + " — bấm «Chạy Login suite» (mvn -Plogin).",
                 cases);
     }
 
@@ -170,7 +170,7 @@ public final class TestCaseGenerator {
         }
         return new ManHinh("buoc1", 1,
                 "Bước 1 — " + TaoDonReportBuilder.tenBuocDayDu(1),
-                "Một case dương cho mỗi loại đơn trong catalog (dừng sau bước 1).",
+                "Một Positive cho mỗi loại đơn trong catalog (dừng sau bước 1).",
                 cases);
     }
 
@@ -198,7 +198,7 @@ public final class TestCaseGenerator {
         themCaAm(cases, fieldCatalog.fieldsForStep(2), toaAn);
         return new ManHinh("buoc2", 2,
                 "Bước 2 — " + TaoDonReportBuilder.tenBuocDayDu(2),
-                "Ca dương CN/TC (+ tư cách Phá sản); ca âm theo bản đồ field CN/TC.",
+                "Positive CN/TC (+ tư cách Phá sản); Negative theo bản đồ field CN/TC.",
                 cases);
     }
 
@@ -227,7 +227,7 @@ public final class TestCaseGenerator {
         themCaAm(cases, fieldCatalog.fieldsForStep(3), toaAn);
         return new ManHinh("buoc3", 3,
                 "Bước 3 — " + TaoDonReportBuilder.tenBuocDayDu(3),
-                "1/2 bị đơn, NLQ; ca âm tách đúng bị đơn Cá nhân và Tổ chức/Phá sản.",
+                "1/2 bị đơn, NLQ; Negative tách đúng bị đơn Cá nhân và Tổ chức/Phá sản.",
                 cases);
     }
 
@@ -251,7 +251,7 @@ public final class TestCaseGenerator {
                 FieldCoverageCatalog.Variant.B4_TEXTAREA), toaAn);
         return new ManHinh("buoc4", 4,
                 "Bước 4 — " + TaoDonReportBuilder.tenBuocDayDu(4),
-                "Eform và textarea là 2 hình riêng; ca âm field cố định chỉ gắn textarea.",
+                "Eform và textarea là 2 hình riêng; Negative field cố định chỉ gắn textarea.",
                 cases);
     }
 
@@ -301,7 +301,7 @@ public final class TestCaseGenerator {
             String marker = candidate.discoveryDaChan()
                     ? " · discovery đã thấy hệ thống chặn" : "";
             cases.add(deXuat("am-b" + candidate.buoc() + "-" + slug(candidate.field()), "am",
-                    "Ca âm [" + context.variant().moTa() + "]: ép «" + candidate.field()
+                    "Negative [" + context.variant().moTa() + "]: ép «" + candidate.field()
                             + "» = «" + (candidate.giaTriLoi().isEmpty()
                             ? "(trống)" : candidate.giaTriLoi()) + "»" + marker,
                     false,

@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dashboard tự động hoá — Tạo đơn dịch vụ tư pháp toà án</title>
 <style>
-  :root{--nen:#f9f9f7;--mat:#fff;--muc:#0b0b0b;--muc2:#52514e;--mo:#6b6963;
-    --vien:rgba(11,11,11,.12);--xanh:#2a78d6;--dat:#0ca30c;--loi:#d03b3b;--bo:#fab219}
+  :root{--nen:#fff;--mat:#fff;--muc:#172033;--muc2:#43506a;--mo:#667085;
+    --vien:#d8dee9;--xanh:#2563eb;--dat:#15803d;--loi:#c62828;--bo:#b45309;
+    --xanh-mo:#e8f0ff;--dat-mo:#eaf7ee;--loi-mo:#fff0f0;--bo-mo:#fff7e8}
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--nen);color:var(--muc);
@@ -183,34 +184,40 @@
   .advanced-intro{max-width:72ch;color:var(--muc2)}
   .loc-tim{display:block;max-width:420px;width:100%;margin-top:4px}
   /*
-   * Giao diện đơn sắc: toàn bộ trạng thái dùng cùng một màu mực. Ý nghĩa Đạt/Lỗi/Cảnh báo
-   * vẫn nằm trong chữ và nhãn, không dựa vào xanh/đỏ/cam. Không đổi màu khi hover.
+   * Màu theo ngữ nghĩa QA. Nhãn chữ vẫn luôn hiện để không truyền đạt trạng thái chỉ bằng màu:
+   * xanh dương = điều hướng/CTA, xanh lá = Positive/Pass, đỏ = Negative/Error,
+   * hổ phách = cảnh báo/Discovery, cam = Login suite.
    */
   :root{
-    --nen:#f4f4f2;--mat:#fff;--muc:#202020;--muc2:#4c4c4a;--mo:#6a6a66;
-    --vien:rgba(32,32,32,.18);--xanh:#202020;--dat:#202020;--loi:#202020;--bo:#202020;
-    --xanh-mo:rgba(32,32,32,.08)
+    --nen:#fff;--mat:#fff;--muc:#172033;--muc2:#43506a;--mo:#667085;
+    --vien:#d8dee9;--xanh:#2563eb;--dat:#15803d;--loi:#c62828;--bo:#b45309;
+    --xanh-mo:#e8f0ff;--dat-mo:#eaf7ee;--loi-mo:#fff0f0;--bo-mo:#fff7e8
   }
-  .d-nut:hover,.d-nut.chinh:hover,nav.tab button:hover{opacity:1;color:inherit}
-  .d-nut:hover{background:var(--mat);border-color:var(--muc)}
-  .d-nut.chinh,.d-nut.d-canhbao{background:var(--muc);border-color:var(--muc);color:#fff}
-  .d-nut.chinh:hover,.d-nut.d-canhbao:hover{background:var(--muc);color:#fff}
-  nav.tab button.dang-chon{color:var(--muc);border-bottom-color:var(--muc)}
-  .screen-list button:hover{background:transparent}
+  .d-nut:hover{background:var(--xanh-mo);border-color:#9bbcf1}
+  .d-nut.chinh{background:var(--xanh);border-color:var(--xanh);color:#fff}
+  .d-nut.chinh:hover{background:#1d4ed8;border-color:#1d4ed8;color:#fff;opacity:1}
+  .d-nut.d-canhbao{background:var(--loi);border-color:var(--loi);color:#fff}
+  .d-nut.d-canhbao:hover{background:#a91f1f;border-color:#a91f1f;color:#fff}
+  nav.tab button.dang-chon{color:var(--xanh);border-bottom-color:var(--xanh)}
+  nav.tab button:hover{color:#1d4ed8}
+  .screen-list button:hover{background:#f0f5ff}
   .screen-list button.dang-chon{
-    background:#eeeeeb;border-color:var(--muc);color:var(--muc)
+    background:var(--xanh-mo);border-color:#9bbcf1;color:#174a9c
   }
-  .filter-chips button.dang-chon{background:var(--muc);border-color:var(--muc)}
-  .case-card:hover{border-color:var(--muc)}
-  .login-negative{background:var(--mat);border-color:var(--vien)}
-  .the-ban.am,.the-loai.duong,.the-loai.am,.the-loai.kham-pha,.the-loai.login-suite{
-    background:var(--muc);color:#fff
-  }
-  .thongbao.loi,.thongbao.d-ok,.thongbao.info{
-    background:#eeeeeb;color:var(--muc);border-color:var(--muc)
-  }
-  .dirty-note.chua-luu{color:var(--muc);text-decoration:underline}
-  .the-cach{background:#eeeeeb;color:var(--muc)}
+  .filter-chips button[data-gen-filter="am"].dang-chon{background:var(--loi);border-color:var(--loi);color:#fff}
+  .filter-chips button[data-gen-filter="duong"].dang-chon{background:var(--dat);border-color:var(--dat);color:#fff}
+  .filter-chips button[data-gen-filter="all"].dang-chon{background:var(--xanh);border-color:var(--xanh);color:#fff}
+  .case-card:hover{border-color:#8db2ef;box-shadow:0 2px 10px rgba(37,99,235,.08)}
+  .login-negative{background:var(--loi-mo);border-color:#efb2b2}
+  .the-ban.am,.the-loai.am{background:var(--loi);color:#fff}
+  .the-loai.duong{background:var(--dat);color:#fff}
+  .the-loai.kham-pha{background:var(--bo);color:#fff}
+  .the-loai.login-suite{background:#c45a00;color:#fff}
+  .thongbao.loi{background:var(--loi-mo);color:#8f1f1f;border-color:#e6a4a4}
+  .thongbao.d-ok{background:var(--dat-mo);color:#11612f;border-color:#9dd6ad}
+  .thongbao.info{background:var(--xanh-mo);color:#174a9c;border-color:#a9c4ef}
+  .dirty-note.chua-luu{color:#8a4b00;text-decoration:none}
+  .the-cach{background:var(--xanh-mo);color:#174a9c}
   @media (max-width:820px){
     header{padding:14px 16px}.app-header{align-items:flex-start}
     nav.tab{padding:0 4px;justify-content:space-between}
@@ -257,20 +264,20 @@
 <main id="noi-dung-chinh">
   <section id="tab-sinh" class="tab-noi-dung hien" role="tabpanel" aria-labelledby="nav-sinh" aria-hidden="false">
     <div class="section-head">
-      <div><h2>Chọn case validate theo màn</h2><p>Chọn đề xuất phù hợp rồi thêm vào danh sách chạy.</p></div>
+      <div><h2>Chọn case validate theo màn</h2><p>Chọn test case đề xuất phù hợp rồi thêm vào danh sách chạy.</p></div>
     </div>
     <div id="thongbao-sinh" class="thongbao" aria-live="polite"></div>
     <details class="huong-dan">
       <summary>Giải thích cách chạy và tài liệu</summary>
       <div>
-        <p>Case của bước N vẫn đăng nhập, điền hợp lệ các bước trước rồi dừng ở bước N. Ca âm có thể dừng sớm khi hệ thống chặn đúng kỳ vọng.</p>
+        <p>Case untilStep = N vẫn login và điền hợp lệ các bước trước, rồi dừng ở bước N. <b>Negative</b> có thể dừng sớm khi hệ thống chặn đúng kỳ vọng.</p>
         <p>Discovery: chạy <code class="mau">mvn -Pdiscovery test</code> để gắn thông báo mong đợi từ hệ thống thật.</p>
         <p>Tài liệu: <code class="mau">docs/WORKFLOW.md</code> · <code class="mau">docs/CASE-SCHEMA.md</code> · <code class="mau">docs/TRIAGE.md</code>.</p>
         <p class="d-mo" id="gen-ghichu"></p>
       </div>
     </details>
     <div class="picker-toolbar">
-      <button type="button" class="d-nut" id="btn-sinh-dexuat">Làm mới đề xuất</button>
+      <button type="button" class="d-nut" id="btn-sinh-dexuat">Làm mới danh sách đề xuất</button>
       <span class="d-mo" id="gen-tong">Chưa sinh.</span>
       <span class="d-mo meta-push" id="gen-phu"></span>
     </div>
@@ -279,10 +286,10 @@
       <div class="picker-panel">
         <div class="picker-panel-head">
           <div><h3 id="gen-ten-man">Đang tải đề xuất…</h3><p class="d-mo" id="gen-mo-ta-man"></p></div>
-          <div class="filter-chips" id="gen-filters" aria-label="Lọc loại case">
-            <button type="button" class="dang-chon" data-gen-filter="am">Ca âm</button>
-            <button type="button" data-gen-filter="duong">Ca dương</button>
-            <button type="button" data-gen-filter="all">Tất cả</button>
+          <div class="filter-chips" id="gen-filters" aria-label="Filter case type">
+            <button type="button" class="dang-chon" data-gen-filter="am" title="Negative — kỳ vọng hệ thống chặn">Negative</button>
+            <button type="button" data-gen-filter="duong" title="Positive — điền hợp lệ">Positive</button>
+            <button type="button" data-gen-filter="all" title="All types">All</button>
           </div>
         </div>
         <div id="ds-sinh" class="case-list"></div>
@@ -312,7 +319,7 @@
       <div class="table-wrap" role="region" aria-label="Danh sách case chạy" tabindex="0">
         <table>
           <thead><tr>
-            <th>Chạy</th><th>Ghi chú / Tên</th><th>Loại</th><th>Ca âm</th><th>Đến bước</th><th>Gửi</th><th>Sửa / Xóa</th>
+            <th>Chạy</th><th>Ghi chú / Tên</th><th>Loại</th><th>Negative</th><th>Đến bước</th><th>Gửi</th><th>Sửa / Xóa</th>
           </tr></thead>
           <tbody id="than-bang"></tbody>
         </table>
@@ -389,8 +396,8 @@
         <div class="truong"><label for="f-ghiChu">Ghi chú</label><input id="f-ghiChu" placeholder="Tên case dễ nhớ (tuỳ chọn)"></div>
       </div>
       <div class="hang" style="margin-top:10px">
-        <div class="truong"><label for="f-truongLoi">Trường lỗi (ca âm — bỏ trống nếu là case bình thường)</label>
-          <select id="f-truongLoi"><option value="">(không phải ca âm)</option></select></div>
+        <div class="truong"><label for="f-truongLoi">Trường lỗi (Negative — bỏ trống nếu Positive)</label>
+          <select id="f-truongLoi"><option value="">(không phải Negative)</option></select></div>
         <div class="truong"><label for="f-giaTriLoi">Giá trị lỗi</label><input id="f-giaTriLoi" placeholder="Giá trị sai muốn ép vào"></div>
         <div class="truong"><label for="f-thongBaoMongDoi">Thông báo mong đợi</label><input id="f-thongBaoMongDoi" placeholder="Chuỗi con phải có trong thông báo chặn"></div>
       </div>
@@ -444,7 +451,7 @@
       <summary>Tài liệu vận hành</summary>
       <div class="panel-body">
         <p><code class="mau">docs/WORKFLOW.md</code> — quy trình vận hành.</p>
-        <p><code class="mau">docs/CASE-SCHEMA.md</code> — cấu trúc case và ca âm.</p>
+        <p><code class="mau">docs/CASE-SCHEMA.md</code> — cấu trúc case và Negative.</p>
         <p><code class="mau">docs/TRIAGE.md</code> — phân loại và xử lý lỗi.</p>
       </div>
     </details>
@@ -563,7 +570,7 @@
     state.rows.forEach(function(r, i){
       var tr = document.createElement('tr');
       if (!r.chay) tr.className = 'tat';
-      var amBadge = (r.truongLoi && r.truongLoi.trim()) ? '<span class="the-ban am">CA ÂM</span>' : '';
+      var amBadge = (r.truongLoi && r.truongLoi.trim()) ? '<span class="the-ban am" title="Negative — kỳ vọng hệ thống chặn">Negative</span>' : '';
       var ten = (r.ghiChu || '').trim() || ('Case ' + (i + 1));
       var chiTiet = [
         r.loaiViec || (/phá sản/i.test(r.loaiDon || '') ? r.tuCachNopDon : ''),
@@ -798,19 +805,25 @@
    * không đè lẫn nhau. Script trong báo cáo không tự chạy khi gán qua innerHTML — phải tạo lại
    * &lt;script&gt; mới để trình duyệt thực thi (giới hạn chuẩn của innerHTML, không phải lỗi).
    */
-  function cssBaoCaoDonSac(){
-    return '<style id="bao-cao-don-sac">'
-      + ':root,:root[data-theme=dark],:root:not([data-theme=light]){color-scheme:light;'
-      + '--nen:#f4f4f2;--mat:#fff;--muc:#202020;--muc2:#4c4c4a;--mo:#6a6a66;'
-      + '--vien:rgba(32,32,32,.18);--luoi:#deded9;--truc:#8a8a84;'
-      + '--xanh:#202020;--xanh-mo:rgba(32,32,32,.08);'
-      + '--dat:#202020;--loi:#202020;--bo:#202020;'
-      + '--dat-chu:#202020;--loi-chu:#202020;--bo-chu:#202020;'
-      + '--dien:#202020;--chon:#202020;--tai:#202020;--boqua-chu:#202020}'
+  function cssBaoCaoTheoTrangThai(){
+    // Style của báo cáo khai báo biến màu ở :root nên khi nhúng chung DOM nó áp thẳng lên <html>
+    // của Dashboard: bản tối của báo cáo (data-theme=dark hoặc prefers-color-scheme:dark) nhuộm đen
+    // cả trang. Phải ghi đè bằng ĐÚNG bộ selector đó — scope vào #khung-baocao thì thua độ ưu tiên.
+    var bien = '--nen:#fff;--mat:#fff;--muc:#172033;--muc2:#43506a;--mo:#667085;'
+      + '--vien:#d8dee9;--luoi:#dfe5ee;--truc:#98a2b3;'
+      + '--xanh:#2563eb;--xanh-mo:#e8f0ff;'
+      + '--dat:#15803d;--loi:#c62828;--bo:#d97706;'
+      + '--dat-chu:#11612f;--loi-chu:#a91f1f;--bo-chu:#8a4b00;'
+      + '--dien:#1d4ed8;--chon:#0e7490;--tai:#7e22ce;--boqua-chu:#9a4f08';
+    return '<style id="bao-cao-theo-trang-thai">'
+      + ':root,:root[data-theme=dark],:root:not([data-theme=light]){color-scheme:light;' + bien + '}'
+      + '#khung-baocao{color-scheme:light;' + bien + '}'
+      // Màu chuỗi biểu đồ theo bộ test cũng có bản tối riêng — khoá về bản sáng.
+      + ':root[data-theme=dark] .bo1,:root:not([data-theme=light]) .bo1{--sac:#b8730f}'
+      + ':root[data-theme=dark] .bo2,:root:not([data-theme=light]) .bo2{--sac:#8046c8}'
+      + ':root[data-theme=dark] .bo3,:root:not([data-theme=light]) .bo3{--sac:#0f7d78}'
       + '#doigiaodien{display:none!important}'
-      + '.bo0,.bo1,.bo2,.bo3{--sac:#202020!important}'
-      + '.nut:hover{color:var(--muc)!important;border-color:var(--muc)!important}'
-      + '.the-so.ok,.the-so.xau,[class*="nhandau-"],[class*="tt-"]{color:var(--muc)!important}'
+      + '#khung-baocao .nut:hover{color:var(--xanh)!important;border-color:var(--xanh)!important}'
       + '</style>';
   }
 
@@ -846,7 +859,7 @@
       var style = doc.querySelector('style');
       stateBox.innerHTML = '';
       host.innerHTML = (style ? '<style>' + style.textContent + '</style>' : '')
-        + doc.body.innerHTML + cssBaoCaoDonSac();
+        + doc.body.innerHTML + cssBaoCaoTheoTrangThai();
       suaDuongDanBaoCao(host);
       host.querySelectorAll('script').forEach(function(cu){
         var moi = document.createElement('script');
@@ -1037,10 +1050,10 @@
   // ── Tab Sinh test case ─────────────────────────────────────────────────
 
   function tenLoaiCase(loai, engine){
-    if (engine === 'login') return 'Suite login';
-    if (loai === 'am') return 'Ca âm';
-    if (loai === 'kham-pha') return 'Khám phá';
-    return 'Ca dương';
+    if (engine === 'login') return 'Login suite';
+    if (loai === 'am') return 'Negative';
+    if (loai === 'kham-pha') return 'Discovery';
+    return 'Positive';
   }
 
   function lopTheLoai(c){
@@ -1049,22 +1062,22 @@
   }
 
   function chaySuiteLogin(){
-    if (!confirm('Chạy suite login (-Plogin): 4 test LoginTest (1 dương + 3 âm).\n\n'
+    if (!confirm('Chạy Login suite (-Plogin): 4 test LoginTest (1 Positive + 3 Negative login).\n\n'
         + 'Không ghi đè local-cases. Log: test-output\\last-run.log')) {
       return;
     }
-    baoTinSinh('info', 'Đang khởi động suite login…');
+    baoTinSinh('info', 'Đang khởi động Login suite…');
     fetch('/api/run-login', {method: 'POST'})
       .then(function(r){ return r.json().then(function(b){ return {ok: r.ok, body: b}; }); })
       .then(function(res){
-        if (!res.ok) { throw new Error(res.body.error || 'Không chạy được suite login.'); }
-        baoTinSinh('ok', res.body.message || 'Đang chạy suite login.');
+        if (!res.ok) { throw new Error(res.body.error || 'Không chạy được Login suite.'); }
+        baoTinSinh('ok', res.body.message || 'Đang chạy Login suite.');
       })
       .catch(function(e){ baoTinSinh('loi', String(e.message || e)); });
   }
 
   function napDeXuat(){
-    baoTinSinh('info', 'Đang sinh đề xuất…');
+    baoTinSinh('info', 'Đang sinh danh sách đề xuất…');
     return fetch('/api/generate-cases').then(function(r){
       if (!r.ok) { throw new Error('máy chủ trả HTTP ' + r.status); }
       return r.json();
@@ -1077,10 +1090,10 @@
       el('gen-tong').textContent = 'Tổng ' + (d.tongDeXuat || 0) + ' đề xuất / '
         + ((d.screens || []).length) + ' màn';
       el('gen-phu').textContent = fc
-        ? 'Phủ field: ' + fc.fieldDaCoCaAm + '/' + fc.tongFieldUngVien + ' (' + fc.phanTramPhu + '%)'
+        ? 'Phủ field Negative: ' + fc.fieldDaCoCaAm + '/' + fc.tongFieldUngVien + ' (' + fc.phanTramPhu + '%)'
         : '';
       var thieu = (fc && fc.fieldChuaPhu && fc.fieldChuaPhu.length)
-        ? ' Field chưa có ca âm: ' + fc.fieldChuaPhu.join(', ') + '.' : '';
+        ? ' Field chưa có Negative: ' + fc.fieldChuaPhu.join(', ') + '.' : '';
       var csv = d.discoveryCsv ? ' CSV: ' + d.discoveryCsv + '.' : '';
       el('gen-ghichu').textContent = (d.ghiChu || '') + thieu + csv;
       veDeXuat();
@@ -1093,7 +1106,7 @@
       var goiY = /failed to fetch|networkerror|load failed/i.test(mo)
         ? 'Máy chủ Dashboard đã tắt. Mở lại: scripts\\chay.cmd → mục 9 (hoặc mvn exec:java), rồi tải lại trang.'
         : mo;
-      baoTinSinh('loi', 'Không sinh được đề xuất — ' + goiY);
+      baoTinSinh('loi', 'Không sinh được danh sách đề xuất — ' + goiY);
     });
   }
 
@@ -1103,7 +1116,7 @@
     return Object.keys(state.genSelected).filter(function(k){ return state.genSelected[k]; }).length;
   }
 
-  /** Đếm case đã chọn mà mặc định chưa bật tick Chạy (ca âm) — người dùng cần biết trước khi sang bước 2. */
+  /** Đếm case đã chọn mà mặc định chưa bật tick Chạy (Negative) — người dùng cần biết trước khi sang bước 2. */
   function soCaseChuaBat(){
     var n = 0;
     Object.keys(state.genSelected).forEach(function(k){
@@ -1122,7 +1135,7 @@
     el('gen-goi-y').textContent = n === 0
       ? 'Chưa chọn case nào. Chọn một màn rồi tick case trong danh sách đề xuất.'
       : ('Đã chọn ' + n + ' case'
-         + (tat ? ' — trong đó ' + tat + ' ca âm được thêm ở trạng thái tắt, hãy tick cột «Chạy» ở bước 2.' : '.'));
+         + (tat ? ' — ' + tat + ' Negative unchecked by default (safe); tick cột «Chạy» ở bước 2.' : '.'));
     el('btn-gen-them').textContent = 'Thêm ' + n + ' case vào danh sách chạy';
     el('btn-gen-them').disabled = n === 0;
     document.querySelectorAll('[data-screen-selected]').forEach(function(b){
@@ -1149,8 +1162,9 @@
     return '<label class="case-card">'
       + '<input type="checkbox" class="chk-gen" data-mi="' + mi + '" data-ci="' + ci + '"' + checked
       + ' aria-label="Chọn ' + escHtml(c.lyDo || c.id) + '">'
-      + '<span><span class="case-title">' + escHtml(c.lyDo || 'Đề xuất test case') + '</span>'
-      + '<span class="case-meta"><span class="the-loai ' + lopTheLoai(c) + '">'
+      + '<span><span class="case-title">' + escHtml(c.lyDo || 'Test case đề xuất') + '</span>'
+      + '<span class="case-meta"><span class="the-loai ' + lopTheLoai(c) + '" title="'
+      + (c.loai === 'am' ? 'Negative — kỳ vọng hệ thống chặn' : (c.loai === 'duong' || !c.loai ? 'Positive — điền hợp lệ' : '')) + '">'
       + escHtml(tenLoaiCase(c.loai, c.engine)) + '</span><span>' + escHtml(metaCase(c)) + '</span></span>'
       + '<span class="case-code" title="' + escHtml(c.id || '') + '">' + escHtml(c.id || '') + '</span>'
       + '</span></label>';
@@ -1192,8 +1206,8 @@
         if (c.engine === 'login') {
           amHtml += '<div class="case-card" style="grid-template-columns:1fr"><div>'
             + '<div class="case-title">' + escHtml(c.lyDo || c.id) + '</div>'
-            + '<div class="case-meta"><span class="the-loai login-suite">Suite login</span>'
-            + '<span>Không thêm vào local-cases</span></div>'
+            + '<div class="case-meta"><span class="the-loai login-suite">Login suite</span>'
+            + '<span>Negative login — không thêm vào local-cases</span></div>'
             + '<div class="case-code">' + escHtml(c.id || '') + '</div></div></div>';
         } else {
           duongHtml += htmlCaseChon(c, state.genScreen, ci);
@@ -1201,10 +1215,10 @@
       });
       // Nút chạy suite đặt NGAY dưới tiêu đề: để dưới danh sách thì bị thanh hành động đáy che,
       // người dùng phải cuộn mới thấy.
-      wrap.innerHTML = '<div class="login-checks"><section class="login-box"><h4>Ca dương — thêm vào danh sách</h4>'
-        + duongHtml + '</section><section class="login-box login-negative"><h4>Ca âm — chạy bộ kiểm tra riêng</h4>'
+      wrap.innerHTML = '<div class="login-checks"><section class="login-box"><h4>Positive — thêm vào danh sách chạy</h4>'
+        + duongHtml + '</section><section class="login-box login-negative"><h4>Negative login — chạy Login suite riêng</h4>'
         + '<div class="thanh-nut" style="margin:0 0 10px"><button type="button" class="d-nut" '
-        + 'data-gen-login-suite="1">Chạy kiểm tra đăng nhập</button></div>'
+        + 'data-gen-login-suite="1">Chạy Login suite</button></div>'
         + amHtml + '</section></div>';
     } else {
       var cases = (man.cases || []).map(function(c, ci){ return {c:c, ci:ci}; }).filter(function(x){
@@ -1212,7 +1226,7 @@
       });
       wrap.innerHTML = cases.length
         ? cases.map(function(x){ return htmlCaseChon(x.c, state.genScreen, x.ci); }).join('')
-        : '<div class="empty-state" style="margin:18px auto"><h3>Không có case phù hợp</h3><p>Chọn bộ lọc khác để xem đề xuất.</p></div>';
+        : '<div class="empty-state" style="margin:18px auto"><h3>Không có case phù hợp</h3><p>Chọn bộ lọc Negative / Positive / All khác.</p></div>';
     }
     wrap.querySelectorAll('.chk-gen').forEach(function(cb){
       cb.addEventListener('change', function(){
@@ -1235,7 +1249,7 @@
   });
   el('btn-gen-them').addEventListener('click', function(){
     if (!state.gen) {
-      baoTinSinh('loi', 'Chưa có đề xuất — bấm «Làm mới đề xuất» trước.');
+      baoTinSinh('loi', 'Chưa có đề xuất — bấm «Làm mới danh sách đề xuất» trước.');
       return;
     }
     var them = [];
